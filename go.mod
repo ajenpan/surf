@@ -1,4 +1,4 @@
-module surfing
+module github.com/ajenpan/surf
 
 go 1.20
 

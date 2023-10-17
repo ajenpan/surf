@@ -1,7 +1,7 @@
 package event
 
 import (
-	"surfing/event/proto"
+	"github.com/ajenpan/surf/event/proto"
 )
 
 type Event = proto.EventMessage

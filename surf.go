@@ -1,6 +1,6 @@
 package surfing
 
-import "surfing/tcp"
+import "github.com/ajenpan/surf/tcp"
 
 func New(opt Options) *Surfing {
 	return &Surfing{
