@@ -24,7 +24,7 @@ type ServerOptions struct {
 	OnMessage        OnMessageFunc
 	OnConn           OnConnStatFunc
 	NewIDFunc        NewIDFunc
-	AuthTokenChecker func(string) (*UserInfo, error)
+	AuthFunc         func(*THVPacket) (*UserInfo, error)
 }
 
 type ServerOption func(*ServerOptions)
@@ -140,15 +140,16 @@ func (n *Server) onAccept(socket *Socket) {
 	}
 
 	// auth token
-	if n.opts.AuthTokenChecker != nil {
+	if n.opts.AuthFunc != nil {
 		var err error
-		if socket.UserInfo, err = n.opts.AuthTokenChecker(string(ack.GetBody())); err != nil {
+		if socket.UserInfo, err = n.opts.AuthFunc(ack); err != nil {
 			ack.Body = []uint8(err.Error())
 			socket.writePacket(ack)
 			return
 		}
 	}
 
+	ack.Reset()
 	ack.SetBody([]byte("ok"))
 	if err := socket.writePacket(ack); err != nil {
 		return

@@ -1,15 +1,16 @@
-package surfing
+package surf
 
 import "github.com/ajenpan/surf/tcp"
 
-func New(opt Options) *Surfing {
-	return &Surfing{
+func New(opt Options) *Surf {
+	ret := &Surf{
 		Options: &opt,
 	}
+	return ret
 }
 
-type Surfing struct {
+type Surf struct {
 	*Options
 
-	svr *tcp.Server
+	tcpsvr *tcp.Server
 }
