@@ -1,26 +1,35 @@
 package server
 
 import (
+	"crypto/rsa"
+
 	"github.com/ajenpan/surf/server/tcp"
 
 	"google.golang.org/protobuf/proto"
 )
 
-func NewTcpServer(addr string, agent Agent) (*TcpServer, error) {
+type TcpServerOptions struct {
+	ListenAddr       string
+	AuthPublicKey    *rsa.PublicKey
+	OnSessionMessage FuncOnSessionMessage
+	OnSessionStatus  FuncOnSessionStatus
+}
+
+func NewTcpServer(opts *TcpServerOptions) (*TcpServer, error) {
 	ret := &TcpServer{
-		agent:      agent,
-		listenAddr: addr,
+		opts:       opts,
+		listenAddr: opts.ListenAddr,
 	}
 	tcpopt := tcp.ServerOptions{
-		Address:   addr,
+		Address:   opts.ListenAddr,
 		OnMessage: ret.OnTcpMessage,
 		OnConn:    ret.OnTcpConn,
 		NewIDFunc: NewSessionID,
 	}
 
-	if AuthPublicKey != nil {
+	if opts.AuthPublicKey != nil {
 		tcpopt.AuthFunc = func(b []byte) (*tcp.UserInfo, error) {
-			uid, uname, role, err := VerifyToken(AuthPublicKey, string(b))
+			uid, uname, role, err := VerifyToken(opts.AuthPublicKey, string(b))
 			if err != nil {
 				return nil, err
 			}
@@ -43,7 +52,7 @@ func NewTcpServer(addr string, agent Agent) (*TcpServer, error) {
 type TcpServer struct {
 	imp *tcp.Server
 
-	agent      Agent
+	opts       *TcpServerOptions
 	listenAddr string
 }
 
@@ -109,8 +118,8 @@ func (s *TcpServer) OnTcpMessage(socket *tcp.Socket, p *tcp.THVPacket) {
 		return
 	}
 
-	if s.agent != nil {
-		s.agent.OnSessionMessage(sess, msg)
+	if s.opts.OnSessionMessage != nil {
+		s.opts.OnSessionMessage(sess, msg)
 	}
 }
 
@@ -126,7 +135,7 @@ func (s *TcpServer) OnTcpConn(socket *tcp.Socket, valid bool) {
 		socket.Meta.Delete(tcpSessionKey)
 	}
 
-	if sess == nil && s.agent != nil {
-		s.agent.OnSessionStatus(sess, valid)
+	if sess != nil && s.opts.OnSessionStatus != nil {
+		s.opts.OnSessionStatus(sess, valid)
 	}
 }

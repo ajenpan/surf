@@ -64,6 +64,7 @@ func (u *UserInfo) UserRole() string {
 
 type Socket struct {
 	*UserInfo
+
 	Meta sync.Map
 
 	conn  net.Conn   // low-level conn fd
@@ -152,10 +153,7 @@ func (s *Socket) readPacket(p Packet) error {
 	if s.Status() == Disconnected {
 		return ErrDisconn
 	}
-	if s.timeOut > 0 {
-		s.conn.SetReadDeadline(time.Now().Add(s.timeOut))
-	}
-	_, err := p.ReadFrom(s.conn)
+	err := readPacket(s.conn, p, s.timeOut)
 	s.lastRecvAt = time.Now().Unix()
 	return err
 }
@@ -164,10 +162,23 @@ func (s *Socket) writePacket(p Packet) error {
 	if s.Status() == Disconnected {
 		return ErrDisconn
 	}
-	if s.timeOut > 0 {
-		s.conn.SetWriteDeadline(time.Now().Add(s.timeOut))
-	}
-	_, err := p.WriteTo(s.conn)
+	err := writePacket(s.conn, p, s.timeOut)
 	s.lastSendAt = time.Now().Unix()
+	return err
+}
+
+func readPacket(conn net.Conn, p Packet, timeout time.Duration) error {
+	if timeout > 0 {
+		conn.SetReadDeadline(time.Now().Add(timeout))
+	}
+	_, err := p.ReadFrom(conn)
+	return err
+}
+
+func writePacket(conn net.Conn, p Packet, timeout time.Duration) error {
+	if timeout > 0 {
+		conn.SetWriteDeadline(time.Now().Add(timeout))
+	}
+	_, err := p.WriteTo(conn)
 	return err
 }

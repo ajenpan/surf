@@ -23,12 +23,10 @@ type Session interface {
 	Close() error
 	Send(msg *Message) error
 	SessionType() string
-
-	// Context() context.Context
 }
 
-type FuncOnMessage func(Session, *Message)
-type FuncOnConnStatus func(Session, bool)
+type FuncOnSessionMessage func(Session, *Message)
+type FuncOnSessionStatus func(Session, bool)
 
 type FuncNewSessionID func() string
 

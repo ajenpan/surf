@@ -103,27 +103,20 @@ func (s *Server) Start() error {
 					return
 				}
 				tempDelay = 0
-
-				socket := NewSocket(conn, SocketOptions{
-					ID:      s.opts.NewIDFunc(),
-					Timeout: s.opts.HeatbeatInterval,
-				})
-
-				go s.onAccept(socket)
+				go s.onAccept(conn)
 			}
 		}
 	}()
 	return nil
 }
 
-func (n *Server) onAccept(socket *Socket) {
-	n.wgConns.Add(1)
-	defer n.wgConns.Done()
-	defer socket.Close()
+func (s *Server) onAccept(conn net.Conn) {
+
+	rwtimeout := s.opts.HeatbeatInterval
 
 	//read ack
 	ack := newEmptyTHVPacket()
-	if err := socket.readPacket(ack); err != nil {
+	if err := readPacket(conn, ack, rwtimeout); err != nil {
 		return
 	}
 	if ack.GetType() != PacketTypeAck &&
@@ -132,48 +125,61 @@ func (n *Server) onAccept(socket *Socket) {
 		return
 	}
 
-	//TODO add filter
+	var userinfo *UserInfo
 
 	// auth token
-	if n.opts.AuthFunc != nil {
+	if s.opts.AuthFunc != nil {
 		ack.Reset()
 		ack.SetType(PacketTypeActionRequire)
 		ack.SetHead([]byte("auth"))
-		if err := socket.writePacket(ack); err != nil {
+		if err := writePacket(conn, ack, rwtimeout); err != nil {
 			return
 		}
 		ack.Reset()
-		if err := socket.readPacket(ack); err != nil || ack.GetType() != PacketTypeDoAction {
+		if err := readPacket(conn, ack, rwtimeout); err != nil || ack.GetType() != PacketTypeDoAction {
 			return
 		}
 
 		var err error
-		if socket.UserInfo, err = n.opts.AuthFunc(ack.GetBody()); err != nil {
+		if userinfo, err = s.opts.AuthFunc(ack.GetBody()); err != nil {
 			ack.SetType(PacketTypeAckResult)
 			ack.SetHead([]byte("fail"))
 			ack.SetBody([]uint8(err.Error()))
-			socket.writePacket(ack)
+			writePacket(conn, ack, rwtimeout)
 			return
 		}
 	}
 
 	// write ack result and socket id
+	socketid := s.opts.NewIDFunc()
+
 	ack.Reset()
 	ack.SetType(PacketTypeAckResult)
 	ack.SetHead([]byte("ok"))
-	ack.SetBody([]byte(socket.ID()))
-	if err := socket.writePacket(ack); err != nil {
+	ack.SetBody([]byte(socketid))
+	if err := writePacket(conn, ack, rwtimeout); err != nil {
 		return
 	}
 
+	socket := NewSocket(conn, SocketOptions{
+		ID:      socketid,
+		Timeout: s.opts.HeatbeatInterval,
+	})
+	socket.UserInfo = userinfo
+	defer socket.Close()
+
+	s.wgConns.Add(1)
+	defer s.wgConns.Done()
+
 	// the connection is established
 	go socket.writeWork()
-	n.storeSocket(socket)
-	defer n.removeSocket(socket)
 
-	if n.opts.OnConn != nil {
-		n.opts.OnConn(socket, true)
-		defer n.opts.OnConn(socket, false)
+	s.storeSocket(socket)
+	defer s.removeSocket(socket)
+
+	if s.opts.OnConn != nil {
+		s.opts.OnConn(socket, true)
+		defer s.opts.OnConn(socket, false)
 	}
 
 	var socketErr error = nil
@@ -194,8 +200,8 @@ func (n *Server) onAccept(socket *Socket) {
 				socket.SendPacket(p)
 			}
 		} else {
-			if n.opts.OnMessage != nil {
-				n.opts.OnMessage(socket, p)
+			if s.opts.OnMessage != nil {
+				s.opts.OnMessage(socket, p)
 			}
 		}
 	}

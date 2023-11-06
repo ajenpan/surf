@@ -16,6 +16,7 @@ type ClientOptions struct {
 	OnConnStat    OnConnStatFunc
 	Token         string
 	Timeout       time.Duration
+	SessionID     string
 }
 
 func NewClient(opts *ClientOptions) *Client {
@@ -23,9 +24,16 @@ func NewClient(opts *ClientOptions) *Client {
 		opts.Timeout = time.Duration(DefaultTimeoutSec) * time.Second
 	}
 
+	socket := NewSocket(nil, SocketOptions{
+		ID:      opts.SessionID,
+		Timeout: opts.Timeout / 2,
+	})
+
 	ret := &Client{
-		Opt: opts,
+		Opt:    opts,
+		Socket: socket,
 	}
+
 	return ret
 }
 
@@ -35,39 +43,41 @@ type Client struct {
 	mutex sync.Mutex
 }
 
-func doAckAction(s *Socket, name string, body []byte) error {
+func doAckAction(c net.Conn, name string, body []byte, timeout time.Duration) error {
 	p := newEmptyTHVPacket()
 	p.SetType(PacketTypeDoAction)
 	p.SetHead([]byte(name))
 	p.SetBody(body)
-	return s.writePacket(p)
+	return writePacket(c, p, timeout)
 }
 
 func (c *Client) Connect() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.Socket != nil {
-		c.Socket.Close()
-		c.Socket = nil
+	if c.Socket != nil && c.Socket.conn != nil {
+		c.Socket.conn.Close()
+		c.Socket.conn = nil
 	}
 
 	if c.Opt.RemoteAddress == "" {
 		return fmt.Errorf("remote address is empty")
 	}
 
+	rwtimeout := c.Opt.Timeout
+
 	conn, err := net.DialTimeout("tcp", c.Opt.RemoteAddress, c.Opt.Timeout)
 	if err != nil {
 		return err
 	}
 
-	socket := NewSocket(conn, SocketOptions{
-		Timeout: c.Opt.Timeout,
-	})
-
+	// socket := NewSocket(conn, SocketOptions{
+	// 	Timeout: c.Opt.Timeout,
+	// })
+	socketid := ""
 	p := newEmptyTHVPacket()
 	p.SetType(PacketTypeAck)
-	if err := socket.writePacket(p); err != nil {
+	if err := writePacket(conn, p, rwtimeout); err != nil {
 		return err
 	}
 
@@ -77,7 +87,7 @@ func (c *Client) Connect() error {
 
 	for {
 		p.Reset()
-		if err = socket.readPacket(p); err != nil {
+		if err = readPacket(conn, p, rwtimeout); err != nil {
 			break
 		}
 		if p.GetType() == PacketTypeActionRequire {
@@ -86,7 +96,7 @@ func (c *Client) Connect() error {
 				err = fmt.Errorf("action %s not found", name)
 				break
 			} else {
-				if err = doAckAction(socket, name, data); err != nil {
+				if err = doAckAction(conn, name, data, rwtimeout); err != nil {
 					break
 				}
 			}
@@ -98,7 +108,7 @@ func (c *Client) Connect() error {
 				break
 			}
 			if len(body) > 0 {
-				socket.id = body
+				socketid = body
 			}
 			break
 		} else {
@@ -112,7 +122,10 @@ func (c *Client) Connect() error {
 	}
 
 	//here is connect finished
-	c.Socket = socket
+	c.Socket.conn = conn
+	c.Socket.id = socketid
+
+	socket := c.Socket
 
 	go func() {
 		defer socket.Close()

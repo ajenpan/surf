@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"reflect"
 	"sync"
@@ -11,69 +12,66 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/server/tcp"
+	"github.com/ajenpan/surf/utils/marshal"
 )
 
 type TcpClientOptions struct {
-	RemoteAddress string
-	AuthToken     string
-	Agent         Agent
+	RemoteAddress    string
+	AuthToken        string
+	AuthPublicKey    *rsa.PublicKey
+	AutoRecconect    bool
+	OnSessionMessage FuncOnSessionMessage
+	OnSessionStatus  FuncOnSessionStatus
 }
 
 func NewTcpClient(opts *TcpClientOptions) *TcpClient {
-	ret := &TcpClient{
-		AutoRecconect:      true,
-		reconnectTimeDelay: 15 * time.Second,
+	auth := func(b []byte) (*tcp.UserInfo, error) {
+		uid, uname, role, err := VerifyToken(opts.AuthPublicKey, string(b))
+		if err != nil {
+			return nil, err
+		}
+		return &tcp.UserInfo{
+			UId:   uid,
+			UName: uname,
+			Role:  role,
+		}, nil
 	}
 
+	uinfo, err := auth([]byte(opts.AuthToken))
+	if err != nil {
+		return nil
+	}
+
+	ret := &TcpClient{
+		opts:               opts,
+		reconnectTimeDelay: 15 * time.Second,
+	}
 	c := tcp.NewClient(&tcp.ClientOptions{
 		RemoteAddress: opts.RemoteAddress,
 		Token:         opts.AuthToken,
-		OnMessage: func(s *tcp.Socket, p *tcp.THVPacket) {
-			ptype := p.GetType()
-			if ptype == PacketTypRoute {
-				var head RouteHead = p.GetHead()
-				if head.GetMsgTyp() == RouteTypResponse || head.GetMsgTyp() == RouteTypRespErr {
-					if cb := ret.GetCallback(head.GetAskID()); cb != nil {
-						cb(ret, p)
-					}
-				}
-			}
-			if ret.agent != nil {
-				// ret.agent.OnSessionMessage(ret, p)
-			}
-		},
-		OnConnStat: func(s *tcp.Socket, enable bool) {
-			// if ret.OnConnectFunc != nil {
-			// 	ret.OnConnectFunc(ret, enable)
-			// }
-			if !enable {
-				if ret.AutoRecconect {
-					ret.Reconnect()
-				}
-			}
-		},
+		OnMessage:     ret.OnTcpMessage,
+		OnConnStat:    ret.OnTcpConn,
 	})
-	ret.Client = c
+	c.UserInfo = uinfo
+	ret.imp = c
 	return ret
 }
 
 type OnRespCBFunc func(*TcpClient, *tcp.THVPacket)
 
 type TcpClient struct {
-	*tcp.Client
+	imp                *tcp.Client
 	opts               *TcpClientOptions
 	reconnectTimeDelay time.Duration
-	AutoRecconect      bool
-	cb                 sync.Map
 	seqIndex           uint32
-	agent              Agent
+	cb                 sync.Map
 }
 
 func (c *TcpClient) Reconnect() {
-	err := c.Connect()
+	err := c.imp.Connect()
 	if err != nil {
 		fmt.Println("connect error:", err)
-		if c.AutoRecconect {
+		if c.opts.AutoRecconect {
 			fmt.Println("start to reconnect")
 			time.AfterFunc(c.reconnectTimeDelay, func() {
 				c.Reconnect()
@@ -82,31 +80,71 @@ func (c *TcpClient) Reconnect() {
 	}
 }
 
-func (c *TcpClient) MakeRequestPacket(target uint32, req proto.Message) (*tcp.THVPacket, uint32, error) {
-	// msgid := calltable.GetMessageMsgID(req)
-	// if msgid == 0 {
-	// 	return nil, 0, fmt.Errorf("not found msgid:%v", msgid)
-	// }
+func (s *TcpClient) OnTcpMessage(socket *tcp.Socket, p *tcp.THVPacket) {
+	sess := loadTcpSession(socket)
+	if sess == nil {
+		return
+	}
+	msg, err := sess.pkg2msg(p)
+	if err != nil {
+		return
+	}
 
-	// raw, err := proto.Marshal(req)
-	// if err != nil {
-	// 	return nil, 0, err
-	// }
-	// askid := c.GetAskID()
-	// head := tcp.NewRoutHead()
-	// head.SetAskID(askid)
-	// head.SetMsgID(uint32(msgid))
-	// head.SetTargetUID(target)
-	// head.SetMsgTyp(tcp.RouteTypRequest)
-
-	// ret := tcp.NewPackFrame(tcp.PacketTypRoute, head, raw)
-
-	// return ret, askid, nil
-
-	return nil, 0, nil
+	if s.opts.OnSessionMessage != nil {
+		s.opts.OnSessionMessage(sess, msg)
+	}
 }
 
-func SendRequestWithCB[T proto.Message](c *TcpClient, target uint32, ctx context.Context, req proto.Message, cb func(error, *TcpClient, T)) {
+func (s *TcpClient) Start() error {
+	return s.imp.Connect()
+}
+
+func (s *TcpClient) Stop() error {
+	s.imp.Close()
+	return nil
+}
+
+func (s *TcpClient) OnTcpConn(socket *tcp.Socket, enable bool) {
+	var sess *TcpSession
+	if enable {
+		sess = &TcpSession{
+			Socket: socket,
+		}
+		socket.Meta.Store(tcpSessionKey, sess)
+	} else {
+		sess = loadTcpSession(socket)
+		socket.Meta.Delete(tcpSessionKey)
+	}
+
+	if sess != nil && s.opts.OnSessionStatus != nil {
+		s.opts.OnSessionStatus(sess, enable)
+	}
+
+	if !enable {
+		if s.opts.AutoRecconect {
+			s.Reconnect()
+		}
+	}
+}
+
+func (c *TcpClient) MakeRequestPacket(target uint64, req proto.Message) (*Message, error) {
+	m := &marshal.ProtoMarshaler{}
+	body, err := m.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	msg := NewMessage()
+	msg.Head.MsgName = string(proto.MessageName(req).Name())
+	msg.Body = body
+	msg.Head.Seq = c.GetAskID()
+	msg.Head.SourceUid = c.imp.UID()
+	msg.Head.TargetUid = target
+	msg.Head.MsgType = 1
+	return msg, nil
+}
+
+func SendRequestWithCB[T proto.Message](c *TcpClient, target uint64, ctx context.Context, req proto.Message, cb func(error, *TcpClient, T)) {
 	go func() {
 		var tresp T
 		rsep := reflect.New(reflect.TypeOf(tresp).Elem()).Interface().(T)
@@ -115,39 +153,18 @@ func SendRequestWithCB[T proto.Message](c *TcpClient, target uint32, ctx context
 	}()
 }
 
-func (c *TcpClient) GroupBroadcast(group string, m proto.Message) error {
-	// raw, err := proto.Marshal(m)
-	// if err != nil {
-	// 	return fmt.Errorf("marshal failed:%v", err)
-	// }
-	// msgid := calltable.GetMessageMsgID(m)
-	// if msgid == 0 {
-	// 	return fmt.Errorf("not found msgid:%v", msgid)
-	// }
-	// req := &msg.GroupBroadcastRequest{
-	// 	Group:   group,
-	// 	Msgid:   uint32(msgid),
-	// 	Msgdata: raw,
-	// }
-	// resp := &msg.GroupBroadcastResponse{}
-	// err = c.SyncCall(0, context.Background(), req, resp)
+func (c *TcpClient) SyncCall(target uint64, ctx context.Context, req proto.Message, resp proto.Message) error {
+	// var err error
+
+	// msg, err := c.MakeRequestPacket(target, req)
 	// if err != nil {
 	// 	return err
 	// }
-	return nil
-}
+	// askid := msg.Head.Seq
 
-func (c *TcpClient) SyncCall(target uint32, ctx context.Context, req proto.Message, resp proto.Message) error {
-	var err error
-
-	packet, askid, err := c.MakeRequestPacket(target, req)
-	if err != nil {
-		return err
-	}
-
-	res := make(chan error, 1)
-
-	c.SetCallback(askid, func(c *TcpClient, p *tcp.THVPacket) {
+	// res := make(chan error, 1)
+	var askid = 0
+	c.SetCallback(uint32(askid), func(c *TcpClient, p *tcp.THVPacket) {
 		// var err error
 		// defer func() {
 		// 	res <- err
@@ -178,21 +195,22 @@ func (c *TcpClient) SyncCall(target uint32, ctx context.Context, req proto.Messa
 		// }
 	})
 
-	err = c.SendPacket(packet)
+	// err = c.imp.SendPacket(packet)
 
-	if err != nil {
-		c.RemoveCallback(askid)
-		return err
-	}
+	// if err != nil {
+	// 	c.RemoveCallback(askid)
+	// 	return err
+	// }
 
-	select {
-	case err = <-res:
-		return err
-	case <-ctx.Done():
-		// dismiss callback
-		c.SetCallback(askid, func(c *TcpClient, packet *tcp.THVPacket) {})
-		return ctx.Err()
-	}
+	// select {
+	// case err = <-res:
+	// 	return err
+	// case <-ctx.Done():
+	// 	// dismiss callback
+	// 	c.SetCallback(askid, func(c *TcpClient, packet *tcp.THVPacket) {})
+	// 	return ctx.Err()
+	// }
+	return nil
 }
 
 func (s *TcpClient) GetAskID() uint32 {
@@ -236,9 +254,3 @@ func (r *TcpClient) AsyncCall(target uint32, m proto.Message) error {
 	// head.SetMsgTyp(tcp.RouteTypAsync)
 	// return r.SendPacket(tcp.NewPackFrame(tcp.PacketTypRoute, head, raw))
 }
-
-// func (r *TcpClient) TargetEcho(target uint32, raw []byte, cb func(error, []byte)) {
-// 	SendRequestWithCB(r, target, context.Background(), &msg.Echo{Body: raw}, func(err error, c *TcpClient, resp *msg.Echo) {
-// 		cb(err, resp.Body)
-// 	})
-// }
