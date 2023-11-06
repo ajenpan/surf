@@ -8,10 +8,10 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func RsaTokenAuth(pk *rsa.PublicKey) func(pkg *THVPacket) (*UserInfo, error) {
-	return func(pkg *THVPacket) (*UserInfo, error) {
+func RsaTokenAuth(pk *rsa.PublicKey) func(data []byte) (*UserInfo, error) {
+	return func(data []byte) (*UserInfo, error) {
 		claims := make(jwt.MapClaims)
-		token, err := jwt.ParseWithClaims(string(pkg.Body), claims, func(t *jwt.Token) (interface{}, error) {
+		token, err := jwt.ParseWithClaims(string(data), claims, func(t *jwt.Token) (interface{}, error) {
 			return pk, nil
 		})
 		if err != nil {

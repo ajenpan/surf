@@ -8,14 +8,15 @@ import (
 type MethodStyle int
 
 const (
-	StyleMicro   = iota // func (context.Context, proto.Message, proto.Message) ( error)
-	StyleGRpc    = iota // func (context.Context, proto.Message) (proto.Message, error)
-	StyleAsync   = iota // func (session, proto.Message) error
-	StyleRequest = iota // func (session, proto.Message) (proto.Message, error)
+	StyleAsync   MethodStyle = iota // func (any, proto.Message) error
+	StyleRequest MethodStyle = iota // func (any, proto.Message) (proto.Message, error)
+	StyleMicro   MethodStyle = iota // func (context.Context, proto.Message, proto.Message) ( error)
+	StyleGRpc    MethodStyle = iota // func (context.Context, proto.Message) (proto.Message, error)
 )
 
 type Method struct {
-	Func reflect.Value
+	Func     reflect.Value
+	FuncName string
 
 	Style MethodStyle
 

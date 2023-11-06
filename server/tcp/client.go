@@ -35,6 +35,14 @@ type Client struct {
 	mutex sync.Mutex
 }
 
+func doAckAction(s *Socket, name string, body []byte) error {
+	p := newEmptyTHVPacket()
+	p.SetType(PacketTypeDoAction)
+	p.SetHead([]byte(name))
+	p.SetBody(body)
+	return s.writePacket(p)
+}
+
 func (c *Client) Connect() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -57,52 +65,50 @@ func (c *Client) Connect() error {
 		Timeout: c.Opt.Timeout,
 	})
 
-	p := NewEmptyTHVPacket()
-	funcs := []func() error{
-		func() error { //send ack
-			p.SetType(PacketTypeAck)
-			return socket.writePacket(p)
-		}, func() error {
-			p.Reset()
-			err = socket.readPacket(p)
-			if err != nil {
-				return err
-			}
-			if p.GetType() != PacketTypeAck {
-				return fmt.Errorf("read ack failed, typ: %d", p.GetType())
-			}
-			//set socket id
-			if len(p.Body) > 0 {
-				socket.id = string(p.Body)
-			}
-			return nil
-		}, func() error { // auth
-			p.Reset()
-			p.SetType(PacketTypeAuth)
-			p.SetBody([]byte(c.Opt.Token))
-			return socket.writePacket(p)
-		}, func() error {
-			p.Reset()
-			err = socket.readPacket(p)
-			if err != nil {
-				return err
-			}
-			if p.GetType() != PacketTypeAuth {
-				return fmt.Errorf("read auth failed, typ: %d", p.GetType())
-			}
-			body := string(p.GetBody())
-			if body != "ok" {
-				return fmt.Errorf("auth failed, body: %s", body)
-			}
-			return nil
-		},
+	p := newEmptyTHVPacket()
+	p.SetType(PacketTypeAck)
+	if err := socket.writePacket(p); err != nil {
+		return err
 	}
 
-	for _, f := range funcs {
-		if err := f(); err != nil {
-			socket.Close()
-			return err
+	actions := map[string][]byte{
+		"auth": []byte(c.Opt.Token),
+	}
+
+	for {
+		p.Reset()
+		if err = socket.readPacket(p); err != nil {
+			break
 		}
+		if p.GetType() == PacketTypeActionRequire {
+			name := string(p.GetHead())
+			if data, has := actions[name]; !has {
+				err = fmt.Errorf("action %s not found", name)
+				break
+			} else {
+				if err = doAckAction(socket, name, data); err != nil {
+					break
+				}
+			}
+		} else if p.GetType() == PacketTypeAckResult {
+			head := string(p.GetHead())
+			body := string(p.GetBody())
+			if head != "ok" {
+				err = fmt.Errorf("ack result failed, head: %s, body: %s", head, body)
+				break
+			}
+			if len(body) > 0 {
+				socket.id = body
+			}
+			break
+		} else {
+			err = fmt.Errorf("invalid packet type: %d", p.GetType())
+			break
+		}
+	}
+
+	if err != nil {
+		return err
 	}
 
 	//here is connect finished
@@ -125,7 +131,7 @@ func (c *Client) Connect() error {
 			tk := time.NewTicker(c.Opt.Timeout / 3)
 			defer tk.Stop()
 
-			heartbeatPakcet := NewEmptyTHVPacket()
+			heartbeatPakcet := newEmptyTHVPacket()
 			heartbeatPakcet.SetType(PacketTypeHeartbeat)
 
 			checkPos := int64(c.Opt.Timeout.Seconds() / 2)
@@ -146,9 +152,9 @@ func (c *Client) Connect() error {
 
 		var socketErr error = nil
 		for {
-			p := NewEmptyTHVPacket()
+			p := newEmptyTHVPacket()
 			if socketErr = socket.readPacket(p); socketErr != nil {
-				//todo: print out error
+				fmt.Println(err)
 				break
 			}
 

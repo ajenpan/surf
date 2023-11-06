@@ -24,7 +24,7 @@ type ServerOptions struct {
 	OnMessage        OnMessageFunc
 	OnConn           OnConnStatFunc
 	NewIDFunc        NewIDFunc
-	AuthFunc         func(*THVPacket) (*UserInfo, error)
+	AuthFunc         func([]byte) (*UserInfo, error)
 }
 
 type ServerOption func(*ServerOptions)
@@ -78,38 +78,42 @@ func (s *Server) Stop() error {
 }
 
 func (s *Server) Start() error {
-	var tempDelay time.Duration = 0
-	for {
-		select {
-		case <-s.die:
-			return nil
-		default:
-			conn, err := s.listener.Accept()
-			if err != nil {
-				if ne, ok := err.(net.Error); ok && ne.Timeout() {
-					if tempDelay == 0 {
-						tempDelay = 5 * time.Millisecond
-					} else {
-						tempDelay *= 2
+	go func() {
+		var tempDelay time.Duration = 0
+		for {
+			select {
+			case <-s.die:
+				return
+			default:
+				conn, err := s.listener.Accept()
+				if err != nil {
+					if ne, ok := err.(net.Error); ok && ne.Timeout() {
+						if tempDelay == 0 {
+							tempDelay = 5 * time.Millisecond
+						} else {
+							tempDelay *= 2
+						}
+						if max := 1 * time.Second; tempDelay > max {
+							tempDelay = max
+						}
+						time.Sleep(tempDelay)
+						continue
 					}
-					if max := 1 * time.Second; tempDelay > max {
-						tempDelay = max
-					}
-					time.Sleep(tempDelay)
-					continue
+					fmt.Println(err)
+					return
 				}
-				return err
+				tempDelay = 0
+
+				socket := NewSocket(conn, SocketOptions{
+					ID:      s.opts.NewIDFunc(),
+					Timeout: s.opts.HeatbeatInterval,
+				})
+
+				go s.onAccept(socket)
 			}
-			tempDelay = 0
-
-			socket := NewSocket(conn, SocketOptions{
-				ID:      s.opts.NewIDFunc(),
-				Timeout: s.opts.HeatbeatInterval,
-			})
-
-			go s.onAccept(socket)
 		}
-	}
+	}()
+	return nil
 }
 
 func (n *Server) onAccept(socket *Socket) {
@@ -118,39 +122,46 @@ func (n *Server) onAccept(socket *Socket) {
 	defer socket.Close()
 
 	//read ack
-	ack := NewEmptyTHVPacket()
+	ack := newEmptyTHVPacket()
 	if err := socket.readPacket(ack); err != nil {
 		return
 	}
-
-	if ack.GetType() != PacketTypeAck {
+	if ack.GetType() != PacketTypeAck &&
+		ack.meta.GetHeadLen() != 0 &&
+		ack.meta.GetBodyLen() != 0 {
 		return
 	}
 
-	// set socket id
-	ack.SetBody([]byte(socket.ID()))
-	if err := socket.writePacket(ack); err != nil {
-		return
-	}
-
-	// auth packet
-	ack.Reset()
-	if err := socket.readPacket(ack); err != nil || ack.GetType() != PacketTypeAuth {
-		return
-	}
+	//TODO add filter
 
 	// auth token
 	if n.opts.AuthFunc != nil {
+		ack.Reset()
+		ack.SetType(PacketTypeActionRequire)
+		ack.SetHead([]byte("auth"))
+		if err := socket.writePacket(ack); err != nil {
+			return
+		}
+		ack.Reset()
+		if err := socket.readPacket(ack); err != nil || ack.GetType() != PacketTypeDoAction {
+			return
+		}
+
 		var err error
-		if socket.UserInfo, err = n.opts.AuthFunc(ack); err != nil {
-			ack.Body = []uint8(err.Error())
+		if socket.UserInfo, err = n.opts.AuthFunc(ack.GetBody()); err != nil {
+			ack.SetType(PacketTypeAckResult)
+			ack.SetHead([]byte("fail"))
+			ack.SetBody([]uint8(err.Error()))
 			socket.writePacket(ack)
 			return
 		}
 	}
 
+	// write ack result and socket id
 	ack.Reset()
-	ack.SetBody([]byte("ok"))
+	ack.SetType(PacketTypeAckResult)
+	ack.SetHead([]byte("ok"))
+	ack.SetBody([]byte(socket.ID()))
 	if err := socket.writePacket(ack); err != nil {
 		return
 	}
@@ -168,7 +179,7 @@ func (n *Server) onAccept(socket *Socket) {
 	var socketErr error = nil
 
 	for {
-		p := NewEmptyTHVPacket()
+		p := newEmptyTHVPacket()
 		socketErr = socket.readPacket(p)
 		if socketErr != nil {
 			break

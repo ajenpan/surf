@@ -44,20 +44,6 @@ func NewSocket(conn net.Conn, opts SocketOptions) *Socket {
 	return ret
 }
 
-type MapMeta struct {
-	imp sync.Map
-}
-
-func (m *MapMeta) MetaLoad(key string) (interface{}, bool) {
-	return m.imp.Load(key)
-}
-func (m *MapMeta) MetaStore(key string, value interface{}) {
-	m.imp.Store(key, value)
-}
-func (m *MapMeta) MetaDelete(key string) {
-	m.imp.Delete(key)
-}
-
 type UserInfo struct {
 	UId   uint64
 	UName string
@@ -78,7 +64,7 @@ func (u *UserInfo) UserRole() string {
 
 type Socket struct {
 	*UserInfo
-	MapMeta
+	Meta sync.Map
 
 	conn  net.Conn   // low-level conn fd
 	state SocketStat // current state
@@ -142,6 +128,10 @@ func (s *Socket) LocalAddr() string {
 		return ""
 	}
 	return s.conn.LocalAddr().String()
+}
+
+func (s *Socket) Valid() bool {
+	return s.Status() == Connected
 }
 
 // retrun socket work status

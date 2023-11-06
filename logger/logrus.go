@@ -93,11 +93,6 @@ func Warn(args ...interface{}) {
 	Default.Warn(args...)
 }
 
-// Warning logs a message at level Warn on the standard logger.
-func Warning(args ...interface{}) {
-	Default.Warning(args...)
-}
-
 // Error logs a message at level Error on the standard logger.
 func Error(args ...interface{}) {
 	Default.Error(args...)

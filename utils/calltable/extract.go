@@ -1,63 +1,65 @@
 package calltable
 
 import (
-	"context"
 	"reflect"
-	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *CallTable[string] {
-	refh := reflect.ValueOf(h)
+	refh := reflect.TypeOf(h)
 
 	ret := NewCallTable[string]()
 
-	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
+	// ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	pbMsgType := reflect.TypeOf((*proto.Message)(nil)).Elem()
 	errType := reflect.TypeOf((*error)(nil)).Elem()
 
 	for i := 0; i < ms.Len(); i++ {
 		service := ms.Get(i)
 		methods := service.Methods()
-		svrName := string(service.Name())
+		// svrName := string(service.Name())
 
 		for j := 0; j < methods.Len(); j++ {
 			rpcMethod := methods.Get(j)
 			rpcMethodName := string(rpcMethod.Name())
 
-			methodv := refh.MethodByName(rpcMethodName)
-			method := methodv.Type()
+			methodv, has := refh.MethodByName(rpcMethodName)
+			if !has {
+				continue
+			}
+			methodt := methodv.Type
 
-			if method.NumIn() != 2 || method.NumOut() != 2 {
+			if methodt.NumIn() != 2 || methodt.NumOut() != 2 {
 				continue
 			}
-			if method.In(0) != ctxType {
+			// if method.In(0) != ctxType {
+			// 	continue
+			// }
+			if !methodt.In(1).Implements(pbMsgType) {
 				continue
 			}
-			if !method.In(1).Implements(pbMsgType) {
+			if !methodt.Out(0).Implements(pbMsgType) {
 				continue
 			}
-			if !method.Out(0).Implements(pbMsgType) {
+			if methodt.Out(1) != errType {
 				continue
 			}
-			if method.Out(1) != errType {
-				continue
-			}
-			epn := strings.Join([]string{svrName, rpcMethodName}, "/")
-			reqType := method.In(1).Elem()
-			respType := method.Out(0).Elem()
+			// epn := strings.Join([]string{svrName, rpcMethodName}, "/")
+			reqType := methodt.In(1).Elem()
+			respType := methodt.Out(0).Elem()
 
 			m := &Method{
-				Func:         methodv,
+				FuncName:     rpcMethodName,
+				Func:         methodv.Func,
 				Style:        StyleGRpc,
 				RequestType:  reqType,
 				ResponseType: respType,
 			}
 			m.InitPool()
 
-			ret.list[epn] = m
+			ret.list[rpcMethodName] = m
 		}
 	}
 	return ret
@@ -73,7 +75,6 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 	for i := 0; i < ms.Len(); i++ {
 		msg := ms.Get(i)
 		msgName := string(msg.Name())
-		fullName := string(msg.FullName())
 		method, has := refh.MethodByName(MethodPrefix + msgName)
 		if !has {
 			continue
@@ -92,12 +93,13 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 		}
 
 		m := &Method{
+			FuncName:    method.Name,
 			Func:        method.Func,
 			Style:       StyleAsync,
 			RequestType: reqMsgType.Elem(),
 		}
 		m.InitPool()
-		ret.list[fullName] = m
+		ret.list[msgName] = m
 	}
 	return ret
 }
