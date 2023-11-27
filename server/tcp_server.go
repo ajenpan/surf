@@ -2,10 +2,14 @@ package server
 
 import (
 	"crypto/rsa"
+	"fmt"
+	"net"
 
+	"github.com/ajenpan/surf/auth"
+	"github.com/ajenpan/surf/log"
 	"github.com/ajenpan/surf/server/tcp"
 
-	"google.golang.org/protobuf/proto"
+	"github.com/ajenpan/surf/server/marshal"
 )
 
 type TcpServerOptions struct {
@@ -13,6 +17,7 @@ type TcpServerOptions struct {
 	AuthPublicKey    *rsa.PublicKey
 	OnSessionMessage FuncOnSessionMessage
 	OnSessionStatus  FuncOnSessionStatus
+	Marshal          marshal.Marshaler
 }
 
 func NewTcpServer(opts *TcpServerOptions) (*TcpServer, error) {
@@ -20,25 +25,23 @@ func NewTcpServer(opts *TcpServerOptions) (*TcpServer, error) {
 		opts:       opts,
 		listenAddr: opts.ListenAddr,
 	}
+	if opts.Marshal == nil {
+		opts.Marshal = &marshal.ProtoMarshaler{}
+	}
 	tcpopt := tcp.ServerOptions{
-		Address:   opts.ListenAddr,
-		OnMessage: ret.OnTcpMessage,
-		OnConn:    ret.OnTcpConn,
+		Address:         opts.ListenAddr,
+		OnSocketMessage: ret.OnMessage,
+		OnSocketConn:    ret.OnConn,
+		OnSocketDisconn: ret.OnDisconn,
+		OnAccpect: func(conn net.Conn) bool {
+			log.Debugf("OnAccpectConn remote:%s, local:%s", conn.RemoteAddr(), conn.LocalAddr())
+			return true
+		},
 		NewIDFunc: NewSessionID,
 	}
 
 	if opts.AuthPublicKey != nil {
-		tcpopt.AuthFunc = func(b []byte) (*tcp.UserInfo, error) {
-			uid, uname, role, err := VerifyToken(opts.AuthPublicKey, string(b))
-			if err != nil {
-				return nil, err
-			}
-			return &tcp.UserInfo{
-				UId:   uid,
-				UName: uname,
-				Role:  role,
-			}, nil
-		}
+		tcpopt.AuthFunc = auth.RsaTokenAuth(opts.AuthPublicKey)
 	}
 
 	imp, err := tcp.NewServer(tcpopt)
@@ -62,34 +65,12 @@ type TcpSession struct {
 
 var tcpSessionKey = &struct{}{}
 
-func (s *TcpSession) Send(msg *Message) error {
-	p, err := s.msg2pkg(msg)
-	if err != nil {
-		return err
-	}
-	return s.Socket.SendPacket(p)
+func (s *TcpSession) Send(p *Message) error {
+	return s.Socket.Send(p)
 }
 
 func (s *TcpSession) SessionType() string {
 	return "tcp-session"
-}
-
-func (s *TcpSession) msg2pkg(p *Message) (*tcp.THVPacket, error) {
-	head, err := proto.Marshal(p.Head)
-	if err != nil {
-		return nil, err
-	}
-	return tcp.NewTHVPacket(head, p.Body), nil
-}
-
-func (s *TcpSession) pkg2msg(p *tcp.THVPacket) (*Message, error) {
-	msg := NewMessage()
-	msg.Body = p.GetBody()
-	err := proto.Unmarshal(p.GetHead(), msg.Head)
-	if err != nil {
-		return nil, err
-	}
-	return msg, nil
 }
 
 func (s *TcpServer) Start() error {
@@ -108,34 +89,41 @@ func loadTcpSession(socket *tcp.Socket) *TcpSession {
 	return v.(*TcpSession)
 }
 
-func (s *TcpServer) OnTcpMessage(socket *tcp.Socket, p *tcp.THVPacket) {
+func (s *TcpServer) OnMessage(socket *tcp.Socket, p tcp.Packet) {
+	if p.PacketType() != PacketBinaryRouteType {
+		fmt.Println("unknow packet type:", p.PacketType())
+		return
+	}
+
 	sess := loadTcpSession(socket)
 	if sess == nil {
 		return
 	}
-	msg, err := sess.pkg2msg(p)
-	if err != nil {
-		return
-	}
 
 	if s.opts.OnSessionMessage != nil {
-		s.opts.OnSessionMessage(sess, msg)
+		msg, ok := p.(*Message)
+		if ok {
+			s.opts.OnSessionMessage(sess, msg)
+		}
 	}
 }
 
-func (s *TcpServer) OnTcpConn(socket *tcp.Socket, valid bool) {
-	var sess *TcpSession
-	if valid {
-		sess = &TcpSession{
-			Socket: socket,
-		}
-		socket.Meta.Store(tcpSessionKey, sess)
-	} else {
-		sess = loadTcpSession(socket)
-		socket.Meta.Delete(tcpSessionKey)
+func (s *TcpServer) OnConn(socket *tcp.Socket) {
+	sess := &TcpSession{
+		Socket: socket,
 	}
+	socket.Meta.Store(tcpSessionKey, sess)
 
-	if sess != nil && s.opts.OnSessionStatus != nil {
-		s.opts.OnSessionStatus(sess, valid)
+	if s.opts.OnSessionStatus != nil {
+		s.opts.OnSessionStatus(sess, true)
 	}
+}
+
+func (s *TcpServer) OnDisconn(socket *tcp.Socket, err error) {
+	sess := loadTcpSession(socket)
+	socket.Meta.Delete(tcpSessionKey)
+	if sess != nil && s.opts.OnSessionStatus != nil {
+		s.opts.OnSessionStatus(sess, false)
+	}
+	log.Errorf("OnDisconn:%v %v", socket.SessionID(), err)
 }

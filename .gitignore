@@ -1,0 +1,8 @@
+bin
+logs
+log.txt
+*.log
+*.db
+*.exe
+*.pem
+.vscode

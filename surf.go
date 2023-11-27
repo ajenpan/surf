@@ -3,9 +3,12 @@ package surf
 import (
 	"reflect"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ajenpan/surf/server"
 	"github.com/ajenpan/surf/server/tcp"
-	"google.golang.org/protobuf/proto"
+
+	"github.com/ajenpan/surf/utils/rsagen"
 )
 
 func New(opt *Options) *Surf {
@@ -15,51 +18,74 @@ func New(opt *Options) *Surf {
 
 	ret := &Surf{
 		Options: opt,
-		MsgCB:   make(map[string]func(server.Session, *server.Message)),
+		msgCB:   make(map[string]func(server.Session, *server.Message)),
 	}
 	return ret
 }
 
 type Options struct {
-	TcpListenAddr string
 }
 
 type Surf struct {
 	*Options
-
 	tcpsvr *tcp.Server
-
-	MsgCB map[string]func(server.Session, *server.Message)
-	// reqCB map[string]func(server.Session, *server.Message)
+	msgCB  map[string]func(server.Session, *server.Message)
 }
 
-func (s *Surf) Start() {
+func (s *Surf) Start() error {
+	pk, err := rsagen.LoadRsaPublicKeyFromFile("public.pem")
+	if err != nil {
+		return err
+	}
+	opts := &server.TcpServerOptions{
+		ListenAddr:       ":12002",
+		AuthPublicKey:    pk,
+		OnSessionMessage: s.onSessionMessage,
+		OnSessionStatus:  s.onSessionStatus,
+	}
+	svr, err := server.NewTcpServer(opts)
+	if err != nil {
+		return err
+	}
+	return svr.Start()
+}
+
+func (h *Surf) onSessionMessage(s server.Session, m *server.Message) {
+
+}
+
+func (h *Surf) onSessionStatus(s server.Session, enable bool) {
+
+}
+
+func (s *Surf) Stop() {
 
 }
 
 func RegisterMsgHandle[T proto.Message](s *Surf, name string, cb func(s server.Session, msg T)) {
-	s.MsgCB[name] = func(sess server.Session, msg *server.Message) {
+	s.msgCB[name] = func(sess server.Session, msg *server.Message) {
 		var impMsgType T
 		impMsg := reflect.New(reflect.TypeOf(impMsgType).Elem()).Interface().(T)
-		proto.Unmarshal(msg.Body, impMsg)
+		proto.Unmarshal(msg.GetBody(), impMsg)
 		cb(sess, impMsg)
 	}
 }
 
 func RegisterRequestHandle[TReq, TResp proto.Message](s *Surf, name string, cb func(s server.Session, msg TReq) (TResp, error)) {
-	s.MsgCB[name] = func(sess server.Session, msg *server.Message) {
+	s.msgCB[name] = func(sess server.Session, msg *server.Message) {
 		var reqTypeHold TReq
 		req := reflect.New(reflect.TypeOf(reqTypeHold).Elem()).Interface().(TReq)
 
 		// var respTypeHold TResp
 		// resp := reflect.New(reflect.TypeOf(respTypeHold).Elem()).Interface().(TResp)
 
-		proto.Unmarshal(msg.Body, req)
+		proto.Unmarshal(msg.GetBody(), req)
 		resp, err := cb(sess, req)
 		if err != nil {
 			// TODO:
 		}
-		msg.Body, _ = proto.Marshal(resp)
+		raw, _ := proto.Marshal(resp)
+		msg.SetBody(raw)
 		sess.Send(msg)
 	}
 }

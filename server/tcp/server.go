@@ -1,11 +1,15 @@
 package tcp
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ajenpan/surf/auth"
+	"github.com/ajenpan/surf/log"
 )
 
 var socketIdx uint64
@@ -19,12 +23,15 @@ func nextID() string {
 }
 
 type ServerOptions struct {
-	Address          string
-	HeatbeatInterval time.Duration
-	OnMessage        OnMessageFunc
-	OnConn           OnConnStatFunc
-	NewIDFunc        NewIDFunc
-	AuthFunc         func([]byte) (*UserInfo, error)
+	Address   string
+	RWTimeout time.Duration
+	NewIDFunc func() string
+	AuthFunc  func([]byte) (*auth.UserInfo, error)
+
+	OnSocketMessage func(*Socket, Packet)
+	OnSocketConn    func(*Socket)
+	OnSocketDisconn func(*Socket, error)
+	OnAccpect       func(net.Conn) bool
 }
 
 type ServerOption func(*ServerOptions)
@@ -42,14 +49,8 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 	ret.listener = listener
 
-	if ret.opts.OnMessage == nil {
-		ret.opts.OnMessage = func(s *Socket, p *THVPacket) {}
-	}
-	if ret.opts.OnConn == nil {
-		ret.opts.OnConn = func(s *Socket, enable bool) {}
-	}
-	if ret.opts.HeatbeatInterval == 0 {
-		ret.opts.HeatbeatInterval = time.Duration(DefaultTimeoutSec) * time.Second
+	if ret.opts.RWTimeout == 0 {
+		ret.opts.RWTimeout = time.Duration(DefaultTimeoutSec) * time.Second
 	}
 	if ret.opts.NewIDFunc == nil {
 		ret.opts.NewIDFunc = nextID
@@ -69,11 +70,12 @@ type Server struct {
 func (s *Server) Stop() error {
 	select {
 	case <-s.die:
+		return nil
 	default:
 		close(s.die)
 	}
-	s.wgConns.Wait()
 	s.listener.Close()
+	s.wgConns.Wait()
 	return nil
 }
 
@@ -110,98 +112,142 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) onAccept(conn net.Conn) {
+func (s *Server) handshake(conn net.Conn) error {
+	var err error
 
-	rwtimeout := s.opts.HeatbeatInterval
+	rwtimeout := s.opts.RWTimeout
 
-	//read ack
-	ack := newEmptyTHVPacket()
-	if err := readPacket(conn, ack, rwtimeout); err != nil {
-		return
-	}
-	if ack.GetType() != PacketTypeAck &&
-		ack.meta.GetHeadLen() != 0 &&
-		ack.meta.GetBodyLen() != 0 {
-		return
+	p, err := readPacketT[*hvPacket](conn, rwtimeout)
+	if err != nil {
+		return err
 	}
 
-	var userinfo *UserInfo
+	if p.GetType() != PacketTypeHandShake && len(p.GetBody()) != 0 {
+		return ErrInvalidPacket
+	}
+
+	var userinfo *auth.UserInfo
 
 	// auth token
 	if s.opts.AuthFunc != nil {
-		ack.Reset()
-		ack.SetType(PacketTypeActionRequire)
-		ack.SetHead([]byte("auth"))
-		if err := writePacket(conn, ack, rwtimeout); err != nil {
-			return
-		}
-		ack.Reset()
-		if err := readPacket(conn, ack, rwtimeout); err != nil || ack.GetType() != PacketTypeDoAction {
-			return
+		p.SetType(PacketTypeActionRequire)
+		p.SetBody([]byte("auth"))
+		if err = writePacket(conn, rwtimeout, p); err != nil {
+			return err
 		}
 
-		var err error
-		if userinfo, err = s.opts.AuthFunc(ack.GetBody()); err != nil {
-			ack.SetType(PacketTypeAckResult)
-			ack.SetHead([]byte("fail"))
-			ack.SetBody([]uint8(err.Error()))
-			writePacket(conn, ack, rwtimeout)
+		if p, err = readPacketT[*hvPacket](conn, rwtimeout); err != nil || p.GetType() != PacketTypeDoAction {
+			return err
+		}
+
+		if userinfo, err = s.opts.AuthFunc(p.GetBody()); err != nil {
+			p.SetType(PacketTypeAckResult)
+			p.SetBody([]byte("fail"))
+			writePacket(conn, rwtimeout, p)
+			return err
+		}
+	}
+
+	socketid := s.opts.NewIDFunc()
+	socket := NewSocket(conn, SocketOptions{
+		ID:      socketid,
+		Timeout: s.opts.RWTimeout,
+	})
+
+	p.SetType(PacketTypeAckResult)
+	p.SetBody([]byte(socketid))
+
+	if err := writePacket(conn, rwtimeout, p); err != nil {
+		return err
+	}
+	socket.UserInfo = *userinfo
+	return nil
+}
+
+func (s *Server) onAccept(conn net.Conn) {
+	if s.opts.OnAccpect != nil {
+		if !s.opts.OnAccpect(conn) {
+			conn.Close()
 			return
 		}
 	}
 
-	// write ack result and socket id
-	socketid := s.opts.NewIDFunc()
-
-	ack.Reset()
-	ack.SetType(PacketTypeAckResult)
-	ack.SetHead([]byte("ok"))
-	ack.SetBody([]byte(socketid))
-	if err := writePacket(conn, ack, rwtimeout); err != nil {
+	if err := s.handshake(conn); err != nil {
+		conn.Close()
 		return
 	}
 
 	socket := NewSocket(conn, SocketOptions{
-		ID:      socketid,
-		Timeout: s.opts.HeatbeatInterval,
+		ID:      s.opts.NewIDFunc(),
+		Timeout: s.opts.RWTimeout,
 	})
-	socket.UserInfo = userinfo
 	defer socket.Close()
 
+	socket.status = Connected
 	s.wgConns.Add(1)
 	defer s.wgConns.Done()
 
-	// the connection is established
-	go socket.writeWork()
+	// the connection is established here
+	var writeErr error
+	var readErr error
 
 	s.storeSocket(socket)
 	defer s.removeSocket(socket)
 
-	if s.opts.OnConn != nil {
-		s.opts.OnConn(socket, true)
-		defer s.opts.OnConn(socket, false)
+	if s.opts.OnSocketConn != nil {
+		s.opts.OnSocketConn(socket)
+	}
+	if s.opts.OnSocketDisconn != nil {
+		defer func() {
+			s.opts.OnSocketDisconn(socket, errors.Join(writeErr, readErr))
+		}()
 	}
 
-	var socketErr error = nil
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	defer wg.Wait()
+
+	go func() {
+		defer wg.Done()
+		writeErr = socket.writeWork()
+	}()
+	recvchan := make(chan Packet, 100)
+
+	go func() {
+		defer wg.Done()
+		defer close(recvchan)
+		readErr = socket.readWork(recvchan)
+	}()
 
 	for {
-		p := newEmptyTHVPacket()
-		socketErr = socket.readPacket(p)
-		if socketErr != nil {
-			break
-		}
-
-		typ := p.GetType()
-		if typ <= PacketTypeInnerEndAt_ {
-			switch typ {
-			case PacketTypeHeartbeat:
-				fallthrough
-			case PacketTypeEcho:
-				socket.SendPacket(p)
+		select {
+		case <-socket.chClosed:
+			return
+		case <-s.die:
+			return
+		case p, ok := <-recvchan:
+			if !ok {
+				return
 			}
-		} else {
-			if s.opts.OnMessage != nil {
-				s.opts.OnMessage(socket, p)
+			switch p.PacketType() {
+			case HVPacketType:
+				{
+					hvPacket, ok := p.(*hvPacket)
+					if !ok {
+						continue
+					}
+					switch hvPacket.GetType() {
+					case PacketTypeEcho:
+						fallthrough
+					case PacketTypeHeartbeat:
+						log.Debug("svr recv heartbeat")
+						socket.Send(p)
+					}
+				}
+			default:
+				if s.opts.OnSocketMessage != nil {
+					s.opts.OnSocketMessage(socket, p)
+				}
 			}
 		}
 	}
@@ -230,11 +276,11 @@ func (s *Server) SocketCount() int {
 func (s *Server) storeSocket(conn *Socket) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sockets[conn.ID()] = conn
+	s.sockets[conn.SessionID()] = conn
 }
 
 func (s *Server) removeSocket(conn *Socket) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.sockets, conn.ID())
+	delete(s.sockets, conn.SessionID())
 }

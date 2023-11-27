@@ -1,6 +1,8 @@
-package logger
+package log
 
 import (
+	"io"
+
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -19,8 +21,9 @@ func init() {
 		Compress:   false, // disabled by default
 		LocalTime:  true,
 	}
+	Default.SetOutput(io.MultiWriter(Default.Out, output))
+	// Default.SetOutput(output)
 
-	Default.SetOutput(output)
 	Default.SetLevel(logrus.DebugLevel)
 }
 

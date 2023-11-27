@@ -1,0 +1,6 @@
+---
+Language: Proto
+BasedOnStyle: LLVM
+ColumnLimit: 320
+AllowShortBlocksOnASingleLine:	false
+AllowShortFunctionsOnASingleLine:	Empty

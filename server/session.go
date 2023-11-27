@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"sync/atomic"
 	"time"
 )
@@ -11,18 +12,22 @@ import (
 // 2. web socket session
 
 type User interface {
-	UID() uint64
-	UserName() string
+	UserID() uint32
 	UserRole() string
+	UserName() string
 }
 
 type Session interface {
 	User
-	ID() string
-	Valid() bool
+
+	SessionID() string
+	SessionType() string
+
+	IsValid() bool
 	Close() error
 	Send(msg *Message) error
-	SessionType() string
+
+	RemoteAddr() net.Addr
 }
 
 type FuncOnSessionMessage func(Session, *Message)
