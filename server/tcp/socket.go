@@ -82,15 +82,15 @@ func (s *Socket) Send(p Packet) error {
 	return nil
 }
 
-func (s *Socket) Close() error {
+func (s *Socket) Close() {
 	stat := atomic.SwapInt32((*int32)(&s.status), int32(Disconnected))
 	if stat == int32(Disconnected) {
-		return nil
+		return
 	}
 
 	select {
 	case <-s.chClosed:
-		return nil
+		return
 	default:
 		close(s.chClosed)
 	}
@@ -100,7 +100,6 @@ func (s *Socket) Close() error {
 		s.conn = nil
 	}
 	close(s.chWrite)
-	return nil
 }
 
 // returns the remote network address.

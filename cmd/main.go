@@ -11,7 +11,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ajenpan/surf/auth"
-	"github.com/ajenpan/surf/handle"
+	"github.com/ajenpan/surf/route"
 	"github.com/ajenpan/surf/server"
 
 	"github.com/ajenpan/battle/msg"
@@ -90,9 +90,9 @@ func RealMain(c *cli.Context) error {
 	client.Connect()
 	defer client.Close()
 
-	// client2 := conn2(ppk)
-	// client2.Connect()
-	// defer client2.Close()
+	client2 := conn2(ppk)
+	client2.Connect()
+	defer client2.Close()
 
 	s := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", s.String())
@@ -101,8 +101,7 @@ func RealMain(c *cli.Context) error {
 
 func server1(pk *rsa.PublicKey, listenAt string) *server.TcpServer {
 	var err error
-
-	h, err := handle.NewRouter()
+	h, err := route.NewRouter()
 	if err != nil {
 		panic(err)
 	}
@@ -121,7 +120,7 @@ func server1(pk *rsa.PublicKey, listenAt string) *server.TcpServer {
 
 func conn1(pk *rsa.PrivateKey) *server.TcpClient {
 	jwt, _ := auth.GenerateToken(pk, &auth.UserInfo{
-		UId:   110002,
+		UId:   1,
 		UName: "battle",
 		URole: "battle",
 	}, 24*time.Hour)
@@ -130,7 +129,7 @@ func conn1(pk *rsa.PrivateKey) *server.TcpClient {
 		RemoteAddress:        "localhost:8080",
 		AuthToken:            jwt,
 		ReconnectDelaySecond: 10,
-		OnMessage: func(tc *server.TcpClient, m *server.Message) {
+		OnMessage: func(tc *server.TcpClient, m *server.MsgWraper) {
 			log.Infof("recv msg: %v", m)
 		},
 		OnStatus: func(tc *server.TcpClient, b bool) {
@@ -142,9 +141,11 @@ func conn1(pk *rsa.PrivateKey) *server.TcpClient {
 }
 
 func conn2(pk *rsa.PrivateKey) *server.TcpClient {
+	battleuid := uint32(1)
+
 	jwt, _ := auth.GenerateToken(pk, &auth.UserInfo{
-		UId:   1010002,
-		UName: "user1010002",
+		UId:   2,
+		UName: "user2",
 		URole: "User",
 	}, 24*time.Hour)
 
@@ -153,7 +154,7 @@ func conn2(pk *rsa.PrivateKey) *server.TcpClient {
 		AuthToken:            jwt,
 		ReconnectDelaySecond: 10,
 
-		OnMessage: func(s *server.TcpClient, m *server.Message) {
+		OnMessage: func(s *server.TcpClient, m *server.MsgWraper) {
 		},
 		OnStatus: func(s *server.TcpClient, enable bool) {
 			if !enable {
@@ -180,8 +181,7 @@ func conn2(pk *rsa.PrivateKey) *server.TcpClient {
 					},
 				},
 			}
-
-			s.SendReqMsg(110002, req, server.NewTcpRespCallbackFunc(func(c *server.TcpClient, resp *msg.RespStartBattle, err error) {
+			s.SendReqMsg(battleuid, req, server.NewTcpRespCallbackFunc(func(c server.Session, resp *msg.RespStartBattle, err error) {
 				if err != nil {
 					log.Errorf("send req failed: %v", err)
 					return
@@ -192,7 +192,7 @@ func conn2(pk *rsa.PrivateKey) *server.TcpClient {
 					req := &msg.ReqJoinBattle{
 						BattleId: resp.BattleId,
 					}
-					s.SendReqMsg(110002, req, server.NewTcpRespCallbackFunc(func(c *server.TcpClient, resp *msg.RespJoinBattle, err error) {
+					s.SendReqMsg(battleuid, req, server.NewTcpRespCallbackFunc(func(c server.Session, resp *msg.RespJoinBattle, err error) {
 						if err != nil {
 							log.Errorf("send req failed: %v", err)
 							return

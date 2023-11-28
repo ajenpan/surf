@@ -3,7 +3,6 @@ package server
 import (
 	"errors"
 	"reflect"
-	"sync"
 	"sync/atomic"
 
 	"google.golang.org/protobuf/proto"
@@ -17,7 +16,7 @@ type TcpClientOptions struct {
 	RemoteAddress        string
 	AuthToken            string
 	ReconnectDelaySecond int32
-	OnMessage            func(*TcpClient, *Message)
+	OnMessage            func(*TcpClient, *MsgWraper)
 	OnStatus             func(*TcpClient, bool)
 }
 
@@ -33,27 +32,25 @@ func NewTcpClient(opts *TcpClientOptions) *TcpClient {
 		OnSocketDisconn:      ret.OnDisconn,
 		ReconnectDelaySecond: opts.ReconnectDelaySecond,
 	})
-	ret.Client = imp
+	ret.imp = imp
 	return ret
 }
 
 var ErrTimeout = errors.New("timeout")
 
-type FuncRespCallback = func(*TcpClient, *msg.ResponseMsgWrap)
-
 type TcpClient struct {
-	*tcp.Client
-	opts   *TcpClientOptions
-	seqidx uint32
-	cb     sync.Map
+	TcpSession
+
+	imp  *tcp.Client
+	opts *TcpClientOptions
 }
 
-func (s *TcpClient) Send(p *Message) error {
-	return s.Client.Send(p)
-}
+// func (s *TcpClient) Send(p *MsgWraper) error {
+// 	return s.Client.Send(p)
+// }
 
-func (s *TcpClient) SessionType() string {
-	return "tcp-session"
+func (c *TcpClient) Connect() error {
+	return c.imp.Connect()
 }
 
 func (c *TcpClient) SetCallback(askid uint32, f FuncRespCallback) {
@@ -72,12 +69,12 @@ func (c *TcpClient) GetCallback(askid uint32) FuncRespCallback {
 }
 
 func (c *TcpClient) OnMessage(socket *tcp.Client, p tcp.Packet) {
-	if p.PacketType() != PacketBinaryRouteType {
+	if p.PacketType() != PacketTypeRouteMsgWraper {
 		log.Error("unknow packet type:", p.PacketType())
 		return
 	}
 
-	m, ok := p.(*Message)
+	m, ok := p.(*MsgWraper)
 	if !ok {
 		log.Error("unknow packet type:", p.PacketType())
 	}
@@ -105,37 +102,18 @@ func (c *TcpClient) OnMessage(socket *tcp.Client, p tcp.Packet) {
 }
 
 func (c *TcpClient) OnConn(socket *tcp.Client) {
+	c.Socket = socket.Socket
 	if c.opts.OnStatus != nil {
 		c.opts.OnStatus(c, true)
 	}
 }
 
 func (c *TcpClient) OnDisconn(socket *tcp.Client, err error) {
+	c.Socket = nil
+
 	if c.opts.OnStatus != nil {
 		c.opts.OnStatus(c, false)
 	}
-}
-
-func (c *TcpClient) SendAsyncMsg(target uint32, req proto.Message) error {
-	var err error
-	body, err := proto.Marshal(req)
-	if err != nil {
-		return err
-	}
-	wrap := &msg.AsyncMsgWrap{
-		Name: string(req.ProtoReflect().Descriptor().FullName().Name()),
-		Body: body,
-	}
-	raw, err := proto.Marshal(wrap)
-	if err != nil {
-		return err
-	}
-	msg := NewMessage()
-	msg.SetBody(raw)
-	msg.SetMsgtype(1)
-	msg.SetUid(target)
-
-	return c.Send(msg)
 }
 
 func (c *TcpClient) NextSeqID() uint32 {
@@ -146,8 +124,8 @@ func (c *TcpClient) NextSeqID() uint32 {
 	return id
 }
 
-func NewTcpRespCallbackFunc[T proto.Message](f func(*TcpClient, T, error)) FuncRespCallback {
-	return func(c *TcpClient, resp *msg.ResponseMsgWrap) {
+func NewTcpRespCallbackFunc[T proto.Message](f func(Session, T, error)) FuncRespCallback {
+	return func(c Session, resp *msg.ResponseMsgWrap) {
 		var tresp T
 		rsep := reflect.New(reflect.TypeOf(tresp).Elem()).Interface().(T)
 		err1 := proto.Unmarshal(resp.Body, rsep)
@@ -176,7 +154,7 @@ func (c *TcpClient) SendReqMsg(target uint32, req proto.Message, cb FuncRespCall
 		return err
 	}
 
-	msg := NewMessage()
+	msg := NewMsgWraper()
 	msg.SetBody(raw)
 	msg.SetMsgtype(1)
 	msg.SetUid(target)
@@ -204,64 +182,9 @@ func (c *TcpClient) SendRespMsg(target uint32, seqid uint32, resp proto.Message)
 	if err != nil {
 		return err
 	}
-	msg := NewMessage()
+	msg := NewMsgWraper()
 	msg.SetBody(raw)
 	msg.SetMsgtype(1)
 	msg.SetUid(target)
 	return c.Send(msg)
 }
-
-// func (c *TcpClient) SyncCall(target uint64, ctx context.Context, req proto.Message, resp proto.Message) error {
-// var err error
-// seqid := c.NextSeqID()
-
-// res := make(chan error, 1)
-// var askid = 0
-// c.SetCallback(uint32(askid), func(c *TcpClient, p *tcp.THVPacket) {
-// 	var err error
-// 	defer func() {
-// 		res <- err
-// 	}()
-// 	head, err := tcp.CastRoutHead(p.GetHead())
-// 	if err != nil {
-// 		return
-// 	}
-// 	msgtype := head.GetMsgTyp()
-// 	if msgtype == tcp.RouteTypRespErr {
-// 		resperr := &msg.Error{Code: -1}
-// 		err := proto.Unmarshal(p.GetBody(), resperr)
-// 		if err != nil {
-// 			return
-// 		}
-// 		err = resperr
-// 		return
-// 	} else if head.GetMsgTyp() == tcp.RouteTypResponse {
-// 		gotmsgid := head.GetMsgID()
-// 		expectmsgid := uint32(calltable.GetMessageMsgID(resp))
-// 		if gotmsgid == expectmsgid {
-// 			err = proto.Unmarshal(p.GetBody(), resp)
-// 		} else {
-// 			err = fmt.Errorf("msgid not match, expect:%v, got:%v", expectmsgid, gotmsgid)
-// 		}
-// 	} else {
-// 		err = fmt.Errorf("unknow msgtype:%v", msgtype)
-// 	}
-// })
-
-// err = c.imp.SendPacket(packet)
-
-// if err != nil {
-// 	c.RemoveCallback(askid)
-// 	return err
-// }
-
-// select {
-// case err = <-res:
-// 	return err
-// case <-ctx.Done():
-// 	// dismiss callback
-// 	c.SetCallback(askid, func(c *TcpClient, packet *tcp.THVPacket) {})
-// 	return ctx.Err()
-// }
-// return nil
-// }

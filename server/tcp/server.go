@@ -101,7 +101,7 @@ func (s *Server) Start() error {
 						time.Sleep(tempDelay)
 						continue
 					}
-					fmt.Println(err)
+					log.Error(err)
 					return
 				}
 				tempDelay = 0
@@ -112,18 +112,18 @@ func (s *Server) Start() error {
 	return nil
 }
 
-func (s *Server) handshake(conn net.Conn) error {
+func (s *Server) handshake(conn net.Conn) (*Socket, error) {
 	var err error
 
 	rwtimeout := s.opts.RWTimeout
 
 	p, err := readPacketT[*hvPacket](conn, rwtimeout)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if p.GetType() != PacketTypeHandShake && len(p.GetBody()) != 0 {
-		return ErrInvalidPacket
+		return nil, ErrInvalidPacket
 	}
 
 	var userinfo *auth.UserInfo
@@ -133,18 +133,18 @@ func (s *Server) handshake(conn net.Conn) error {
 		p.SetType(PacketTypeActionRequire)
 		p.SetBody([]byte("auth"))
 		if err = writePacket(conn, rwtimeout, p); err != nil {
-			return err
+			return nil, err
 		}
 
 		if p, err = readPacketT[*hvPacket](conn, rwtimeout); err != nil || p.GetType() != PacketTypeDoAction {
-			return err
+			return nil, err
 		}
 
 		if userinfo, err = s.opts.AuthFunc(p.GetBody()); err != nil {
 			p.SetType(PacketTypeAckResult)
 			p.SetBody([]byte("fail"))
 			writePacket(conn, rwtimeout, p)
-			return err
+			return nil, err
 		}
 	}
 
@@ -158,10 +158,10 @@ func (s *Server) handshake(conn net.Conn) error {
 	p.SetBody([]byte(socketid))
 
 	if err := writePacket(conn, rwtimeout, p); err != nil {
-		return err
+		return nil, err
 	}
 	socket.UserInfo = *userinfo
-	return nil
+	return socket, nil
 }
 
 func (s *Server) onAccept(conn net.Conn) {
@@ -171,16 +171,12 @@ func (s *Server) onAccept(conn net.Conn) {
 			return
 		}
 	}
-
-	if err := s.handshake(conn); err != nil {
+	socket, err := s.handshake(conn)
+	if err != nil {
 		conn.Close()
+		log.Error("handshake err:", err)
 		return
 	}
-
-	socket := NewSocket(conn, SocketOptions{
-		ID:      s.opts.NewIDFunc(),
-		Timeout: s.opts.RWTimeout,
-	})
 	defer socket.Close()
 
 	socket.status = Connected
@@ -188,11 +184,27 @@ func (s *Server) onAccept(conn net.Conn) {
 	defer s.wgConns.Done()
 
 	// the connection is established here
-	var writeErr error
-	var readErr error
 
 	s.storeSocket(socket)
 	defer s.removeSocket(socket)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	defer wg.Wait()
+
+	var writeErr error
+	go func() {
+		defer wg.Done()
+		writeErr = socket.writeWork()
+	}()
+
+	recvchan := make(chan Packet, 100)
+	var readErr error
+	go func() {
+		defer wg.Done()
+		defer close(recvchan)
+		readErr = socket.readWork(recvchan)
+	}()
 
 	if s.opts.OnSocketConn != nil {
 		s.opts.OnSocketConn(socket)
@@ -202,22 +214,6 @@ func (s *Server) onAccept(conn net.Conn) {
 			s.opts.OnSocketDisconn(socket, errors.Join(writeErr, readErr))
 		}()
 	}
-
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	defer wg.Wait()
-
-	go func() {
-		defer wg.Done()
-		writeErr = socket.writeWork()
-	}()
-	recvchan := make(chan Packet, 100)
-
-	go func() {
-		defer wg.Done()
-		defer close(recvchan)
-		readErr = socket.readWork(recvchan)
-	}()
 
 	for {
 		select {
@@ -240,7 +236,7 @@ func (s *Server) onAccept(conn net.Conn) {
 					case PacketTypeEcho:
 						fallthrough
 					case PacketTypeHeartbeat:
-						log.Debug("svr recv heartbeat")
+						log.Debug("svr recv heartbeat,sid:", socket.SessionID())
 						socket.Send(p)
 					}
 				}

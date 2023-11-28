@@ -2,14 +2,12 @@ package server
 
 import (
 	"crypto/rsa"
-	"fmt"
 	"net"
 
 	"github.com/ajenpan/surf/auth"
 	"github.com/ajenpan/surf/log"
 	"github.com/ajenpan/surf/server/tcp"
-
-	"github.com/ajenpan/surf/server/marshal"
+	"github.com/ajenpan/surf/utils/marshal"
 )
 
 type TcpServerOptions struct {
@@ -59,20 +57,6 @@ type TcpServer struct {
 	listenAddr string
 }
 
-type TcpSession struct {
-	*tcp.Socket
-}
-
-var tcpSessionKey = &struct{}{}
-
-func (s *TcpSession) Send(p *Message) error {
-	return s.Socket.Send(p)
-}
-
-func (s *TcpSession) SessionType() string {
-	return "tcp-session"
-}
-
 func (s *TcpServer) Start() error {
 	return s.imp.Start()
 }
@@ -81,17 +65,9 @@ func (s *TcpServer) Stop() error {
 	return s.imp.Stop()
 }
 
-func loadTcpSession(socket *tcp.Socket) *TcpSession {
-	v, ok := socket.Meta.Load(tcpSessionKey)
-	if !ok {
-		return nil
-	}
-	return v.(*TcpSession)
-}
-
 func (s *TcpServer) OnMessage(socket *tcp.Socket, p tcp.Packet) {
-	if p.PacketType() != PacketBinaryRouteType {
-		fmt.Println("unknow packet type:", p.PacketType())
+	if p.PacketType() != PacketTypeRouteMsgWraper {
+		log.Error("unknow packet type:", p.PacketType())
 		return
 	}
 
@@ -101,7 +77,7 @@ func (s *TcpServer) OnMessage(socket *tcp.Socket, p tcp.Packet) {
 	}
 
 	if s.opts.OnSessionMessage != nil {
-		msg, ok := p.(*Message)
+		msg, ok := p.(*MsgWraper)
 		if ok {
 			s.opts.OnSessionMessage(sess, msg)
 		}
@@ -109,11 +85,7 @@ func (s *TcpServer) OnMessage(socket *tcp.Socket, p tcp.Packet) {
 }
 
 func (s *TcpServer) OnConn(socket *tcp.Socket) {
-	sess := &TcpSession{
-		Socket: socket,
-	}
-	socket.Meta.Store(tcpSessionKey, sess)
-
+	sess := newTcpSession(socket)
 	if s.opts.OnSessionStatus != nil {
 		s.opts.OnSessionStatus(sess, true)
 	}

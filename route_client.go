@@ -97,7 +97,7 @@ func (h *RouteClient) OnStatus(s *server.TcpClient, enable bool) {
 	fmt.Println("OnConnect:", s.UserID(), s.SessionID(), enable)
 }
 
-func (h *RouteClient) OnMessage(s *server.TcpClient, m *server.Message) {
+func (h *RouteClient) OnMessage(s *server.TcpClient, m *server.MsgWraper) {
 	typ := m.GetMsgtype()
 	switch typ {
 	case 0:

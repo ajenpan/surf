@@ -1,12 +1,12 @@
-package handle
+package route
 
 import (
-	"log"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/auth"
+	"github.com/ajenpan/surf/log"
 	"github.com/ajenpan/surf/server"
 )
 
@@ -28,14 +28,8 @@ type Router struct {
 	Selfinfo *auth.UserInfo
 }
 
-type tcpSocketKeyT struct{}
-type tcpPacketKeyT struct{}
-
-var tcpSocketKey = tcpSocketKeyT{}
-var tcpPacketKey = tcpPacketKeyT{}
-
 func (r *Router) OnSessionStatus(s server.Session, enable bool) {
-	log.Printf("OnSessionStatus: %v %v %v, %v \n", s.SessionID(), s.RemoteAddr(), s.UserName(), enable)
+	log.Debugf("OnSessionStatus: %v %v %v %v", s.SessionID(), s.RemoteAddr(), s.UserID(), enable)
 
 	currSession := r.GetUserSession(s.UserID())
 	if enable {
@@ -53,7 +47,7 @@ func (r *Router) OnSessionStatus(s server.Session, enable bool) {
 	}
 }
 
-func (r *Router) OnSessionMessage(s server.Session, m *server.Message) {
+func (r *Router) OnSessionMessage(s server.Session, m *server.MsgWraper) {
 
 	var err error
 	targetuid := m.GetUid()
@@ -67,7 +61,7 @@ func (r *Router) OnSessionMessage(s server.Session, m *server.Message) {
 	targetSess := r.GetUserSession(targetuid)
 	if targetSess == nil {
 		//TODO: send err to source
-		log.Println("session not found")
+		log.Print("session not found")
 		return
 	}
 
@@ -78,7 +72,7 @@ func (r *Router) OnSessionMessage(s server.Session, m *server.Message) {
 	m.SetUid(s.UserID())
 	err = targetSess.Send(m)
 	if err != nil {
-		log.Println(err)
+		log.Print(err)
 	}
 }
 
@@ -130,7 +124,7 @@ func (r *Router) PublishEvent(event proto.Message) {
 	log.Printf("[Mock PublishEvent] name:%v, msg:%v\n", string(proto.MessageName(event).Name()), event)
 }
 
-func (r *Router) OnCall(s server.Session, msg *server.Message) {
+func (r *Router) OnCall(s server.Session, msg *server.MsgWraper) {
 	// var err error
 
 	// msgid := int(head.GetMsgID())
@@ -210,7 +204,7 @@ func (r *Router) OnCall(s server.Session, msg *server.Message) {
 	// }
 }
 
-func (r *Router) forwardEnable(s server.Session, target server.Session, msg *server.Message) bool {
+func (r *Router) forwardEnable(s server.Session, target server.Session, msg *server.MsgWraper) bool {
 	// suinfo := GetSocketUserInfo(s)
 	// tuinfo := GetSocketUserInfo(target)
 	// if suinfo == nil || tuinfo == nil {

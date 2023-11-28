@@ -128,7 +128,7 @@ func (c *Client) doconnect() error {
 					}
 					switch hvPacket.GetType() {
 					case PacketTypeHeartbeat:
-						log.Debug("client recv heartbeat")
+						log.Debug("client recv heartbeat,sid:", socket.SessionID())
 					}
 				default:
 					if c.Opt.OnSocketMessage != nil {
@@ -143,14 +143,15 @@ func (c *Client) doconnect() error {
 
 func (c *Client) reconnect() {
 	time.AfterFunc(time.Duration(c.Opt.ReconnectDelaySecond)*time.Second, func() {
-		fmt.Println("start to reconnect")
+		log.Info("start to reconnect to ", c.Opt.RemoteAddress)
+
 		if c.IsValid() {
-			fmt.Println("already connected")
+			log.Error("already connected")
 			return
 		}
 		err := c.doconnect()
 		if err != nil {
-			fmt.Println("connect error:", err)
+			log.Error("connect error:", err)
 			// go on reconnect
 			c.reconnect()
 		}
