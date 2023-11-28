@@ -82,7 +82,7 @@ func RealMain(c *cli.Context) error {
 
 	fmt.Println(jwt)
 
-	svr := server1(pk, "localhost:8080")
+	svr := server1(pk, ":8080")
 	svr.Start()
 	defer svr.Stop()
 

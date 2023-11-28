@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package surf;
+
+option go_package = "/msg";
+option csharp_namespace = "src.msg.surf";
+
+message ReqLinkSession {}
+
+message RespLinkSession {}
+
+message NotifyLinkStatus {
+  int32 status = 1;
+  uint32 uid = 2;
+}

@@ -3,6 +3,7 @@ syntax = "proto3";
 package surf;
 
 option go_package = "/msg";
+option csharp_namespace = "src.msg.surf";
 
 message Error {
   int32 code = 1;
