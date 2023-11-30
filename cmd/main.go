@@ -11,15 +11,14 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ajenpan/surf/auth"
+	"github.com/ajenpan/surf/log"
 	"github.com/ajenpan/surf/route"
 	"github.com/ajenpan/surf/server"
-
-	"github.com/ajenpan/battle/msg"
-	"github.com/ajenpan/surf/log"
 	"github.com/ajenpan/surf/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/utils/signal"
 
 	_ "github.com/ajenpan/battle/logic/niuniu"
+	"github.com/ajenpan/battle/msg"
 )
 
 var (
@@ -78,7 +77,7 @@ func RealMain(c *cli.Context) error {
 		UId:   10001,
 		UName: "gdclient",
 		URole: "user",
-	}, 24*time.Hour)
+	}, 240*time.Hour)
 
 	fmt.Println(jwt)
 

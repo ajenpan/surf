@@ -137,13 +137,15 @@ func (s *TcpSession) SendResponse(target uint32, req *RequestMsg, resp proto.Mes
 		err = errors.Join(err, merr)
 	}
 
-	if serr, ok := err.(*ResponseError); ok {
-		respwrap.Err = (*msg.Error)(serr)
-	} else {
-		respwrap.Err = (*msg.Error)(&ResponseError{
-			Code:   -1,
-			Detail: err.Error(),
-		})
+	if err != nil {
+		if serr, ok := err.(*ResponseError); ok {
+			respwrap.Err = (*msg.Error)(serr)
+		} else {
+			respwrap.Err = (*msg.Error)(&ResponseError{
+				Code:   -1,
+				Detail: err.Error(),
+			})
+		}
 	}
 
 	body, err := proto.Marshal((proto.Message)(respwrap))

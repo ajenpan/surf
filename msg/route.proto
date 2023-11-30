@@ -5,11 +5,15 @@ package surf;
 option go_package = "/msg";
 option csharp_namespace = "src.msg.surf";
 
-message ReqLinkSession {}
+message ReqLinkSession {
+  int32 target = 1;
+}
 
-message RespLinkSession {}
+message RespLinkSession {
+  int32 target = 1;
+}
 
 message NotifyLinkStatus {
-  int32 status = 1;
-  uint32 uid = 2;
+  uint32 uid = 1;
+  int32 status = 2;
 }

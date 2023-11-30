@@ -77,6 +77,7 @@ func (c *TcpClient) OnMessage(socket *tcp.Client, p tcp.Packet) {
 	m, ok := p.(*MsgWraper)
 	if !ok {
 		log.Error("unknow packet type:", p.PacketType())
+		return
 	}
 
 	if m.GetMsgtype() == MsgTypeResponse {
@@ -109,8 +110,6 @@ func (c *TcpClient) OnConn(socket *tcp.Client) {
 }
 
 func (c *TcpClient) OnDisconn(socket *tcp.Client, err error) {
-	c.Socket = nil
-
 	if c.opts.OnStatus != nil {
 		c.opts.OnStatus(c, false)
 	}
@@ -133,7 +132,13 @@ func NewTcpRespCallbackFunc[T proto.Message](f func(Session, T, error)) FuncResp
 			f(c, rsep, err1)
 			return
 		}
-		f(c, rsep, resp.Err)
+
+		var err error
+		if !(resp.Err == nil || resp.Err.Code == 0) {
+			err = resp.Err
+		}
+
+		f(c, rsep, err)
 	}
 }
 

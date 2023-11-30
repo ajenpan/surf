@@ -69,11 +69,6 @@ func (c *Client) doconnect() error {
 	c.Socket = socket
 
 	go func() {
-		tk := time.NewTicker(c.Opt.Timeout / 3)
-		defer tk.Stop()
-		heartbeatPakcet := newHVPacket()
-		heartbeatPakcet.SetType(PacketTypeHeartbeat)
-		checkPos := int64(c.Opt.Timeout.Seconds() / 2)
 
 		var writeErr error
 		var readErr error
@@ -103,6 +98,14 @@ func (c *Client) doconnect() error {
 			c.Opt.OnSocketConn(c)
 		}
 
+		// start heartbeat
+		tkcheck := c.Opt.Timeout / 4
+		tk := time.NewTicker(tkcheck)
+		defer tk.Stop()
+		heartbeatPakcet := newHVPacket()
+		heartbeatPakcet.SetType(PacketTypeHeartbeat)
+		checkPos := (int64)(tkcheck.Seconds())
+
 		for {
 			select {
 			case <-socket.chClosed:
@@ -112,9 +115,16 @@ func (c *Client) doconnect() error {
 					return
 				}
 				nowUnix := now.Unix()
+				lastRecvAt := atomic.LoadInt64(&socket.lastRecvAt)
 				lastSendAt := atomic.LoadInt64(&socket.lastSendAt)
-				if nowUnix-lastSendAt >= checkPos {
-					socket.Send(heartbeatPakcet)
+				idletime := nowUnix - min(lastRecvAt, lastSendAt)
+				if idletime >= checkPos {
+					//log.Debugf("client send heartbeat,sid:%v %v ,now:%v %v %v", socket.SessionID(), int(time.Duration(idletime).Seconds()), nowUnix, socket.lastSendAt, socket.lastRecvAt)
+					if err := socket.Send(heartbeatPakcet); err != nil {
+						log.Error("send heartbeat:", err)
+					}
+				} else {
+					//log.Debugf("client miss heartbeat,sid:%v %v ,now:%v %v %v", socket.SessionID(), int(time.Duration(idletime).Seconds()), nowUnix, socket.lastSendAt, socket.lastRecvAt)
 				}
 			case p, ok := <-recvchan:
 				if !ok {
@@ -191,13 +201,11 @@ func (c *Client) doHandShake(conn net.Conn) (*Socket, error) {
 					break
 				}
 			}
-		} else if pp.GetType() == PacketTypeAckResult {
-			body := string(pp.GetBody())
-			if len(body) == 0 {
-				err = fmt.Errorf("ack result failed")
-				break
-			}
-			socketid = body
+		} else if pp.GetType() == PacketTypeAckSuccess {
+			socketid = string(pp.GetBody())
+			break
+		} else if pp.GetType() == PacketTypeAckFailure {
+			err = fmt.Errorf("ack failure: %v", string(pp.GetBody()))
 			break
 		} else {
 			err = fmt.Errorf("invalid packet type: %d", pp.GetType())

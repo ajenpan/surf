@@ -64,7 +64,16 @@ type Surf struct {
 }
 
 func (s *Surf) Start() error {
+	for _, c := range s.clients {
+		c.Connect()
+	}
 	return nil
+}
+
+func (s *Surf) Stop() {
+	for _, c := range s.clients {
+		c.Close()
+	}
 }
 
 func (s *Surf) getAsyncCallbcak(name string) FuncAsyncHandle {
@@ -115,10 +124,6 @@ func (h *Surf) onStatus(s *server.TcpClient, enable bool) {
 	log.Infof("onstatus: %v, %v", s.SessionID(), enable)
 }
 
-func (s *Surf) Stop() {
-
-}
-
 // func (h *Surf) OnAsync(s server.Session, uid uint32, m *server.AsyncMsg) {
 // 	var err error
 // 	method := h.CT.Get(m.Name)
@@ -163,7 +168,6 @@ func (s *Surf) Stop() {
 // 		err, _ = result[0].Interface().(error)
 // 		resp, _ = result[1].Interface().(proto.Message)
 // 	}
-
 // 	s.SendResponse(uid, m, resp, err)
 // }
 

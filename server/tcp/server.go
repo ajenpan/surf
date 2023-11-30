@@ -141,8 +141,8 @@ func (s *Server) handshake(conn net.Conn) (*Socket, error) {
 		}
 
 		if userinfo, err = s.opts.AuthFunc(p.GetBody()); err != nil {
-			p.SetType(PacketTypeAckResult)
-			p.SetBody([]byte("fail"))
+			p.SetType(PacketTypeAckFailure)
+			p.SetBody([]byte(err.Error()))
 			writePacket(conn, rwtimeout, p)
 			return nil, err
 		}
@@ -154,7 +154,7 @@ func (s *Server) handshake(conn net.Conn) (*Socket, error) {
 		Timeout: s.opts.RWTimeout,
 	})
 
-	p.SetType(PacketTypeAckResult)
+	p.SetType(PacketTypeAckSuccess)
 	p.SetBody([]byte(socketid))
 
 	if err := writePacket(conn, rwtimeout, p); err != nil {
@@ -177,20 +177,20 @@ func (s *Server) onAccept(conn net.Conn) {
 		log.Error("handshake err:", err)
 		return
 	}
-	defer socket.Close()
-
 	socket.status = Connected
+
 	s.wgConns.Add(1)
 	defer s.wgConns.Done()
 
 	// the connection is established here
-
 	s.storeSocket(socket)
 	defer s.removeSocket(socket)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 	defer wg.Wait()
+
+	defer socket.Close()
 
 	var writeErr error
 	go func() {
@@ -237,7 +237,9 @@ func (s *Server) onAccept(conn net.Conn) {
 						fallthrough
 					case PacketTypeHeartbeat:
 						log.Debug("svr recv heartbeat,sid:", socket.SessionID())
-						socket.Send(p)
+						if err := socket.Send(p); err != nil {
+							log.Error(err)
+						}
 					}
 				}
 			default:

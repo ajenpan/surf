@@ -51,7 +51,8 @@ const (
 	PacketTypeHandShake     hvPacketSubType = PacketTypeInnerStartAt_ + iota
 	PacketTypeActionRequire hvPacketSubType = PacketTypeInnerStartAt_ + iota
 	PacketTypeDoAction      hvPacketSubType = PacketTypeInnerStartAt_ + iota
-	PacketTypeAckResult     hvPacketSubType = PacketTypeInnerStartAt_ + iota
+	PacketTypeAckFailure    hvPacketSubType = PacketTypeInnerStartAt_ + iota
+	PacketTypeAckSuccess    hvPacketSubType = PacketTypeInnerStartAt_ + iota
 	PacketTypeHeartbeat     hvPacketSubType = PacketTypeInnerStartAt_ + iota
 	PacketTypeEcho          hvPacketSubType = PacketTypeInnerStartAt_ + iota
 	PacketTypeMessage       hvPacketSubType = PacketTypeInnerStartAt_ + iota
