@@ -36,15 +36,14 @@ func NewSocket(conn net.Conn, opts SocketOptions) *Socket {
 	if opts.Timeout < time.Duration(DefaultMinTimeoutSec)*time.Second {
 		opts.Timeout = time.Duration(DefaultTimeoutSec) * time.Second
 	}
-
 	ret := &Socket{
 		id:       opts.ID,
-		conn:     conn,
 		timeOut:  opts.Timeout,
 		chWrite:  make(chan Packet, 100),
 		chClosed: make(chan struct{}),
 		status:   Disconnected,
 	}
+	ret.setconn(conn)
 	return ret
 }
 
@@ -64,10 +63,19 @@ type Socket struct {
 	lastRecvAt int64
 
 	status SocketStatus
+
+	localAddr  net.Addr
+	remoteAddr net.Addr
 }
 
 func (s *Socket) SessionID() string {
 	return s.id
+}
+
+func (s *Socket) setconn(conn net.Conn) {
+	s.conn = conn
+	s.remoteAddr = conn.RemoteAddr()
+	s.localAddr = conn.LocalAddr()
 }
 
 func (s *Socket) Send(p Packet) error {
@@ -104,17 +112,11 @@ func (s *Socket) Close() {
 
 // returns the remote network address.
 func (s *Socket) RemoteAddr() net.Addr {
-	if s == nil || s.conn == nil {
-		return nil
-	}
-	return s.conn.RemoteAddr()
+	return s.remoteAddr
 }
 
 func (s *Socket) LocalAddr() net.Addr {
-	if s == nil || s.conn == nil {
-		return nil
-	}
-	return s.conn.LocalAddr()
+	return s.localAddr
 }
 
 func (s *Socket) IsValid() bool {

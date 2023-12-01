@@ -152,6 +152,10 @@ func (p *hvPacket) ReadFrom(reader io.Reader) (int64, error) {
 	bodylen := p.head.getBodyLen()
 
 	if bodylen > 0 {
+		if bodylen > uint32(MaxPacketBodySize) {
+			return 0, ErrBodySizeWrong
+		}
+
 		p.body = make([]uint8, bodylen)
 		_, err = io.ReadFull(reader, p.body)
 		if err != nil {

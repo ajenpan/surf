@@ -39,10 +39,11 @@ func New(opt *Options) *Surf {
 
 	for _, addr := range opt.RouteAddrs {
 		opts := &server.TcpClientOptions{
-			RemoteAddress: addr,
-			AuthToken:     s.JWToken,
-			OnMessage:     s.onMessage,
-			OnStatus:      s.onStatus,
+			RemoteAddress:     addr,
+			AuthToken:         s.JWToken,
+			OnMessage:         s.onMessage,
+			OnStatus:          s.onStatus,
+			ReconnectDelaySec: 10,
 		}
 		client := server.NewTcpClient(opts)
 		s.clients[addr] = client
@@ -121,7 +122,7 @@ func (h *Surf) onMessage(s *server.TcpClient, m *server.MsgWraper) {
 }
 
 func (h *Surf) onStatus(s *server.TcpClient, enable bool) {
-	log.Infof("onstatus: %v, %v", s.SessionID(), enable)
+	log.Infof("route onstatus: %v, %v", s.SessionID(), enable)
 }
 
 // func (h *Surf) OnAsync(s server.Session, uid uint32, m *server.AsyncMsg) {

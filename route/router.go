@@ -1,4 +1,4 @@
-package route
+package main
 
 import (
 	"sync"
@@ -48,7 +48,6 @@ func (r *Router) OnSessionStatus(s server.Session, enable bool) {
 }
 
 func (r *Router) OnSessionMessage(s server.Session, m *server.MsgWraper) {
-
 	var err error
 	targetuid := m.GetUid()
 
@@ -61,7 +60,7 @@ func (r *Router) OnSessionMessage(s server.Session, m *server.MsgWraper) {
 	targetSess := r.GetUserSession(targetuid)
 	if targetSess == nil {
 		//TODO: send err to source
-		log.Print("session not found")
+		log.Warnf("session uid:%v not found", targetuid)
 		return
 	}
 
@@ -72,7 +71,7 @@ func (r *Router) OnSessionMessage(s server.Session, m *server.MsgWraper) {
 	m.SetUid(s.UserID())
 	err = targetSess.Send(m)
 	if err != nil {
-		log.Print(err)
+		log.Error(err)
 	}
 }
 

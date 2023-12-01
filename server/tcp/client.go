@@ -14,10 +14,10 @@ import (
 type ClientOption func(*ClientOptions)
 
 type ClientOptions struct {
-	RemoteAddress        string
-	Token                string
-	Timeout              time.Duration
-	ReconnectDelaySecond int32
+	RemoteAddress     string
+	Token             string
+	Timeout           time.Duration
+	ReconnectDelaySec int32
 
 	OnSocketMessage func(*Client, Packet)
 	OnSocketConn    func(*Client)
@@ -31,13 +31,18 @@ func NewClient(opts *ClientOptions) *Client {
 
 	ret := &Client{
 		Opt: opts,
+		Socket: Socket{
+			chWrite:  make(chan Packet, 100),
+			chClosed: make(chan struct{}),
+			timeOut:  opts.Timeout,
+			status:   Disconnected,
+		},
 	}
-
 	return ret
 }
 
 type Client struct {
-	*Socket
+	Socket
 	Opt   *ClientOptions
 	mutex sync.Mutex
 }
@@ -53,22 +58,22 @@ func (c *Client) doconnect() error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if c.Socket != nil && c.Socket.IsValid() {
-		c.Socket.Close()
+	if c.IsValid() {
+		c.Close()
 	}
 
 	conn, err := net.DialTimeout("tcp", c.Opt.RemoteAddress, c.Opt.Timeout)
 	if err != nil {
 		return err
 	}
-	socket, err := c.doHandShake(conn)
+	err = c.doHandShake(conn)
 	if err != nil {
 		conn.Close()
 		return err
 	}
-	c.Socket = socket
 
 	go func() {
+		socket := &c.Socket
 
 		var writeErr error
 		var readErr error
@@ -89,7 +94,7 @@ func (c *Client) doconnect() error {
 			if c.Opt.OnSocketDisconn != nil {
 				c.Opt.OnSocketDisconn(c, errors.Join(writeErr, readErr))
 			}
-			if c.Opt.ReconnectDelaySecond > 0 {
+			if c.Opt.ReconnectDelaySec > 0 {
 				c.reconnect()
 			}
 		}()
@@ -152,7 +157,7 @@ func (c *Client) doconnect() error {
 }
 
 func (c *Client) reconnect() {
-	time.AfterFunc(time.Duration(c.Opt.ReconnectDelaySecond)*time.Second, func() {
+	time.AfterFunc(time.Duration(c.Opt.ReconnectDelaySec)*time.Second, func() {
 		log.Info("start to reconnect to ", c.Opt.RemoteAddress)
 
 		if c.IsValid() {
@@ -168,13 +173,13 @@ func (c *Client) reconnect() {
 	})
 }
 
-func (c *Client) doHandShake(conn net.Conn) (*Socket, error) {
+func (c *Client) doHandShake(conn net.Conn) error {
 	rwtimeout := c.Opt.Timeout
 
 	p := newHVPacket()
 	p.SetType(PacketTypeHandShake)
 	if err := writePacket(conn, rwtimeout, p); err != nil {
-		return nil, err
+		return err
 	}
 
 	actions := map[string][]byte{
@@ -213,15 +218,13 @@ func (c *Client) doHandShake(conn net.Conn) (*Socket, error) {
 		}
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
-	socket := NewSocket(conn, SocketOptions{
-		ID:      socketid,
-		Timeout: rwtimeout,
-	})
 
-	socket.status = Connected
-	return socket, nil
+	c.id = socketid
+	c.status = Connected
+	c.setconn(conn)
+	return nil
 }
 
 func (c *Client) Connect() error {
@@ -229,14 +232,8 @@ func (c *Client) Connect() error {
 		return fmt.Errorf("remote address is empty")
 	}
 	err := c.doconnect()
-	if err != nil && c.Opt.ReconnectDelaySecond > 0 {
+	if err != nil && c.Opt.ReconnectDelaySec > 0 {
 		c.reconnect()
 	}
 	return err
-}
-
-func (c *Client) Close() {
-	if c.Socket != nil {
-		c.Socket.Close()
-	}
 }

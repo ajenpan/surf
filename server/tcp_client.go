@@ -13,11 +13,11 @@ import (
 )
 
 type TcpClientOptions struct {
-	RemoteAddress        string
-	AuthToken            string
-	ReconnectDelaySecond int32
-	OnMessage            func(*TcpClient, *MsgWraper)
-	OnStatus             func(*TcpClient, bool)
+	RemoteAddress     string
+	AuthToken         string
+	ReconnectDelaySec int32
+	OnMessage         func(*TcpClient, *MsgWraper)
+	OnStatus          func(*TcpClient, bool)
 }
 
 func NewTcpClient(opts *TcpClientOptions) *TcpClient {
@@ -25,12 +25,12 @@ func NewTcpClient(opts *TcpClientOptions) *TcpClient {
 		opts: opts,
 	}
 	imp := tcp.NewClient(&tcp.ClientOptions{
-		RemoteAddress:        opts.RemoteAddress,
-		Token:                opts.AuthToken,
-		OnSocketMessage:      ret.OnMessage,
-		OnSocketConn:         ret.OnConn,
-		OnSocketDisconn:      ret.OnDisconn,
-		ReconnectDelaySecond: opts.ReconnectDelaySecond,
+		RemoteAddress:     opts.RemoteAddress,
+		Token:             opts.AuthToken,
+		OnSocketMessage:   ret.OnMessage,
+		OnSocketConn:      ret.OnConn,
+		OnSocketDisconn:   ret.OnDisconn,
+		ReconnectDelaySec: opts.ReconnectDelaySec,
 	})
 	ret.imp = imp
 	return ret
@@ -102,8 +102,8 @@ func (c *TcpClient) OnMessage(socket *tcp.Client, p tcp.Packet) {
 	}
 }
 
-func (c *TcpClient) OnConn(socket *tcp.Client) {
-	c.Socket = socket.Socket
+func (c *TcpClient) OnConn(cc *tcp.Client) {
+	c.Socket = &cc.Socket
 	if c.opts.OnStatus != nil {
 		c.opts.OnStatus(c, true)
 	}

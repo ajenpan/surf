@@ -12,7 +12,6 @@ import (
 
 	"github.com/ajenpan/surf/auth"
 	"github.com/ajenpan/surf/log"
-	"github.com/ajenpan/surf/route"
 	"github.com/ajenpan/surf/server"
 	"github.com/ajenpan/surf/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/utils/signal"
@@ -89,7 +88,7 @@ func RealMain(c *cli.Context) error {
 
 func server1(pk *rsa.PublicKey, listenAt string) *server.TcpServer {
 	var err error
-	h, err := route.NewRouter()
+	h, err := NewRouter()
 	if err != nil {
 		panic(err)
 	}

@@ -105,7 +105,10 @@ func (s *Server) Start() error {
 					return
 				}
 				tempDelay = 0
-				go s.onAccept(conn)
+
+				if conn != nil {
+					go s.onAccept(conn)
+				}
 			}
 		}
 	}()

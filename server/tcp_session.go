@@ -30,7 +30,6 @@ func loadTcpSession(socket *tcp.Socket) *TcpSession {
 
 type TcpSession struct {
 	*tcp.Socket
-
 	seqidx uint32
 	cb     sync.Map
 }
@@ -64,12 +63,6 @@ func (s *TcpSession) SessionType() string {
 
 func (s *TcpSession) Send(p *MsgWraper) error {
 	return s.Socket.Send(p)
-}
-
-func (s *TcpSession) Close() {
-	if s.Socket != nil {
-		s.Socket.Close()
-	}
 }
 
 func (s *TcpSession) SendAsync(uid uint32, a proto.Message) error {
