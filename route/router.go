@@ -1,4 +1,4 @@
-package main
+package route
 
 import (
 	"sync"
@@ -10,13 +10,12 @@ import (
 	"github.com/ajenpan/surf/server"
 )
 
-func NewRouter() (*Router, error) {
+func NewRouter() *Router {
 	ret := &Router{
 		userSession: make(map[uint32]server.Session),
 		// UserSessions :
 	}
-
-	return ret, nil
+	return ret
 }
 
 type Router struct {

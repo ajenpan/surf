@@ -24,14 +24,8 @@ func NewSessionID() string {
 // 1. tcp socket session
 // 2. web socket session
 
-type User interface {
-	UserID() uint32
-	UserRole() string
-	UserName() string
-}
-
 type Session interface {
-	User
+	UserID() uint32
 
 	SessionID() string
 	SessionType() string
