@@ -3,7 +3,7 @@ package route
 import (
 	"sync"
 
-	"github.com/ajenpan/surf/server"
+	"github.com/ajenpan/surf/core/network"
 )
 
 type Groups struct {
@@ -22,13 +22,13 @@ func (m *Groups) GetGroup(name string) *Group {
 	return nil
 }
 
-func (m *Groups) RemoveFromGroup(name string, uid uint64, s server.Session) {
+func (m *Groups) RemoveFromGroup(name string, uid uint64, s *network.Conn) {
 	if v, has := m.groups.Load(name); has {
 		v.(*Group).RemoveIfSame(uid, s)
 	}
 }
 
-func (m *Groups) AddTo(name string, uid uint64, s server.Session) {
+func (m *Groups) AddTo(name string, uid uint64, s *network.Conn) {
 	g := m.MustGetGroup(name)
 	g.Add(uid, s)
 }

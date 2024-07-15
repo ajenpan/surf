@@ -1,0 +1,227 @@
+package network
+
+import (
+	"fmt"
+	"net"
+	"sync"
+	"time"
+
+	"github.com/ajenpan/surf/core/auth"
+)
+
+type TcpServerOptions struct {
+	ListenAddr       string
+	HeatbeatInterval time.Duration
+
+	OnPacket  FuncOnConnPacket
+	OnStatus  FuncOnConnEnable
+	OnAccpect FuncOnAccpect
+	OnAuth    FuncOnAuth
+}
+
+type TcpServerOption func(*TcpServerOptions)
+
+func NewTcpServer(opts TcpServerOptions) (*TcpServer, error) {
+	ret := &TcpServer{
+		opts:    opts,
+		sockets: make(map[string]*Conn),
+		die:     make(chan bool),
+	}
+	if ret.opts.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec)*time.Second {
+		ret.opts.HeatbeatInterval = time.Duration(DefaultTimeoutSec) * time.Second
+	}
+
+	listener, err := net.Listen("tcp", opts.ListenAddr)
+	if err != nil {
+		return nil, err
+	}
+	ret.listener = listener
+	return ret, nil
+}
+
+type TcpServer struct {
+	opts     TcpServerOptions
+	mu       sync.RWMutex
+	sockets  map[string]*Conn
+	die      chan bool
+	listener net.Listener
+}
+
+func (s *TcpServer) Stop() error {
+	select {
+	case <-s.die:
+		return nil
+	default:
+		close(s.die)
+	}
+	s.listener.Close()
+	return nil
+}
+
+func (s *TcpServer) Start() error {
+	go func() {
+		var tempDelay time.Duration = 0
+		for {
+			select {
+			case <-s.die:
+				return
+			default:
+				conn, err := s.listener.Accept()
+				if err != nil {
+					if ne, ok := err.(net.Error); ok && ne.Timeout() {
+						if tempDelay == 0 {
+							tempDelay = 5 * time.Millisecond
+						} else {
+							tempDelay *= 2
+						}
+						if max := 1 * time.Second; tempDelay > max {
+							tempDelay = max
+						}
+						time.Sleep(tempDelay)
+						continue
+					}
+					fmt.Println(err)
+					return
+				}
+				tempDelay = 0
+				go s.onAccept(conn)
+			}
+		}
+	}()
+	return nil
+}
+
+func (s *TcpServer) onAccept(conn net.Conn) {
+	defer conn.Close()
+
+	if s.opts.OnAccpect != nil {
+		if !s.opts.OnAccpect(conn) {
+			return
+		}
+	}
+
+	socket, err := s.handshake(conn)
+	if err != nil {
+		return
+	}
+
+	socket.status = Connected
+
+	// the connection is established here
+	go func() {
+		defer socket.Close()
+		socket.writeWork()
+	}()
+
+	go func() {
+		defer socket.Close()
+		socket.readWork()
+	}()
+
+	if s.opts.OnStatus != nil {
+		s.opts.OnStatus(socket, true)
+		defer s.opts.OnStatus(socket, false)
+	}
+
+	for {
+		select {
+		case <-socket.chClosed:
+			return
+		case <-s.die:
+			socket.Close()
+			return
+		case packet, ok := <-socket.chRead:
+			if !ok {
+				return
+			}
+			switch packet.GetFlag() {
+			case HVPacketFlagHeartbeat:
+				socket.Send(packet)
+			case HVPacketFlagPacket:
+				s.opts.OnPacket(socket, packet)
+			}
+
+		}
+	}
+}
+
+func (s *TcpServer) handshake(conn net.Conn) (*Conn, error) {
+	deadline := time.Now().Add(s.opts.HeatbeatInterval * 2)
+	conn.SetReadDeadline(deadline)
+	conn.SetWriteDeadline(deadline)
+	pk := NewHVPacket()
+	_, err := pk.ReadFrom(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	if pk.GetFlag() != HVPacketFlagHandShake && len(pk.GetBody()) != 0 {
+		return nil, ErrInvalidPacket
+	}
+
+	var us auth.User
+	if s.opts.OnAuth != nil {
+		pk.Reset()
+		pk.SetFlag(HVPacketFlagAuth)
+		if _, err = pk.WriteTo(conn); err != nil {
+			return nil, err
+		}
+		if _, err = pk.ReadFrom(conn); err != nil {
+			return nil, err
+		}
+		if us, err = s.opts.OnAuth(pk.GetBody()); err != nil {
+			return nil, err
+		}
+	}
+
+	// var userinfo *UserInfo
+	// // auth token
+	// if s.opts.AuthFunc != nil {
+	// 	p.SetFlag(hvPacketFlagActionRequire)
+	// 	p.SetBody([]byte("auth"))
+	// 	if _, err = WritePacket(conn, p); err != nil {
+	// 		return nil, err
+	// 	}
+	// 	if p, err = ReadPacketT[*HVPacket](conn); err != nil || p.GetFlag() != hvPacketFlagDoAction {
+	// 		return nil, err
+	// 	}
+	// 	if userinfo, err = s.opts.AuthFunc(p.GetBody()); err != nil {
+	// 		p.SetFlag(hvPacketFlagAckResult)
+	// 		p.SetBody([]byte("fail"))
+	// 		WritePacket(conn, p)
+	// 		return nil, err
+	// 	}
+	// }
+
+	socketid := GenConnID()
+
+	socket := &Conn{
+		User:     us,
+		id:       socketid,
+		conn:     conn,
+		timeOut:  s.opts.HeatbeatInterval,
+		chClosed: make(chan struct{}),
+		status:   Disconnected,
+		chWrite:  make(chan *HVPacket, 10),
+		chRead:   make(chan *HVPacket, 10),
+	}
+
+	pk.SetFlag(HVPacketFlagHandShakeResult)
+	pk.SetSubFlag(0)
+	pk.SetBody([]byte(socketid))
+	if _, err := pk.WriteTo(conn); err != nil {
+		return nil, err
+	}
+
+	return socket, nil
+}
+
+func (s *TcpServer) Address() net.Addr {
+	return s.listener.Addr()
+}
+
+func (s *TcpServer) SocketCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.sockets)
+}

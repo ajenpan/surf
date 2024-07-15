@@ -3,7 +3,7 @@ package route
 import (
 	"sync"
 
-	"github.com/ajenpan/surf/server"
+	"github.com/ajenpan/surf/core/network"
 
 	"github.com/emirpasic/gods/maps/treemap"
 )
@@ -19,27 +19,27 @@ func NewGroup() *Group {
 	}
 }
 
-func (g *Group) Add(uid uint64, s server.Session) {
+func (g *Group) Add(uid uint64, s *network.Conn) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	g.imp.Put(uid, s)
 }
 
-func (g *Group) RemoveIfSame(uid uint64, s server.Session) {
+func (g *Group) RemoveIfSame(uid uint64, s *network.Conn) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 	if v, found := g.imp.Get(uid); found {
-		if v.(server.Session) == s {
+		if v.(*network.Conn) == s {
 			g.imp.Remove(uid)
 		}
 	}
 }
 
-func (g *Group) Get(uid uint64) server.Session {
+func (g *Group) Get(uid uint64) *network.Conn {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 	if v, found := g.imp.Get(uid); found {
-		return v.(server.Session)
+		return v.(*network.Conn)
 	}
 	return nil
 }
@@ -49,19 +49,19 @@ func (g *Group) Size() int {
 	defer g.lock.RUnlock()
 	return g.imp.Size()
 }
-func (g *Group) GetAll() []server.Session {
+func (g *Group) GetAll() []*network.Conn {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
-	ret := make([]server.Session, 0, g.imp.Size())
+	ret := make([]*network.Conn, 0, g.imp.Size())
 	g.imp.All(func(key, value interface{}) bool {
-		ret = append(ret, value.(server.Session))
+		ret = append(ret, value.(*network.Conn))
 		return true
 	})
 	return ret
 }
 
-func (g *Group) Range(startAt, endAt int) ([]server.Session, int) {
+func (g *Group) Range(startAt, endAt int) ([]*network.Conn, int) {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 	if endAt > g.imp.Size() {
@@ -81,9 +81,9 @@ func (g *Group) Range(startAt, endAt int) ([]server.Session, int) {
 	}
 
 	cnt := endAt - startAt
-	ret := make([]server.Session, 0, cnt)
+	ret := make([]*network.Conn, 0, cnt)
 	for i := 0; i < cnt; i++ {
-		ret = append(ret, iter.Value().(server.Session))
+		ret = append(ret, iter.Value().(*network.Conn))
 		if !iter.Next() {
 			break
 		}

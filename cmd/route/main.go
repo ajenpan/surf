@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/rsa"
 	"fmt"
 	"os"
 	"runtime"
@@ -10,12 +9,10 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ajenpan/surf/auth"
-	"github.com/ajenpan/surf/log"
-	"github.com/ajenpan/surf/route"
-	"github.com/ajenpan/surf/server"
-	"github.com/ajenpan/surf/utils/rsagen"
-	utilSignal "github.com/ajenpan/surf/utils/signal"
+	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/log"
+	"github.com/ajenpan/surf/core/utils/rsagen"
+	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 )
 
 var (
@@ -65,7 +62,7 @@ func RealMain(c *cli.Context) error {
 		return err
 	}
 
-	pk, err := rsagen.LoadRsaPublicKeyFromFile(PublicKeyFile)
+	_, err = rsagen.LoadRsaPublicKeyFromFile(PublicKeyFile)
 	if err != nil {
 		return err
 	}
@@ -73,32 +70,12 @@ func RealMain(c *cli.Context) error {
 	jwt, _ := auth.GenerateToken(ppk, &auth.UserInfo{
 		UId:   10001,
 		UName: "gdclient",
-		URole: "user",
+		URole: 0,
 	}, 240*time.Hour)
 
 	fmt.Println(jwt)
 
-	svr := server1(pk, ":8080")
-	svr.Start()
-	defer svr.Stop()
-
 	s := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", s.String())
 	return nil
-}
-
-func server1(pk *rsa.PublicKey, listenAt string) *server.TcpServer {
-	var err error
-	h := route.NewRouter()
-	svropt := &server.TcpServerOptions{
-		AuthPublicKey:    pk,
-		ListenAddr:       listenAt,
-		OnSessionMessage: h.OnSessionMessage,
-		OnSessionStatus:  h.OnSessionStatus,
-	}
-	svr, err := server.NewTcpServer(svropt)
-	if err != nil {
-		panic(err)
-	}
-	return svr
 }

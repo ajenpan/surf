@@ -4,11 +4,9 @@ package event;
 
 option go_package = "event/proto";
 
-service Event {
-  rpc Subscribe(SubscribeRequest) returns (stream EventMessage) {}
+message SubscribeRequest {
+  repeated string topics = 1;
 }
-
-message SubscribeRequest { repeated string topics = 1; }
 
 message EventMessage {
   string topic = 1;
