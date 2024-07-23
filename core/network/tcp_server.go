@@ -13,10 +13,10 @@ type TcpServerOptions struct {
 	ListenAddr       string
 	HeatbeatInterval time.Duration
 
-	OnPacket  FuncOnConnPacket
-	OnStatus  FuncOnConnEnable
-	OnAccpect FuncOnAccpect
-	OnAuth    FuncOnAuth
+	OnConnPacket  FuncOnConnPacket
+	OnConnEnable  FuncOnConnEnable
+	OnConnAuth    FuncOnConnAuth
+	OnConnAccpect func(net.Conn) bool
 }
 
 type TcpServerOption func(*TcpServerOptions)
@@ -24,7 +24,7 @@ type TcpServerOption func(*TcpServerOptions)
 func NewTcpServer(opts TcpServerOptions) (*TcpServer, error) {
 	ret := &TcpServer{
 		opts:    opts,
-		sockets: make(map[string]*Conn),
+		sockets: make(map[string]*TcpConn),
 		die:     make(chan bool),
 	}
 	if ret.opts.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec)*time.Second {
@@ -42,7 +42,7 @@ func NewTcpServer(opts TcpServerOptions) (*TcpServer, error) {
 type TcpServer struct {
 	opts     TcpServerOptions
 	mu       sync.RWMutex
-	sockets  map[string]*Conn
+	sockets  map[string]*TcpConn
 	die      chan bool
 	listener net.Listener
 }
@@ -91,61 +91,61 @@ func (s *TcpServer) Start() error {
 	return nil
 }
 
-func (s *TcpServer) onAccept(conn net.Conn) {
-	defer conn.Close()
+func (s *TcpServer) onAccept(c net.Conn) {
+	defer c.Close()
 
-	if s.opts.OnAccpect != nil {
-		if !s.opts.OnAccpect(conn) {
+	if s.opts.OnConnAccpect != nil {
+		if !s.opts.OnConnAccpect(c) {
 			return
 		}
 	}
 
-	socket, err := s.handshake(conn)
+	conn, err := s.handshake(c)
 	if err != nil {
 		return
 	}
 
-	socket.status = Connected
+	conn.status = Connected
 
 	// the connection is established here
 	go func() {
-		defer socket.Close()
-		socket.writeWork()
+		defer conn.Close()
+		conn.writeWork()
 	}()
 
 	go func() {
-		defer socket.Close()
-		socket.readWork()
+		defer conn.Close()
+		conn.readWork()
 	}()
 
-	if s.opts.OnStatus != nil {
-		s.opts.OnStatus(socket, true)
-		defer s.opts.OnStatus(socket, false)
+	if s.opts.OnConnEnable != nil {
+		s.opts.OnConnEnable(conn, true)
+		defer s.opts.OnConnEnable(conn, false)
 	}
 
 	for {
 		select {
-		case <-socket.chClosed:
+		case <-conn.chClosed:
 			return
 		case <-s.die:
-			socket.Close()
+			conn.Close()
 			return
-		case packet, ok := <-socket.chRead:
+		case packet, ok := <-conn.chRead:
 			if !ok {
 				return
 			}
 			switch packet.GetFlag() {
 			case HVPacketFlagHeartbeat:
-				socket.Send(packet)
+				conn.Send(packet)
 			case HVPacketFlagPacket:
-				s.opts.OnPacket(socket, packet)
+				s.opts.OnConnPacket(conn, packet)
 			}
 
 		}
 	}
 }
 
-func (s *TcpServer) handshake(conn net.Conn) (*Conn, error) {
+func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 	deadline := time.Now().Add(s.opts.HeatbeatInterval * 2)
 	conn.SetReadDeadline(deadline)
 	conn.SetWriteDeadline(deadline)
@@ -160,16 +160,16 @@ func (s *TcpServer) handshake(conn net.Conn) (*Conn, error) {
 	}
 
 	var us auth.User
-	if s.opts.OnAuth != nil {
+	if s.opts.OnConnAuth != nil {
 		pk.Reset()
-		pk.SetFlag(HVPacketFlagAuth)
+		pk.SetFlag(HVPacketFlagCmd)
 		if _, err = pk.WriteTo(conn); err != nil {
 			return nil, err
 		}
 		if _, err = pk.ReadFrom(conn); err != nil {
 			return nil, err
 		}
-		if us, err = s.opts.OnAuth(pk.GetBody()); err != nil {
+		if us, err = s.opts.OnConnAuth(pk.GetBody()); err != nil {
 			return nil, err
 		}
 	}
@@ -195,7 +195,7 @@ func (s *TcpServer) handshake(conn net.Conn) (*Conn, error) {
 
 	socketid := GenConnID()
 
-	socket := &Conn{
+	socket := &TcpConn{
 		User:     us,
 		id:       socketid,
 		conn:     conn,

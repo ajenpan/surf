@@ -117,9 +117,9 @@ func (s *Surf) init() error {
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
 		ListenAddr:       ":9999",
 		HeatbeatInterval: 30 * time.Second,
-		OnPacket:         s.onPacket,
-		OnStatus:         s.onStatus,
-		OnAuth: func(data []byte) (auth.User, error) {
+		OnConnPacket:     s.onPacket,
+		OnConnEnable:     s.onStatus,
+		OnConnAuth: func(data []byte) (auth.User, error) {
 			return auth.VerifyToken(s.pk, data)
 		},
 	})
@@ -146,7 +146,7 @@ func (s *Surf) Run() error {
 	return nil
 }
 
-func (h *Surf) onPacket(s *network.Conn, pk *network.HVPacket) {
+func (h *Surf) onPacket(s network.Conn, pk *network.HVPacket) {
 	// ctx := &Context{Session: s, UId: m.GetUid()}
 	// h.OnServerMsgWraper(ctx, m)
 	sf := pk.GetSubFlag()
@@ -160,7 +160,7 @@ func (h *Surf) onPacket(s *network.Conn, pk *network.HVPacket) {
 
 }
 
-func (h *Surf) onStatus(s *network.Conn, enable bool) {
+func (h *Surf) onStatus(s network.Conn, enable bool) {
 	// log.Infof("route onstatus: %v, %v", s.SessionID(), enable)
 }
 

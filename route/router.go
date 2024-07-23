@@ -12,14 +12,14 @@ import (
 
 func NewRouter() *Router {
 	ret := &Router{
-		userSession: make(map[uint32]*network.Conn),
+		userSession: make(map[uint32]*network.TcpConn),
 		// UserSessions :
 	}
 	return ret
 }
 
 type Router struct {
-	userSession     map[uint32]*network.Conn
+	userSession     map[uint32]*network.TcpConn
 	userSessionLock sync.RWMutex
 
 	// UserSessions *UserSessions
@@ -27,7 +27,7 @@ type Router struct {
 	Selfinfo *auth.UserInfo
 }
 
-func (r *Router) OnSessionStatus(s *network.Conn, enable bool) {
+func (r *Router) OnSessionStatus(s *network.TcpConn, enable bool) {
 	log.Debugf("OnSessionStatus: %v %v %v %v", s.ConnID(), s.RemoteAddr(), s.UserID(), enable)
 
 	currSession := r.GetUserSession(s.UserID())
@@ -46,7 +46,7 @@ func (r *Router) OnSessionStatus(s *network.Conn, enable bool) {
 	}
 }
 
-func (r *Router) OnSessionMessage(s *network.Conn, m *network.Packet) {
+func (r *Router) OnSessionMessage(s *network.TcpConn, m *network.Packet) {
 	// var err error
 	// targetuid := m.GetUid()
 
@@ -74,13 +74,13 @@ func (r *Router) OnSessionMessage(s *network.Conn, m *network.Packet) {
 	// }
 }
 
-func (r *Router) GetUserSession(uid uint32) *network.Conn {
+func (r *Router) GetUserSession(uid uint32) *network.TcpConn {
 	r.userSessionLock.RLock()
 	defer r.userSessionLock.RUnlock()
 	return r.userSession[uid]
 }
 
-func (r *Router) StoreUserSession(uid uint32, s *network.Conn) {
+func (r *Router) StoreUserSession(uid uint32, s *network.TcpConn) {
 	r.userSessionLock.Lock()
 	defer r.userSessionLock.Unlock()
 	r.userSession[uid] = s
@@ -92,7 +92,7 @@ func (r *Router) RemoveUserSession(uid uint32) {
 	delete(r.userSession, uid)
 }
 
-func (r *Router) onUserOnline(s *network.Conn) {
+func (r *Router) onUserOnline(s *network.TcpConn) {
 	// uinfo.Groups.Range(func(k, v interface{}) bool {
 	// 	r.gm.AddTo(k.(string), uinfo.UID, s)
 	// 	return true
@@ -105,7 +105,7 @@ func (r *Router) onUserOnline(s *network.Conn) {
 	// })
 }
 
-func (r *Router) onUserOffline(s *network.Conn) {
+func (r *Router) onUserOffline(s *network.TcpConn) {
 	// uinfo.Groups.Range(func(k, v interface{}) bool {
 	// 	r.gm.RemoveFromGroup(k.(string), uinfo.UID, s)
 	// 	return true

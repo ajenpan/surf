@@ -33,9 +33,9 @@ const (
 	// inner 224
 	HVPacketTypeInnerStartAt_   hvPacketFlag = 224
 	HVPacketFlagHandShake       hvPacketFlag = 225
-	HVPacketFlagHandShakeResult hvPacketFlag = 226
-	HVPacketFlagAuth            hvPacketFlag = 227
-	HVPacketFlagAuthData        hvPacketFlag = 228
+	HVPacketFlagCmd             hvPacketFlag = 226
+	HVPacketFlagCmdResult       hvPacketFlag = 227
+	HVPacketFlagHandShakeResult hvPacketFlag = 228
 	HVPacketFlagHeartbeat       hvPacketFlag = 229
 	HVPacketFlagPacket          hvPacketFlag = 230
 	HVPcketTypeInnerEndAt_      hvPacketFlag = 255

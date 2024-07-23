@@ -11,6 +11,7 @@ import (
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
+	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 )
@@ -36,12 +37,6 @@ func longVersion() string {
 }
 
 func main() {
-	if err := Run(); err != nil {
-		fmt.Println(err)
-	}
-}
-
-func Run() error {
 	cli.VersionPrinter = func(c *cli.Context) {
 		fmt.Println(longVersion())
 	}
@@ -50,19 +45,39 @@ func Run() error {
 	app.Name = Name
 	app.Action = RealMain
 	err := app.Run(os.Args)
-	return err
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 const PrivateKeyFile = "private.pem"
 const PublicKeyFile = "public.pem"
 
-func RealMain(c *cli.Context) error {
-	ppk, err := rsagen.LoadRsaPrivateKeyFromFile(PrivateKeyFile)
+func ReadRSAKey() ([]byte, []byte, error) {
+	privateRaw, err := os.ReadFile(PrivateKeyFile)
 	if err != nil {
-		return err
+		privateKey, publicKey, err := rsagen.GenerateRsaPem(2048)
+		if err != nil {
+			return nil, nil, err
+		}
+		privateRaw = []byte(privateKey)
+		os.WriteFile(PrivateKeyFile, []byte(privateKey), 0644)
+		os.WriteFile(PublicKeyFile, []byte(publicKey), 0644)
+	}
+	publicRaw, err := os.ReadFile(PublicKeyFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return privateRaw, publicRaw, nil
+}
+
+func RealMain(c *cli.Context) error {
+	privateRaw, _, err := ReadRSAKey()
+	if err != nil {
+		panic(err)
 	}
 
-	_, err = rsagen.LoadRsaPublicKeyFromFile(PublicKeyFile)
+	ppk, err := rsagen.ParseRsaPrivateKeyFromPem(privateRaw)
 	if err != nil {
 		return err
 	}
@@ -74,6 +89,24 @@ func RealMain(c *cli.Context) error {
 	}, 240*time.Hour)
 
 	fmt.Println(jwt)
+
+	ws, err := network.NewWSServer(network.WSServerOptions{
+		ListenAddr: ":9999",
+		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
+			log.Printf("OnConnPacket %s ", c.ConnID())
+
+		},
+		OnConnEnable: func(c network.Conn, b bool) {
+			log.Printf("OnConnEnable %s %v", c.ConnID(), b)
+		},
+		// OnConnAuth: func(data []byte) (auth.User, error) {
+		// 	return auth.VerifyToken(&ppk.PublicKey, data)
+		// },
+	})
+	if err != nil {
+		return err
+	}
+	ws.Start()
 
 	s := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", s.String())

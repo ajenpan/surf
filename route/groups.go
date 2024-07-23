@@ -22,13 +22,13 @@ func (m *Groups) GetGroup(name string) *Group {
 	return nil
 }
 
-func (m *Groups) RemoveFromGroup(name string, uid uint64, s *network.Conn) {
+func (m *Groups) RemoveFromGroup(name string, uid uint64, s *network.TcpConn) {
 	if v, has := m.groups.Load(name); has {
 		v.(*Group).RemoveIfSame(uid, s)
 	}
 }
 
-func (m *Groups) AddTo(name string, uid uint64, s *network.Conn) {
+func (m *Groups) AddTo(name string, uid uint64, s *network.TcpConn) {
 	g := m.MustGetGroup(name)
 	g.Add(uid, s)
 }
