@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package games.niuniu;
+
+option go_package = "./game/niuniu;niuniu";
+
+// 牌型类型
+enum CardType {
+  BULL_NO_POINT = 0;    // 无点牌
+  BULL_ONE = 1;         // 牛一
+  BULL_TWO = 2;         // 牛二
+  BULL_THREE = 3;       // 牛三
+  BULL_FOUR = 4;        // 牛四
+  BULL_FIVE = 5;        // 牛五
+  BULL_SIX = 6;         // 牛六
+  BULL_SEVEN = 7;       // 牛七
+  BULL_EIGHT = 8;       // 牛八
+  BULL_NINE = 9;        // 牛九
+  BULL_BULL = 10;       // 牛牛
+  BULL_FOURBOMB = 11;   // 四炸
+  BULL_FIVEFLOWER = 12; // 五花
+  BULL_FIVESMALL = 13;  // 五小
+}
+
+enum GameStep {
+  UNKNOW = 0;
+  IDLE = 1;          // 空闲,等待玩家准备
+  COUNTDOWN = 2;     // 开始倒计时
+  BEGIN = 3;         // 开始
+  BANKER = 4;        // 抢庄
+  BANKER_NOTIFY = 5; // 通知庄
+  BET = 6;           // 下注
+  DEAL_CARDS = 7;    // 发牌
+  SHOW_CARDS = 8;    // 亮牌
+  TALLY = 9;         // 游戏结算
+  OVER = 10;         // 游戏结束
+}
+
+message OutCardInfo {
+  CardType type = 1;
+  bytes cards = 2; //有牛: 前三张为组成牛牛的三张牌, 其它从大到小排序
+}
+
+message GamePlayerInfo {
+  int32 seat_id = 1;
+  GameStep status = 2;
+  int32 ready = 3;
+  int32 banker_rob = 4; //抢庄
+  bool banker = 5;
+  int32 bet_rate = 6;   //下注倍率
+  bytes hand_cards = 7; //
+  OutCardInfo out_card = 8;
+}
+
+message GameInfo {
+  GameStep status = 4; // 游戏状态
+  map<int32, GamePlayerInfo> player_info = 5;
+}
+
+//游戏全量信息
+message GameDeskInfoRequest {}
+
+message GameDeskInfoResponse {
+  GameInfo info = 1;
+  string game_conf = 2;
+}
+
+message GameStatusNotify {
+  GameStep game_status = 1; // 游戏状态
+  int32 time_down = 3;      // 倒计时
+}
+
+// 用户请求抢庄
+message PlayerBanker {
+  int32 rob = 2; // 1:不抢, 2: 抢
+}
+
+// 广播抢庄用户
+message PlayerBankerNotify {
+  int32 seat_id = 1;
+  int32 rob = 2;
+}
+
+// 广播庄家位置
+message BankerSeatNotify {
+  int32 seat_id = 1;
+}
+
+// 闲家下注
+message PlayerBetRate {
+  int32 rate = 1;
+}
+
+// 广播闲家下注倍率信息
+message PlayerBetRateNotify {
+  int32 seat_id = 1;
+  int32 rate = 2;
+}
+
+// 通知用户手牌信息
+message PlayerHandCardsNotify {
+  int32 seat_id = 1;
+  bytes hand_cards = 2;
+}
+
+// 请求上传出牌信息
+message PlayerOutCard {
+  OutCardInfo out_card = 1;
+}
+
+// 广播用户出牌结果
+message PlayerOutCardNotify {
+  int32 seat_id = 1;
+  OutCardInfo out_card = 2;
+}
+
+// 游戏结算
+message PlayerTallyNotify {
+  message TallyInfo {
+    int32 seat_id = 1;
+    int32 coins = 2;
+  }
+  int32 banker_seat_id = 1;
+  map<int32, TallyInfo> tall_info = 2; // 用户输户赢信息
+}

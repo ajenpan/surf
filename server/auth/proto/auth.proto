@@ -1,0 +1,117 @@
+syntax = "proto3";
+
+package auth;
+
+option go_package = "./proto;proto";
+
+service Auth {
+  rpc Captcha(CaptchaRequest) returns (CaptchaResponse) {}
+  rpc Login(LoginRequest) returns (LoginResponse) {}
+  rpc AnonymousLogin(AnonymousLoginRequest) returns (LoginResponse) {}
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {}
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {}
+  rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {}
+  rpc Register(RegisterRequest) returns (RegisterResponse) {}
+  rpc ModifyPasswd(ModifyPasswdRequest) returns (ModifyPasswdResponse) {}
+  rpc PublicKeys(PublicKeysRequest) returns (PublicKeysResponse) {}
+}
+
+message CaptchaRequest {
+  string captcha_type = 1;
+}
+
+message CaptchaResponse {
+  string captcha_id = 1;
+  string base64_captcha = 2;
+}
+
+message CaptchaVerify {
+  string captcha_id = 1;
+  string answer = 2;
+}
+
+message UserInfo {
+  int64 uid = 1;
+  string uname = 2;
+  int32 stat = 3;
+  int64 created = 4;
+  string nickname = 5;
+  string avatar = 6;
+}
+
+message LoginRequest {
+  string uname = 1;
+  string passwd = 2;
+
+  CaptchaVerify captcha_verify = 3;
+}
+
+message LoginResponse {
+  enum Flag {
+    SUCCESS = 0;
+    FAIL = 1;
+    CAPTCHA_ERROR = 2;
+    PASSWD_ERROR = 3;
+    UNAME_ERROR = 4;
+    STAT_ERROR = 5;
+  }
+
+  string assess_token = 1;
+  string refresh_token = 2;
+  UserInfo user_info = 3;
+  Flag flag = 4;
+  string msg = 5;
+}
+
+message LogoutRequest {}
+
+message LogoutResponse {
+  string msg = 1;
+}
+
+message RefreshTokenRequest {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+message RefreshTokenResponse {
+  string access_token = 1;
+}
+
+message RegisterRequest {
+  string uname = 1;
+  string passwd = 2;
+  string nickname = 3;
+  string email = 4;
+
+  // CaptchaVerify captcha_verify = 5;
+}
+
+message RegisterResponse {
+  string msg = 1;
+}
+
+// verify
+message UserInfoRequest {
+  int64 uid = 1;
+}
+message UserInfoResponse {
+  UserInfo info = 1;
+}
+
+// change user's passwd
+message ModifyPasswdRequest {}
+message ModifyPasswdResponse {}
+
+// reset user's passwd if forgot
+message ResetPasswdRequest {}
+message ResetPasswdResponse {}
+
+message AnonymousLoginRequest {
+  string identify_code = 1;
+}
+
+message PublicKeysRequest {}
+message PublicKeysResponse {
+  bytes keys = 1;
+}
