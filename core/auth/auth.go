@@ -1,9 +1,9 @@
 package auth
 
 type UserInfo struct {
-	UId   uint32
-	UName string
-	URole uint32
+	UId   uint32 `json:"uid"`
+	UName string `json:"uname"`
+	URole uint32 `json:"urid"`
 }
 
 func (u *UserInfo) UserID() uint32 {

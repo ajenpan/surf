@@ -2,19 +2,28 @@ package core
 
 import (
 	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/network"
 )
 
-type Context struct {
+type Context interface {
+	Response(msg interface{}, err error)
+	SendAsync(msg interface{}) error
+	Caller() auth.User
 }
 
-func (ctx *Context) SendRespMsg() {
+type context struct {
+	Conn network.Conn
+	Core *Surf
+}
+
+func (ctx *context) Response(msg interface{}, err error) {
 
 }
 
-func (ctx *Context) SendAsync() {
-
+func (ctx *context) SendAsync(msg interface{}) error {
+	return nil
 }
 
-func (ctx *Context) From() auth.User {
+func (ctx *context) Caller() auth.User {
 	return nil
 }

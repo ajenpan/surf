@@ -2,22 +2,31 @@ package core
 
 import (
 	"crypto/rsa"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
-	"google.golang.org/protobuf/proto"
+	"github.com/ajenpan/surf/core/log"
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/registry"
+	"github.com/ajenpan/surf/core/utils/calltable"
+	"github.com/ajenpan/surf/core/utils/marshal"
 )
 
-// type FuncAsyncHandle func(*Context, *network.AsyncMsg)
-// type FuncRequestHandle func(*Context, *network.RequestMsg)
-
 type Options struct {
-	JWToken    string
-	pk         *rsa.PublicKey
-	RouteAddrs []string
+	ServerId     uint32
+	ConnectRoute bool
+	RouteToken   string
+
+	HttpListenAddr string
+	WsListenAddr   string
+	TcpListenAddr  string
+
+	CTByName *calltable.CallTable[string]
+	CTById   *calltable.CallTable[int32]
 }
 
 func New(opt Options) *Surf {
@@ -94,34 +103,22 @@ func New(opt Options) *Surf {
 
 type Surf struct {
 	Options
+	pk  *rsa.PublicKey
 	Reg *registry.Registry
 
-	tcpsvr *network.TcpServer
+	tcpsvr  *network.TcpServer
+	wssvr   *network.WSServer
+	httpsvr *http.Server
 }
-
-// func (s *Surf) Start() error {
-// 	RegisterAysncHandle(s, "NotifyLinkStatus", s.onNotifyLinkStatus)
-// 	for _, c := range s.routeClient {
-// 		c.Connect()
-// 	}
-// 	return nil
-// }
-//	func (s *Surf) Stop() {
-//		for _, c := range s.routeClient {
-//			c.Close()
-//		}
-//	}
 
 func (s *Surf) init() error {
 	var err error
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
 		ListenAddr:       ":9999",
 		HeatbeatInterval: 30 * time.Second,
-		OnConnPacket:     s.onPacket,
-		OnConnEnable:     s.onStatus,
-		OnConnAuth: func(data []byte) (auth.User, error) {
-			return auth.VerifyToken(s.pk, data)
-		},
+		OnConnPacket:     s.onConnPacket,
+		OnConnEnable:     s.onConnStatus,
+		OnConnAuth:       s.onConnAuth,
 	})
 	if err != nil {
 		return err
@@ -130,37 +127,110 @@ func (s *Surf) init() error {
 	return nil
 }
 
-func (s *Surf) start() error {
-
-	s.tcpsvr.Start()
+func (s *Surf) Close() error {
 
 	return nil
 }
 
-func (s *Surf) stop() {
+func (s *Surf) Start() error {
+	if len(s.HttpListenAddr) > 1 {
+		s.startHttpSvr()
+	}
 
-}
+	if (len(s.WsListenAddr)) > 1 {
+		s.startWsSvr()
+	}
 
-func (s *Surf) Run() error {
+	if len(s.TcpListenAddr) > 1 {
+		s.startTcpSvr()
+	}
+	// quit := make(chan struct{})
+	// s.httpsvr = &network.HttpSvr{
+	// 	Addr:    s.HttpListenAddr,
+	// 	Marshal: &marshal.JSONPb{},
+	// 	Mux:     http.NewServeMux(),
+	// }
+
+	// s.httpsvr.ServerCallTable(&s.CTByName)
+
+	// go func() {
+	// 	err := s.httpsvr.Run()
+	// 	select {
+	// 	case <-quit:
+	// 	case errchan <- err:
+	// 	}
+	// }()
 
 	return nil
 }
 
-func (h *Surf) onPacket(s network.Conn, pk *network.HVPacket) {
+func (s *Surf) startHttpSvr() {
+	log.Infof("startHttpSvr")
+
+	mux := http.NewServeMux()
+	s.CTByName.Range(func(key string, method *calltable.Method) bool {
+		if !strings.HasPrefix(key, "/") {
+			key = "/" + key
+		}
+		cb := s.WrapMethod(method)
+		mux.HandleFunc(key, cb)
+		return true
+	})
+
+	svr := &http.Server{
+		Addr:    s.HttpListenAddr,
+		Handler: mux,
+	}
+	s.httpsvr = svr
+	go svr.ListenAndServe()
+}
+
+func (s *Surf) startWsSvr() {
+	log.Infof("startWsSvr")
+
+	ws := network.NewWSServer(network.WSServerOptions{
+		ListenAddr:   s.WsListenAddr,
+		OnConnPacket: s.onConnPacket,
+		OnConnEnable: s.onConnStatus,
+		OnConnAuth:   s.onConnAuth,
+	})
+
+	ws.Start()
+}
+
+func (s *Surf) startTcpSvr() {
+	log.Infof("startTcpSvr")
+
+	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
+		ListenAddr:       ":9999",
+		HeatbeatInterval: 30 * time.Second,
+		OnConnPacket:     s.onConnPacket,
+		OnConnEnable:     s.onConnStatus,
+		OnConnAuth:       s.onConnAuth,
+	})
+	if err != nil {
+		panic(err)
+	}
+	s.tcpsvr = tcpsvr
+	tcpsvr.Start()
+}
+
+func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 	// ctx := &Context{Session: s, UId: m.GetUid()}
 	// h.OnServerMsgWraper(ctx, m)
 	sf := pk.GetSubFlag()
 	switch sf {
 	case 1:
 		pk.GetBody()
-
 	default:
-
 	}
-
 }
 
-func (h *Surf) onStatus(s network.Conn, enable bool) {
+func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
+	return auth.VerifyToken(h.pk, data)
+}
+
+func (h *Surf) onConnStatus(s network.Conn, enable bool) {
 	// log.Infof("route onstatus: %v, %v", s.SessionID(), enable)
 }
 
@@ -211,31 +281,33 @@ func (h *Surf) onStatus(s network.Conn, enable bool) {
 // 	s.SendResponse(uid, m, resp, err)
 // }
 
-func RegisterAysncHandle[T proto.Message](s *Surf, name string, cb func(ctx *Context, msg T)) {
-	// if cb == nil {
-	// 	return
-	// }
-	// s.RegisterAysncHandle(name, func(ctx *Context, msg *network.AsyncMsg) {
-	// 	var impMsgType T
-	// 	impMsg := reflect.New(reflect.TypeOf(impMsgType).Elem()).Interface().(T)
-	// 	err := proto.Unmarshal(msg.GetBody(), impMsg)
-	// 	if err != nil {
-	// 		log.Error(err)
-	// 		return
-	// 	}
-	// 	cb(ctx, impMsg)
-	// })
-}
+func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
 
-func RegisterRequestHandle[TReq, TResp proto.Message](s *Surf, name string, cb func(ctx *Context, msg TReq) (TResp, error)) {
-	// if cb == nil {
-	// 	return
-	// }
-	// s.RegisterRequestHandle(name, func(ctx *Context, msg *network.RequestMsg) {
-	// 	var reqTypeHold TReq
-	// 	req := reflect.New(reflect.TypeOf(reqTypeHold).Elem()).Interface().(TReq)
-	// 	proto.Unmarshal(msg.GetBody(), req)
-	// 	resp, err := cb(ctx, req)
-	// 	ctx.Session.SendResponse(ctx.UId, msg, resp, err)
-	// })
+		req := method.NewRequest()
+
+		if err = (&marshal.JSONPb{}).Unmarshal(raw, req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		contenttype := r.Header.Get("Content-Type")
+		w.Header().Set("Content-Type", contenttype)
+
+		var ctx Context = &HttpCallContext{
+			w:    w,
+			r:    r,
+			core: s,
+		}
+
+		// here call method
+		method.Call(ctx, req)
+	}
 }

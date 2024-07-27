@@ -26,7 +26,7 @@ func VerifyToken(pk *rsa.PublicKey, tokenRaw []byte) (*UserInfo, error) {
 	if uid, has := claims["uid"]; has {
 		ret.UId = uint32(uid.(float64))
 	}
-	if role, has := claims["rid"]; has {
+	if role, has := claims["urid"]; has {
 		ret.URole = uint32(role.(float64))
 	}
 	return ret, nil
@@ -37,13 +37,11 @@ func GenerateToken(pk *rsa.PrivateKey, uinfo *UserInfo, validity time.Duration) 
 		validity = 24 * time.Hour
 	}
 	claims := make(jwt.MapClaims)
-	claims["exp"] = time.Now().Add(24 * time.Hour).Unix()
+	claims["exp"] = time.Now().Add(validity).Unix()
 	claims["iat"] = time.Now().Unix()
 	claims["uid"] = float64(uinfo.UId)
 	claims["aud"] = uinfo.UName
-	claims["rid"] = uinfo.URole
-	claims["iss"] = "hotwave"
-	claims["sub"] = "auth"
+	claims["urid"] = uinfo.URole
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	return token.SignedString(pk)
 }

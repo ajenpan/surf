@@ -2,27 +2,19 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
-	"reflect"
-	"strings"
 
 	"github.com/urfave/cli/v2"
-	"google.golang.org/protobuf/encoding/protojson"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 
-	"github.com/ajenpan/surf/core/network"
+	"github.com/ajenpan/surf/core"
 
-	"github.com/ajenpan/surf/core/utils/calltable"
-	"github.com/ajenpan/surf/core/utils/marshal"
-
-	"github.com/ajenpan/surf/server/auth/common"
-	"github.com/ajenpan/surf/server/auth/handler"
-	"github.com/ajenpan/surf/server/auth/store/cache"
-	"github.com/ajenpan/surf/server/auth/store/models"
+	auth "github.com/ajenpan/surf/server/uauth"
+	"github.com/ajenpan/surf/server/uauth/store/cache"
+	"github.com/ajenpan/surf/server/uauth/store/models"
 
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 
@@ -47,7 +39,7 @@ const PublicKeyFile = "public.pem"
 func ReadRSAKey() ([]byte, []byte, error) {
 	privateRaw, err := os.ReadFile(PrivateKeyFile)
 	if err != nil {
-		privateKey, publicKey, err := rsagen.GenerateRsaPem(512)
+		privateKey, publicKey, err := rsagen.GenerateRsaPem(1024)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -86,7 +78,7 @@ func main() {
 			Value:       ":30020",
 			Destination: &ListenAddr,
 		}, &cli.BoolFlag{
-			Name:        "print-config",
+			Name:        "printconf",
 			Destination: &PrintConf,
 			Hidden:      true,
 		},
@@ -110,6 +102,7 @@ func CreateMysqlClient(dsn string) *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
+
 	return dbc
 }
 
@@ -137,74 +130,28 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	publicKey, err := rsagen.ParseRsaPublicKeyFromPem(publicRaw)
+
+	h := auth.NewAuth(auth.AuthOptions{
+		PK:        pk,
+		PublicKey: publicRaw,
+		DB:        CreateMysqlClient("sa1:sa1@tcp(test41:3306)/surf?charset=utf8mb4&parseTime=True&loc=Local"),
+		Cache:     cache.NewMemory(),
+	})
+	ct := h.CTByName()
+
+	surf := core.New(core.Options{
+		ServerId:       1,
+		HttpListenAddr: ":9999",
+		CTByName:       ct,
+	})
+
+	err = surf.Start()
 	if err != nil {
 		return err
 	}
-
-	h := handler.NewAuth(handler.AuthOptions{
-		PK:        pk,
-		PublicKey: publicRaw,
-		DB:        CreateSQLiteClient("auth.db"),
-		// DB:    CreateMysqlClient("root:123456@tcp(test122:13306)/auth?charset=utf8mb4&parseTime=True&loc=Local"),
-		Cache: cache.NewMemory(),
-	})
-
-	AuthWrapper := func(h http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			authorstr := r.Header.Get("Authorization")
-			authorstr = strings.TrimPrefix(authorstr, "Bearer ")
-			if authorstr == "" {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			_, err := common.VerifyToken(publicKey, authorstr)
-			if err != nil {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-
-			h(w, r)
-		}
-	}
-
-	mux := http.NewServeMux()
-
-	NewMethod := func(f interface{}) *calltable.Method {
-		refv := reflect.ValueOf(f)
-		if refv.Kind() != reflect.Func {
-			return nil
-		}
-		ret := &calltable.Method{
-			Func:         refv,
-			RequestType:  refv.Type().In(1).Elem(),
-			ResponseType: refv.Type().Out(0).Elem(),
-		}
-		ret.InitPool()
-		return ret
-	}
-
-	svr := &network.HttpSvr{
-		Mux: mux,
-		Marshal: &marshal.JSONPb{
-			MarshalOptions: protojson.MarshalOptions{
-				UseEnumNumbers: true,
-				UseProtoNames:  true,
-			},
-		},
-		Addr: ListenAddr,
-	}
-
-	mux.Handle("/auth/Login", svr.WrapMethod(NewMethod(h.Login)))
-	mux.Handle("/auth/Register", svr.WrapMethod(NewMethod(h.Register)))
-	mux.Handle("/auth/UserInfo", AuthWrapper(svr.WrapMethod(NewMethod(h.UserInfo))))
-	mux.Handle("/auth/RefreshToken", AuthWrapper(svr.WrapMethod(NewMethod(h.RefreshToken))))
-
-	go svr.Start()
-	defer svr.Stop()
+	defer surf.Close()
 
 	fmt.Println("start http server at:", ListenAddr)
-
 	signal := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", signal.String())
 	return nil

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ajenpan/surf/server/auth/store/models"
+	"github.com/ajenpan/surf/server/uauth/store/models"
 )
 
 type AuthCacheInfo struct {

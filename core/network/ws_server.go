@@ -22,7 +22,7 @@ type WSServerOptions struct {
 
 type WSServerOption func(*WSServerOptions)
 
-func NewWSServer(opts WSServerOptions) (*WSServer, error) {
+func NewWSServer(opts WSServerOptions) *WSServer {
 	ret := &WSServer{
 		WSServerOptions: opts,
 		sockets:         make(map[string]*WSConn),
@@ -41,7 +41,7 @@ func NewWSServer(opts WSServerOptions) (*WSServer, error) {
 		ret.upgrader.CheckOrigin = ret.OnConnAccpect
 	}
 
-	return ret, nil
+	return ret
 }
 
 type WSServer struct {

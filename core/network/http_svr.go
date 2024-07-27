@@ -10,13 +10,13 @@ import (
 )
 
 type HttpSvr struct {
-	Marshal marshal.Marshaler
 	Addr    string
+	Marshal marshal.Marshaler
 	Mux     *http.ServeMux
 	svr     *http.Server
 }
 
-func (s *HttpSvr) Start() error {
+func (s *HttpSvr) Run() error {
 	s.svr = &http.Server{
 		Addr:    s.Addr,
 		Handler: s.Mux,
@@ -82,7 +82,7 @@ func (s *HttpSvr) WrapMethod(method *calltable.Method) http.HandlerFunc {
 			respData, err := s.Marshal.Marshal(respArgs[0].Interface())
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(respErr.Error()))
+				w.Write([]byte(err.Error()))
 				return
 			}
 			w.Write(respData)

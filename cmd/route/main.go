@@ -90,7 +90,7 @@ func RealMain(c *cli.Context) error {
 
 	fmt.Println(jwt)
 
-	ws, err := network.NewWSServer(network.WSServerOptions{
+	ws := network.NewWSServer(network.WSServerOptions{
 		ListenAddr: ":9999",
 		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
 			log.Printf("OnConnPacket %s ", c.ConnID())

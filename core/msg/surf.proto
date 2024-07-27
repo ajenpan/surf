@@ -1,13 +1,28 @@
 syntax = "proto3";
 
-package surf;
+package msg;
 
-option go_package = "/msg";
-option csharp_namespace = "src.msg.surf";
+option go_package = "./msg;msg";
+option csharp_namespace = "src.msg";
 
 message Error {
   int32 code = 1;
   string detail = 2;
+}
+
+message RouteMsgWrap {
+  enum MsgType {
+    Async = 0;
+    Request = 1;
+    Response = 2;
+  }
+
+  Error err = 1;
+  MsgType msg_type = 2;
+  uint32 seqid = 3;
+  int32 msgid = 4;
+  bytes data = 5;
+  uint64 from = 6;
 }
 
 message AsyncMsgWrap {

@@ -1,19 +1,31 @@
 syntax = "proto3";
 
-package auth;
+package uauth;
 
-option go_package = "./proto;proto";
+option go_package = "./uauth;uauth";
 
-service Auth {
-  rpc Captcha(CaptchaRequest) returns (CaptchaResponse) {}
-  rpc Login(LoginRequest) returns (LoginResponse) {}
-  rpc AnonymousLogin(AnonymousLoginRequest) returns (LoginResponse) {}
-  rpc Logout(LogoutRequest) returns (LogoutResponse) {}
-  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {}
-  rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {}
-  rpc Register(RegisterRequest) returns (RegisterResponse) {}
-  rpc ModifyPasswd(ModifyPasswdRequest) returns (ModifyPasswdResponse) {}
-  rpc PublicKeys(PublicKeysRequest) returns (PublicKeysResponse) {}
+// service UAuth {
+//   rpc Captcha(CaptchaRequest) returns (CaptchaResponse) {}
+//   rpc Login(LoginRequest) returns (LoginResponse) {}
+//   rpc AnonymousLogin(AnonymousLoginRequest) returns (LoginResponse) {}
+//   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {}
+//   rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {}
+//   rpc Register(RegisterRequest) returns (RegisterResponse) {}
+//   rpc ModifyPasswd(ModifyPasswdRequest) returns (ModifyPasswdResponse) {}
+//   rpc PublicKeys(PublicKeysRequest) returns (PublicKeysResponse) {}
+// }
+
+enum ResponseFlag {
+  Success = 0;
+
+  // common
+  CaptchaWrong = 2;
+  PasswdWrong = 3;
+  UnameNotFound = 4;
+  StatErr = 5;
+  DataBaseErr = 11;
+  GenTokenErr = 21;
+  // login + 100
 }
 
 message CaptchaRequest {
@@ -47,26 +59,8 @@ message LoginRequest {
 }
 
 message LoginResponse {
-  enum Flag {
-    SUCCESS = 0;
-    FAIL = 1;
-    CAPTCHA_ERROR = 2;
-    PASSWD_ERROR = 3;
-    UNAME_ERROR = 4;
-    STAT_ERROR = 5;
-  }
-
   string assess_token = 1;
-  string refresh_token = 2;
   UserInfo user_info = 3;
-  Flag flag = 4;
-  string msg = 5;
-}
-
-message LogoutRequest {}
-
-message LogoutResponse {
-  string msg = 1;
 }
 
 message RefreshTokenRequest {
@@ -83,8 +77,6 @@ message RegisterRequest {
   string passwd = 2;
   string nickname = 3;
   string email = 4;
-
-  // CaptchaVerify captcha_verify = 5;
 }
 
 message RegisterResponse {
@@ -108,7 +100,13 @@ message ResetPasswdRequest {}
 message ResetPasswdResponse {}
 
 message AnonymousLoginRequest {
-  string identify_code = 1;
+  string uname = 1;
+  string passwd = 2;
+}
+
+message AnonymousLoginResponse {
+  string assess_token = 1;
+  UserInfo user_info = 3;
 }
 
 message PublicKeysRequest {}
