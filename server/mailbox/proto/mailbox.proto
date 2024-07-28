@@ -1,0 +1,190 @@
+syntax = "proto3";
+
+option go_package = "./proto;proto";
+
+service MailBox {
+  rpc RecvMail(RecvMailRequest) returns (RecvMailResponse) {}
+  rpc SendMail(SendMailRequest) returns (SendMailResponse) {}
+  rpc UserMarkMail(UserMarkMailRequest) returns (UserMarkMailResponse) {}
+  rpc MailList(MailListRequest) returns (MailListResponse) {}
+  rpc UpdateMail(UpdateMailRequest) returns (UpdateMailResponse) {}
+
+  rpc PublishAnnouncement(PublishAnnouncementRequest) returns (PublishAnnouncementResponse) {}
+  rpc Announcement(AnnouncementRequest) returns (AnnouncementResponse) {}
+  rpc GenerateGiftCode(GenerateGiftCodeRequest) returns (GenerateGiftCodeResponse) {}
+  rpc GiftCodeList(GiftCodeListRequest) returns (GiftCodeListResponse) {}
+  rpc ExchangeGiftCode(ExchangeGiftCodeRequest) returns (ExchangeGiftCodeResponse) {}
+  rpc UpdateGiftCode(UpdateGiftCodeRequest) returns (UpdateGiftCodeResponse) {}
+}
+
+message MailAttachment {
+  message MailAttachmentItem {
+    string name = 1;
+    uint32 quantity = 2;
+    string icon_url = 3;
+  }
+  repeated MailAttachmentItem items = 1;
+}
+
+message MailRecvCond {
+  message MailRecvCondItem {
+    enum CondType { NumIDList = 0; }
+    CondType type = 1;
+    string value = 2;
+  }
+  repeated MailRecvCondItem items = 1;
+}
+
+message MailBody {
+  string title = 1;
+  string content = 2;
+}
+
+message RecvMailRequest {
+  uint32 latest_mailid = 1;
+}
+
+message RecvMailResponse {
+  message RecvMailInfo {
+    uint32 mailid = 1;
+    string title = 2;
+    string content = 3;
+    MailAttachment attachment = 5;
+    int64 recv_at = 8;
+    uint32 mark = 9;
+    map<string, MailBody> i18n = 10;
+  }
+  uint32 latest_check_mailid = 1;
+  repeated RecvMailInfo mails = 2;
+}
+
+message SendMailRequest {
+  // uint32 mailid = 1;
+  string title = 2;
+  string content = 3;
+  MailAttachment attachment = 4;
+  MailRecvCond recv_conds = 5;
+  string effect_at = 6;
+  string expire_at = 7;
+  map<string, MailBody> i18n = 8;
+}
+
+message SendMailResponse {
+  uint32 mailid = 1;
+}
+
+message UpdateMailRequest {
+  uint32 mailid = 1;
+  int32 status = 2;
+}
+
+message UpdateMailResponse {}
+
+message ListPage {
+  int32 page_size = 1;
+  int32 page_num = 2;
+}
+
+message MailListRequest {
+  ListPage page = 1;
+}
+
+message MailListResponse {
+  message Statist {
+    uint32 mail_read = 1;
+    uint32 attach_recv = 2;
+  }
+
+  message MailDetail {
+    uint32 mailid = 1;
+    string title = 2;
+    string content = 3;
+    MailAttachment attachment = 4;
+    MailRecvCond recv_conds = 5;
+    string effect_at = 6;
+    string expire_at = 7;
+    string create_at = 8;
+    string create_by = 9;
+    int32 status = 10;
+    Statist statist = 11;
+    map<string, MailBody> i18n = 12;
+  }
+  uint32 total = 1;
+  repeated MailDetail mails = 2;
+}
+
+message UserMarkMailRequest {
+  map<uint32, uint32> marks = 1; // mailid : mark
+}
+
+message UserMarkMailResponse {
+  map<uint32, uint32> result = 1; // mailid : mark
+}
+
+message PublishAnnouncementRequest {
+  string title = 1;
+  string content = 2;
+  string effect_at = 3;
+  string expire_at = 4;
+  bool expect_valid = 5;
+}
+
+message PublishAnnouncementResponse {}
+message AnnouncementRequest {}
+
+message AnnouncementResponse {
+  string title = 1;
+  string content = 2;
+  string effect_at = 3;
+  string expire_at = 4;
+  bool expect_valid = 5;
+  bool current_vaild = 6;
+}
+message GenerateGiftCodeRequest {
+  int32 max_exchange_count = 1; // 最大兑换次数
+  string expire_at = 2;         //失效时间
+  string gift_type = 4;         //礼包类型
+  int32 gift_count = 5;         //礼包数量
+}
+
+message GenerateGiftCodeResponse {
+  string code = 1;
+}
+
+message GiftCodeListRequest {
+  ListPage page = 1;
+}
+
+message GiftCodeListResponse {
+  message GiftCodeRecord {
+    string code = 1;
+    int32 max_exchange_count = 2;
+    int32 remain_exchange_count = 3;
+    string gift_type = 4;
+    int32 gift_count = 5;
+    string create_at = 6;
+    string expire_at = 7;
+    int32 status = 8;
+    int32 id = 9;
+  }
+  repeated GiftCodeRecord list = 1;
+  int32 total = 2;
+}
+
+message ExchangeGiftCodeRequest {
+  string code = 1;
+}
+
+message ExchangeGiftCodeResponse {
+  int32 flag = 1;
+  string msg = 2;
+  int32 gift_type = 4;
+  int32 gift_count = 5;
+}
+
+message UpdateGiftCodeRequest {
+  int32 id = 1;
+  int32 status = 2;
+}
+
+message UpdateGiftCodeResponse {}
