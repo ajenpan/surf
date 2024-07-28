@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package surf;
 
-option go_package = ".;route";
+option go_package = "./route;route";
 option csharp_namespace = "src.msg.surf";
 
 message ReqLinkSession {

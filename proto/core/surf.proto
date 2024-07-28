@@ -1,22 +1,22 @@
 syntax = "proto3";
 
-package msg;
+package core;
 
-option go_package = "./msg;msg";
-option csharp_namespace = "src.msg";
+option go_package = "./core;core";
+option csharp_namespace = "src.msg.core";
 
 message Error {
   int32 code = 1;
   string detail = 2;
 }
 
-message RouteMsgWrap {
-  enum MsgType {
-    Async = 0;
-    Request = 1;
-    Response = 2;
-  }
+enum MsgType {
+  Async = 0;
+  Request = 1;
+  Response = 2;
+}
 
+message ClientMsgWrap {
   Error err = 1;
   MsgType msg_type = 2;
   uint32 seqid = 3;

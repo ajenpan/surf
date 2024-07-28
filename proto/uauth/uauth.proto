@@ -3,6 +3,7 @@ syntax = "proto3";
 package uauth;
 
 option go_package = "./uauth;uauth";
+option csharp_namespace = "src.msg.surf";
 
 // service UAuth {
 //   rpc Captcha(CaptchaRequest) returns (CaptchaResponse) {}
@@ -24,7 +25,7 @@ enum ResponseFlag {
   UnameNotFound = 4;
   StatErr = 5;
   DataBaseErr = 11;
-  GenTokenErr = 21;
+  GenTokenErr = 21; 
   // login + 100
 }
 
