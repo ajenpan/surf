@@ -1,29 +1,24 @@
 package log
 
 import (
-	"io"
-
 	"github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var Default *logrus.Logger
 
-type Logger = logrus.Logger
-
 func init() {
 	Default = logrus.New()
 	output := &lumberjack.Logger{
 		Filename:   "./logs/log.txt",
-		MaxSize:    500, // megabytes
-		MaxBackups: 4,
+		MaxSize:    50, // megabytes
+		MaxBackups: 3,
 		MaxAge:     1,     // days
 		Compress:   false, // disabled by default
 		LocalTime:  true,
 	}
-	Default.SetOutput(io.MultiWriter(Default.Out, output))
-	// Default.SetOutput(output)
 
+	Default.SetOutput(output)
 	Default.SetLevel(logrus.DebugLevel)
 }
 
@@ -61,6 +56,11 @@ func Warnf(format string, args ...interface{}) {
 	Default.Warnf(format, args...)
 }
 
+// Warningf logs a message at level Warn on the standard logger.
+func Warningf(format string, args ...interface{}) {
+	Default.Warningf(format, args...)
+}
+
 // Errorf logs a message at level Error on the standard logger.
 func Errorf(format string, args ...interface{}) {
 	Default.Errorf(format, args...)
@@ -94,6 +94,11 @@ func Info(args ...interface{}) {
 // Warn logs a message at level Warn on the standard logger.
 func Warn(args ...interface{}) {
 	Default.Warn(args...)
+}
+
+// Warning logs a message at level Warn on the standard logger.
+func Warning(args ...interface{}) {
+	Default.Warning(args...)
 }
 
 // Error logs a message at level Error on the standard logger.

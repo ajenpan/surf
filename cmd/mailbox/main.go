@@ -16,17 +16,16 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
-	"gamemail/conf"
-	"gamemail/handle"
-	"gamemail/log"
-	"gamemail/proto"
+	"github.com/ajenpan/surf/core/log"
+	proto "github.com/ajenpan/surf/msg/mailbox"
+	"github.com/ajenpan/surf/server/mailbox"
 )
 
 var ConfigPath string = ""
 var ListenAddr string = ""
 var PrintConf bool = false
 
-var GHandler *handle.Handler
+var GHandler *mailbox.Handler
 
 var Version string = ""
 var GitCommit string = ""
@@ -64,12 +63,12 @@ func main() {
 	app.Action = func(c *cli.Context) error {
 		var err error
 
-		if conf.DefaultConf, err = conf.ConfInit(ConfigPath, PrintConf); err != nil {
+		if mailbox.DefaultConf, err = mailbox.ConfInit(ConfigPath, PrintConf); err != nil {
 			log.Error(err)
 			return err
 		}
 
-		if GHandler = handle.NewHandler(conf.DefaultConf); GHandler == nil {
+		if GHandler = mailbox.NewHandler(mailbox.DefaultConf); GHandler == nil {
 			err := fmt.Errorf("create handler failed")
 			log.Panic(err)
 			return err
@@ -106,12 +105,12 @@ func HttpHeaderForward(f func(rw http.ResponseWriter, r *http.Request)) func(rw 
 		// for nginx
 		values, has := r.Header["X-Real-Ip"]
 		if has && len(values) > 0 {
-			r = r.WithContext(context.WithValue(r.Context(), handle.CtxXRealIp, values[0]))
+			r = r.WithContext(context.WithValue(r.Context(), mailbox.CtxXRealIp, values[0]))
 		} else {
 			if host, _, err := net.SplitHostPort(r.RemoteAddr); err != nil {
-				r = r.WithContext(context.WithValue(r.Context(), handle.CtxXRealIp, r.RemoteAddr))
+				r = r.WithContext(context.WithValue(r.Context(), mailbox.CtxXRealIp, r.RemoteAddr))
 			} else {
-				r = r.WithContext(context.WithValue(r.Context(), handle.CtxXRealIp, host))
+				r = r.WithContext(context.WithValue(r.Context(), mailbox.CtxXRealIp, host))
 			}
 		}
 		f(rw, r)
@@ -128,19 +127,19 @@ func parserAdminBearer(r *http.Request) (context.Context, error) {
 	if len(bearerToekn) < 1 {
 		return nil, fmt.Errorf("token is required")
 	}
-	claims, err := handle.VerifyAdminTokenWithClaims(bearerToekn)
+	claims, err := mailbox.VerifyAdminTokenWithClaims(bearerToekn)
 	if err != nil {
 		return nil, fmt.Errorf("token verify failed: %v", err)
 	}
-	newCtx := context.WithValue(r.Context(), handle.CtxClaims, claims)
-	newCtx = context.WithValue(newCtx, handle.CtxAdminUID, claims["uid"])
-	newCtx = context.WithValue(newCtx, handle.CtxCallerRole, "admin")
+	newCtx := context.WithValue(r.Context(), mailbox.CtxClaims, claims)
+	newCtx = context.WithValue(newCtx, mailbox.CtxAdminUID, claims["uid"])
+	newCtx = context.WithValue(newCtx, mailbox.CtxCallerRole, "admin")
 	return newCtx, nil
 }
 
 func httpsvr() error {
-	ct := handle.ParseRpcMethod(proto.File_proto_mailbox_proto.Services(), GHandler)
-	ct.Range(func(key string, method *handle.MessageMethod) bool {
+	ct := mailbox.ParseRpcMethod(proto.File_mailbox_proto.Services(), GHandler)
+	ct.Range(func(key string, method *mailbox.MessageMethod) bool {
 		key = "/" + key
 		fmt.Println("handle path:", key)
 

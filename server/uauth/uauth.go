@@ -20,8 +20,8 @@ import (
 	"github.com/ajenpan/surf/core/errors"
 	log "github.com/ajenpan/surf/core/log"
 	msg "github.com/ajenpan/surf/msg/uauth"
-	"github.com/ajenpan/surf/server/uauth/store/cache"
-	"github.com/ajenpan/surf/server/uauth/store/models"
+	"github.com/ajenpan/surf/server/uauth/database/cache"
+	"github.com/ajenpan/surf/server/uauth/database/models"
 )
 
 var RegUname = regexp.MustCompile(`^[a-zA-Z0-9_]{4,16}$`)

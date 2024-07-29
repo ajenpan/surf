@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "./proto;proto";
+option go_package = "./mailbox;mailbox";
 
 service MailBox {
   rpc RecvMail(RecvMailRequest) returns (RecvMailResponse) {}
@@ -28,7 +28,9 @@ message MailAttachment {
 
 message MailRecvCond {
   message MailRecvCondItem {
-    enum CondType { NumIDList = 0; }
+    enum CondType {
+      NumIDList = 0;
+    }
     CondType type = 1;
     string value = 2;
   }
@@ -142,9 +144,9 @@ message AnnouncementResponse {
 }
 message GenerateGiftCodeRequest {
   int32 max_exchange_count = 1; // 最大兑换次数
-  string expire_at = 2;         //失效时间
-  string gift_type = 4;         //礼包类型
-  int32 gift_count = 5;         //礼包数量
+  string expire_at = 2;         // 失效时间
+  string gift_type = 4;         // 礼包类型
+  int32 gift_count = 5;         // 礼包数量
 }
 
 message GenerateGiftCodeResponse {

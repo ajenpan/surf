@@ -1,4 +1,4 @@
-package handle
+package mailbox
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	pb "gamemail/proto"
+	pb "github.com/ajenpan/surf/msg/mailbox"
 )
 
 type (

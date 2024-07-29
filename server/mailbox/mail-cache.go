@@ -1,4 +1,4 @@
-package handle
+package mailbox
 
 import (
 	"fmt"
@@ -11,9 +11,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	pb "google.golang.org/protobuf/proto"
 
-	gamedbMod "gamemail/database/game"
-	"gamemail/log"
-	"gamemail/proto"
+	"github.com/ajenpan/surf/core/log"
+	proto "github.com/ajenpan/surf/msg/mailbox"
+	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
 
 type ReciChecker interface {
@@ -120,7 +120,7 @@ func MakeCheckerList(raw *proto.MailRecvCond) ([]ReciChecker, error) {
 	return ret, nil
 }
 
-func NewMailDetail(info *gamedbMod.BfunMailList) (*MailDetail, error) {
+func NewMailDetail(info *gamedbMod.MailList) (*MailDetail, error) {
 	var err error
 
 	ret := &MailDetail{
@@ -170,7 +170,7 @@ func NewMailDetail(info *gamedbMod.BfunMailList) (*MailDetail, error) {
 }
 
 type MailDetail struct {
-	DBMail     gamedbMod.BfunMailList
+	DBMail     gamedbMod.MailList
 	PBMail     proto.SendMailRequest
 	PBRecvMail proto.RecvMailResponse_RecvMailInfo
 	Checkers   []ReciChecker

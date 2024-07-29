@@ -1,4 +1,4 @@
-package handle
+package mailbox
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"gamemail/log"
-	"gamemail/proto"
+	"github.com/ajenpan/surf/core/log"
+	proto "github.com/ajenpan/surf/msg/mailbox"
 )
 
 type announcement struct {

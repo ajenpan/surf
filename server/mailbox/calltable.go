@@ -1,4 +1,4 @@
-package handle
+package mailbox
 
 import (
 	"reflect"
@@ -114,7 +114,7 @@ func ParseProtoMessageWithSuffix(suffix string, ms protoreflect.MessageDescripto
 	return ret
 }
 
-//ParseRpcMethod
+// ParseRpcMethod
 func ParseRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *CallTable {
 	ret := &CallTable{
 		list: make(map[string]*MessageMethod),

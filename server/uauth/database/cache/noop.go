@@ -3,7 +3,7 @@ package cache
 import (
 	"context"
 
-	"github.com/ajenpan/surf/server/uauth/store/models"
+	"github.com/ajenpan/surf/server/uauth/database/models"
 )
 
 type Noop struct {

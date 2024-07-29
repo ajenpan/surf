@@ -6,15 +6,15 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"gorm.io/driver/mysql"
-	"gorm.io/driver/sqlite"
+
+	// "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 
 	"github.com/ajenpan/surf/core"
 
 	auth "github.com/ajenpan/surf/server/uauth"
-	"github.com/ajenpan/surf/server/uauth/store/cache"
-	"github.com/ajenpan/surf/server/uauth/store/models"
+	"github.com/ajenpan/surf/server/uauth/database/cache"
 
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 
@@ -106,20 +106,19 @@ func CreateMysqlClient(dsn string) *gorm.DB {
 	return dbc
 }
 
-func CreateSQLiteClient(dsn string) *gorm.DB {
-	dbc, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
-	err = dbc.AutoMigrate(
-		&models.Users{},
-	)
-
-	if err != nil {
-		panic(err)
-	}
-	return dbc
-}
+// func CreateSQLiteClient(dsn string) *gorm.DB {
+// 	dbc, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	err = dbc.AutoMigrate(
+// 		&models.Users{},
+// 	)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return dbc
+// }
 
 func RealMain(c *cli.Context) error {
 	privateRaw, publicRaw, err := ReadRSAKey()

@@ -1,13 +1,10 @@
 package database
 
 import (
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
-
-	"gamemail/conf"
-	"gamemail/log"
 )
 
 func CreateMysqlClient(dsn string) (*gorm.DB, error) {
@@ -16,16 +13,16 @@ func CreateMysqlClient(dsn string) (*gorm.DB, error) {
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
-		Logger: log.NewGormLogrus(),
+		// Logger: log.NewGormLogrus(),
 	})
 }
 
 var WPropsDB *gorm.DB
 
-func InitDB(c *conf.Config) error {
+func InitDB(dsn string) error {
 	var err error
 
-	if WPropsDB, err = CreateMysqlClient(c.WPropsDBDSN); err != nil {
+	if WPropsDB, err = CreateMysqlClient(dsn); err != nil {
 		return err
 	}
 

@@ -1,21 +1,20 @@
-package handle
+package mailbox
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 
-	"gamemail/conf"
-	"gamemail/database"
-	gamedbMod "gamemail/database/game"
-	"gamemail/log"
-	"gamemail/proto"
+	"github.com/ajenpan/surf/core/log"
+	proto "github.com/ajenpan/surf/msg/mailbox"
+	"github.com/ajenpan/surf/server/mailbox/database"
+	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
 
 type RecvMailMark = uint32
@@ -43,15 +42,15 @@ func createMysqlClient(dsn string) *gorm.DB {
 	return dbc
 }
 
-func NewHandler(c *conf.Config) *Handler {
+func NewHandler(c *Config) *Handler {
 	ret := &Handler{
 		conf: c,
 		ann:  &announcement{},
 	}
 
-	ret.WLogDB = createMysqlClient(conf.DefaultConf.WLogDBDSN)
-	ret.WGameDB = createMysqlClient(conf.DefaultConf.WGameDBDSN)
-	ret.WPropsDB = createMysqlClient(conf.DefaultConf.WPropsDBDSN)
+	ret.WLogDB = createMysqlClient(DefaultConf.WLogDBDSN)
+	ret.WGameDB = createMysqlClient(DefaultConf.WGameDBDSN)
+	ret.WPropsDB = createMysqlClient(DefaultConf.WPropsDBDSN)
 	ret.Rds = redis.NewClient(&redis.Options{
 		Addr:     c.RedisConn,
 		Password: "", // no password set
@@ -70,7 +69,7 @@ type User struct {
 }
 
 type Handler struct {
-	conf  *conf.Config
+	conf  *Config
 	cache *MailCache
 
 	WGameDB  *gorm.DB
@@ -86,9 +85,9 @@ func (h *Handler) Init() error {
 		infos: make(map[uint32]*MailDetail),
 	}
 
-	lists := []*gamedbMod.BfunMailList{}
+	lists := []*gamedbMod.MailList{}
 
-	err := h.WGameDB.Model(&gamedbMod.BfunMailList{}).Order(gamedbMod.BfunMailListColumns.Mailid + " DESC").Limit(MailMaxKeepCount * 10).Find(&lists).Error
+	err := h.WGameDB.Model(&gamedbMod.MailList{}).Order(gamedbMod.MailListColumns.Mailid + " DESC").Limit(MailMaxKeepCount * 10).Find(&lists).Error
 
 	if err != nil {
 		log.Error(err)
@@ -107,8 +106,8 @@ func (h *Handler) Init() error {
 		details = append(details, detail)
 		// 如果邮件已经失效
 		if now.After(detail.ExpireAt) && record.Status == 0 {
-			err = h.WGameDB.Model(&gamedbMod.BfunMailList{}).Where(&gamedbMod.BfunMailList{Mailid: record.Mailid}).
-				Update(gamedbMod.BfunMailListColumns.Status, 2).Error
+			err = h.WGameDB.Model(&gamedbMod.MailList{}).Where(&gamedbMod.MailList{Mailid: record.Mailid}).
+				Update(gamedbMod.MailListColumns.Status, 2).Error
 			if err != nil {
 				log.Error(err)
 			}
@@ -152,13 +151,13 @@ func (h *Handler) RecvMail(ctx context.Context, in *proto.RecvMailRequest, out *
 	newMail := h.cache.RecvNewMail(checkPoint, user, MailMaxKeepCount)
 	if len(newMail) > 0 {
 
-		newRecord := []*gamedbMod.BfunMailRecv{}
+		newRecord := []*gamedbMod.MailRecv{}
 
 		for _, v := range newMail {
 			if v.GetMailID() <= uint32(RecvLatestMailID) {
 				continue
 			}
-			newRecord = append(newRecord, &gamedbMod.BfunMailRecv{
+			newRecord = append(newRecord, &gamedbMod.MailRecv{
 				Mailid: uint(v.GetMailID()),
 				Mark:   0,
 				RecvAt: time.Now(),
@@ -166,15 +165,15 @@ func (h *Handler) RecvMail(ctx context.Context, in *proto.RecvMailRequest, out *
 		}
 
 		if len(newRecord) > 0 {
-			err := h.WGameDB.Model(gamedbMod.BfunMailRecv{}).CreateInBatches(newRecord, 10).Error
+			err := h.WGameDB.Model(gamedbMod.MailRecv{}).CreateInBatches(newRecord, 10).Error
 			if err != nil {
 				log.Error(err)
 			}
 		}
 	}
 
-	lists := []*gamedbMod.BfunMailRecv{}
-	err = h.WGameDB.Model(&gamedbMod.BfunMailRecv{}).Order("mailid desc").Where("uid=? and mailid>? and status=0 and mark&4=0",
+	lists := []*gamedbMod.MailRecv{}
+	err = h.WGameDB.Model(&gamedbMod.MailRecv{}).Order("mailid desc").Where("uid=? and mailid>? and status=0 and mark&4=0",
 		user.UID, in.LatestMailid).Limit(MailMaxKeepCount).Find(&lists).Error
 	if err != nil {
 		return err
@@ -206,7 +205,7 @@ func (h *Handler) getMail(mailid uint32) *MailDetail {
 	if mail == nil {
 		//get from database
 
-		record := &gamedbMod.BfunMailList{
+		record := &gamedbMod.MailList{
 			Mailid: uint(mailid),
 		}
 		var err error
@@ -262,7 +261,7 @@ func (h *Handler) SendMail(ctx context.Context, in *proto.SendMailRequest, out *
 		return err
 	}
 
-	record := &gamedbMod.BfunMailList{
+	record := &gamedbMod.MailList{
 		MailDetail: detailRaw,
 		CreateAt:   time.Now(),
 		CreateBy:   uid,
@@ -342,14 +341,14 @@ func (h *Handler) MailList(ctx context.Context, in *proto.MailListRequest, out *
 	in.Page = CheckListPage(in.Page)
 	total := int64(0)
 
-	err := h.WGameDB.Model(gamedbMod.BfunMailList{}).Count(&total).Error
+	err := h.WGameDB.Model(gamedbMod.MailList{}).Count(&total).Error
 	if err != nil {
 		return err
 	}
 	out.Total = uint32(total)
 
-	data := []*gamedbMod.BfunMailList{}
-	if err := h.WGameDB.Debug().Limit(int(in.Page.PageSize)).Offset(int(in.Page.PageNum * in.Page.PageSize)).Order(gamedbMod.BfunMailListColumns.Mailid + " DESC").Find(&data).Error; err != nil {
+	data := []*gamedbMod.MailList{}
+	if err := h.WGameDB.Debug().Limit(int(in.Page.PageSize)).Offset(int(in.Page.PageNum * in.Page.PageSize)).Order(gamedbMod.MailListColumns.Mailid + " DESC").Find(&data).Error; err != nil {
 		return err
 	}
 	mailids := []uint{}
@@ -414,12 +413,12 @@ func (h *Handler) MailList(ctx context.Context, in *proto.MailListRequest, out *
 }
 
 func (h *Handler) UpdateMail(ctx context.Context, in *proto.UpdateMailRequest, out *proto.UpdateMailResponse) error {
-	record := &gamedbMod.BfunMailList{
+	record := &gamedbMod.MailList{
 		Mailid: uint(in.Mailid),
 		Status: int(in.Status),
 	}
 
-	err := h.WGameDB.Model(record).Select(gamedbMod.BfunMailListColumns.Status).Updates(record).Error
+	err := h.WGameDB.Model(record).Select(gamedbMod.MailListColumns.Status).Updates(record).Error
 	if err != nil {
 		return err
 	}

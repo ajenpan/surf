@@ -1,4 +1,4 @@
-package handle
+package mailbox
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	gamedbMod "gamemail/database/game"
-	"gamemail/proto"
+	proto "github.com/ajenpan/surf/msg/mailbox"
+	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
 
 var RegGiftCode = regexp.MustCompile(`^[a-zA-Z0-9]{8}$`)
@@ -49,7 +49,7 @@ func (h *Handler) GenerateGiftCode(ctx context.Context, in *proto.GenerateGiftCo
 		return fmt.Errorf("code generate failed, the code is %s", giftcode)
 	}
 
-	record := &gamedbMod.BfunGiftCode{
+	record := &gamedbMod.GiftCode{
 		Code:        giftcode,
 		GiftType:    in.GiftType,
 		GiftCount:   int(in.GiftCount),
@@ -76,14 +76,14 @@ func (h *Handler) GiftCodeList(ctx context.Context, in *proto.GiftCodeListReques
 	in.Page = CheckListPage(in.Page)
 
 	total := int64(0)
-	if err := h.WGameDB.Debug().Model(&gamedbMod.BfunGiftCode{}).Count(&total).Error; err != nil {
+	if err := h.WGameDB.Debug().Model(&gamedbMod.GiftCode{}).Count(&total).Error; err != nil {
 		return err
 	}
 	out.Total = int32(total)
 
-	var list []*gamedbMod.BfunGiftCode
+	var list []*gamedbMod.GiftCode
 
-	if err := h.WGameDB.Debug().Model(&gamedbMod.BfunGiftCode{}).Limit(int(in.Page.PageSize)).Offset(int(in.Page.PageNum * in.Page.PageSize)).Order("id DESC").Find(&list).Error; err != nil {
+	if err := h.WGameDB.Debug().Model(&gamedbMod.GiftCode{}).Limit(int(in.Page.PageSize)).Offset(int(in.Page.PageNum * in.Page.PageSize)).Order("id DESC").Find(&list).Error; err != nil {
 		return err
 	}
 
@@ -120,7 +120,7 @@ func (h *Handler) ExchangeGiftCode(ctx context.Context, in *proto.ExchangeGiftCo
 
 	//cache the code info maybe batter ?
 
-	record := &gamedbMod.BfunGiftCode{}
+	record := &gamedbMod.GiftCode{}
 	res := h.WGameDB.Debug().Model(record).Where("code = ?", in.Code).Find(record)
 	if res.Error != nil {
 		return res.Error
@@ -150,7 +150,7 @@ func (h *Handler) ExchangeGiftCode(ctx context.Context, in *proto.ExchangeGiftCo
 		return nil
 	}
 	var tempid int
-	res = h.WGameDB.Raw("select id from `bfun_gift_exchange` where uid=? and gift_code=?", user.UID, in.Code).Scan(&tempid)
+	res = h.WGameDB.Raw("select id from `gift_exchange` where uid=? and gift_code=?", user.UID, in.Code).Scan(&tempid)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -161,7 +161,7 @@ func (h *Handler) ExchangeGiftCode(ctx context.Context, in *proto.ExchangeGiftCo
 		return nil
 	}
 
-	res = h.WGameDB.Exec("update bfun_gift_code set remain_count = remain_count - 1 WHERE code = ? and remain_count > 0", in.Code)
+	res = h.WGameDB.Exec("update gift_code set remain_count = remain_count - 1 WHERE code = ? and remain_count > 0", in.Code)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -171,7 +171,7 @@ func (h *Handler) ExchangeGiftCode(ctx context.Context, in *proto.ExchangeGiftCo
 		return nil
 	}
 
-	res = h.WGameDB.Exec("INSERT INTO `bfun_gift_exchange` (`uid`, `gift_code`, `gift_stat`) VALUES (?, ?, ?, 1)", user.UID, in.Code)
+	res = h.WGameDB.Exec("INSERT INTO `gift_exchange` (`uid`, `gift_code`, `gift_stat`) VALUES (?, ?, ?, 1)", user.UID, in.Code)
 	if res.RowsAffected != 1 {
 		out.Flag = 4
 		out.Msg = "您已经领取过该兑换码"
@@ -188,11 +188,11 @@ func (h *Handler) UpdateGiftCode(ctx context.Context, in *proto.UpdateGiftCodeRe
 	if err != nil {
 		return fmt.Errorf("you have no permission")
 	}
-	record := &gamedbMod.BfunGiftCode{
+	record := &gamedbMod.GiftCode{
 		ID:     int(in.Id),
 		Status: int8(in.Status),
 	}
-	res := h.WGameDB.Debug().Model(record).Select(gamedbMod.BfunGiftCodeColumns.Status).Updates(record)
+	res := h.WGameDB.Debug().Model(record).Select(gamedbMod.GiftCodeColumns.Status).Updates(record)
 	if res.Error != nil {
 		return res.Error
 	}
