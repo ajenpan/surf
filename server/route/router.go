@@ -2,53 +2,91 @@ package route
 
 import (
 	"sync"
+	"time"
 
-	"google.golang.org/protobuf/proto"
+	proto "google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
+	msgCore "github.com/ajenpan/surf/msg/core"
 )
 
 func NewRouter() *Router {
 	ret := &Router{
-		userSession: make(map[uint32]*network.TcpConn),
+		// userSession: make(map[uint32]network.Conn),
 		// UserSessions :
 	}
 	return ret
 }
 
 type Router struct {
-	userSession     map[uint32]*network.TcpConn
-	userSessionLock sync.RWMutex
-
+	// userSession     map[uint32]network.Conn
+	// userSessionLock sync.RWMutex
 	// UserSessions *UserSessions
+
+	UserConn   sync.Map
+	ServerConn sync.Map
 
 	Selfinfo *auth.UserInfo
 }
 
-func (r *Router) OnSessionStatus(s *network.TcpConn, enable bool) {
-	log.Debugf("OnSessionStatus: %v %v %v %v", s.ConnID(), s.RemoteAddr(), s.UserID(), enable)
+func (r *Router) OnConnEnable(conn network.Conn, enable bool) {
+	log.Debugf("OnConnEnable: id:%v,addr:%v,uid:%v,urid:%v,enable:%v", conn.ConnID(), conn.RemoteAddr(), conn.UserID(), conn.UserRole(), enable)
 
-	currSession := r.GetUserSession(s.UserID())
-	if enable {
-		if currSession != nil {
-			r.RemoveUserSession(s.UserID())
-			r.onUserOffline(currSession)
+	switch conn.UserRole() {
+	case auth.UserRole_User:
+		if enable {
+			currConn, got := r.UserConn.Swap(conn.UserID(), conn)
+			if got {
+				r.onUserOffline(currConn.(network.Conn))
+			}
+			r.onUserOnline(conn)
+		} else {
+			currConn, got := r.UserConn.LoadAndDelete(conn.UserID())
+			if got {
+				r.onUserOffline(currConn.(network.Conn))
+				currConn.(network.Conn).Close()
+			}
 		}
-		r.StoreUserSession(s.UserID(), s)
-		r.onUserOnline(s)
-	} else {
-		if currSession != nil && currSession == s {
-			r.RemoveUserSession(s.UserID())
-			r.onUserOffline(currSession)
+	case auth.UserRole_Server:
+		if enable {
+			currConn, got := r.ServerConn.Swap(conn.UserID(), conn)
+			if got {
+				r.onServerOffline(currConn.(network.Conn))
+			}
+			r.onServerOnline(conn)
+		} else {
+			currConn, got := r.ServerConn.LoadAndDelete(conn.UserID())
+			if got {
+				r.onServerOffline(currConn.(network.Conn))
+				currConn.(network.Conn).Close()
+			}
 		}
 	}
 }
 
-func (r *Router) OnSessionMessage(s *network.TcpConn, m *network.Packet) {
+func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	// var err error
 	// targetuid := m.GetUid()
+
+	if pk.GetSubFlag() != 1 {
+		return
+	}
+
+	w := &msgCore.MsgWrap{}
+	err := proto.Unmarshal(pk.GetBody(), w)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	switch s.UserRole() {
+	case auth.UserRole_User:
+		// send to server
+	case auth.UserRole_Server:
+		// send to user
+	}
 
 	// if targetuid == 0 {
 	// 	//call my self
@@ -74,52 +112,63 @@ func (r *Router) OnSessionMessage(s *network.TcpConn, m *network.Packet) {
 	// }
 }
 
-func (r *Router) GetUserSession(uid uint32) *network.TcpConn {
-	r.userSessionLock.RLock()
-	defer r.userSessionLock.RUnlock()
-	return r.userSession[uid]
+// func (r *Router) GetUserSession(uid uint32) network.Conn {
+// 	r.userSessionLock.RLock()
+// 	defer r.userSessionLock.RUnlock()
+// 	return r.userSession[uid]
+// }
+
+// func (r *Router) StoreUserSession(uid uint32, s network.Conn) {
+// 	r.userSessionLock.Lock()
+// 	defer r.userSessionLock.Unlock()
+// 	r.userSession[uid] = s
+// }
+
+//	func (r *Router) RemoveUserSession(uid uint32) {
+//		r.userSessionLock.Lock()
+//		defer r.userSessionLock.Unlock()
+//		delete(r.userSession, uid)
+//	}
+
+func (r *Router) onServerOnline(s network.Conn) {
+
 }
 
-func (r *Router) StoreUserSession(uid uint32, s *network.TcpConn) {
-	r.userSessionLock.Lock()
-	defer r.userSessionLock.Unlock()
-	r.userSession[uid] = s
+func (r *Router) onServerOffline(s network.Conn) {
+
 }
 
-func (r *Router) RemoveUserSession(uid uint32) {
-	r.userSessionLock.Lock()
-	defer r.userSessionLock.Unlock()
-	delete(r.userSession, uid)
-}
+func (r *Router) onUserOnline(s network.Conn) {
+	s.Store("loginat", time.Now())
 
-func (r *Router) onUserOnline(s *network.TcpConn) {
 	// uinfo.Groups.Range(func(k, v interface{}) bool {
 	// 	r.gm.AddTo(k.(string), uinfo.UID, s)
 	// 	return true
 	// })
 
-	// r.PublishEvent(&msg.UserStatChange{
-	// 	Sid:  s.ID(),
-	// 	Uid:  uinfo.UID,
-	// 	Stat: msg.UserStatChange_Online,
-	// })
+	r.PublishEvent("ConnEnable", map[string]any{
+		"sid":    s.ConnID(),
+		"uid":    s.UserID(),
+		"enable": true,
+	})
 }
 
-func (r *Router) onUserOffline(s *network.TcpConn) {
+func (r *Router) onUserOffline(s network.Conn) {
+
 	// uinfo.Groups.Range(func(k, v interface{}) bool {
 	// 	r.gm.RemoveFromGroup(k.(string), uinfo.UID, s)
 	// 	return true
 	// })
 
-	// r.PublishEvent(&msg.UserStatChange{
-	// 	Sid:  s.ID(),
-	// 	Uid:  uinfo.UID,
-	// 	Stat: msg.UserStatChange_Offline,
-	// })
+	r.PublishEvent("ConnEnable", map[string]any{
+		"sid":    s.ConnID(),
+		"uid":    s.UserID(),
+		"enable": false,
+	})
 }
 
-func (r *Router) PublishEvent(event proto.Message) {
-	log.Printf("[Mock PublishEvent] name:%v, msg:%v\n", string(proto.MessageName(event).Name()), event)
+func (r *Router) PublishEvent(ename string, event any) {
+	log.Printf("[Mock PublishEvent] name:%v,event:%v", ename, event)
 }
 
 // func (r *Router) OnCall(s *network.Conn, msg *server.MsgWraper) {

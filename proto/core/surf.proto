@@ -16,7 +16,7 @@ enum MsgType {
   Response = 2;
 }
 
-message ClientMsgWrap {
+message MsgWrap {
   Error err = 1;
   MsgType msg_type = 2;
   uint32 seqid = 3;
@@ -25,20 +25,18 @@ message ClientMsgWrap {
   uint64 from = 6;
 }
 
-message AsyncMsgWrap {
-  string name = 1;
-  bytes body = 2;
-}
-
-message RequestMsgWrap {
-  string name = 1;
-  bytes body = 2;
-  uint32 seqid = 3;
-}
-
-message ResponseMsgWrap {
-  string name = 1;
-  bytes body = 2;
-  uint32 seqid = 3;
-  Error err = 4;
-}
+// message AsyncMsgWrap {
+//   string name = 1;
+//   bytes body = 2;
+// }
+// message RequestMsgWrap {
+//   string name = 1;
+//   bytes body = 2;
+//   uint32 seqid = 3;
+// }
+// message ResponseMsgWrap {
+//   string name = 1;
+//   bytes body = 2;
+//   uint32 seqid = 3;
+//   Error err = 4;
+// }

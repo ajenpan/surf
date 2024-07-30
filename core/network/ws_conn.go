@@ -1,6 +1,7 @@
 package network
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 type WSConn struct {
 	auth.User
+	sync.Map
 
 	imp      *ws.Conn
 	status   ConnStatus
@@ -28,6 +30,13 @@ func (c *WSConn) Send(p *HVPacket) error {
 
 func (c *WSConn) ConnID() string {
 	return c.id
+}
+
+func (s *WSConn) RemoteAddr() string {
+	if !s.Enable() {
+		return ""
+	}
+	return s.imp.RemoteAddr().String()
 }
 
 func (c *WSConn) Close() error {

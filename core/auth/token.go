@@ -27,7 +27,7 @@ func VerifyToken(pk *rsa.PublicKey, tokenRaw []byte) (*UserInfo, error) {
 		ret.UId = uint32(uid.(float64))
 	}
 	if role, has := claims["urid"]; has {
-		ret.URole = uint32(role.(float64))
+		ret.URole = uint8(role.(float64))
 	}
 	return ret, nil
 }

@@ -3,6 +3,7 @@ package network
 import (
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +22,7 @@ func GenConnID() string {
 
 type TcpConn struct {
 	auth.User
+	sync.Map
 
 	conn net.Conn
 	id   string
@@ -73,11 +75,11 @@ func (c *TcpConn) Close() error {
 	}
 }
 
-func (s *TcpConn) RemoteAddr() net.Addr {
+func (s *TcpConn) RemoteAddr() string {
 	if !s.Enable() {
-		return nil
+		return ""
 	}
-	return s.conn.RemoteAddr()
+	return s.conn.RemoteAddr().String()
 }
 
 func (s *TcpConn) LocalAddr() net.Addr {
