@@ -4,12 +4,9 @@ import (
 	"sync"
 	"time"
 
-	proto "google.golang.org/protobuf/proto"
-
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
-	msgCore "github.com/ajenpan/surf/msg/core"
 )
 
 func NewRouter() *Router {
@@ -70,22 +67,8 @@ func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	// var err error
 	// targetuid := m.GetUid()
 
-	if pk.GetSubFlag() != 1 {
+	if pk.GetFlag() == 1 {
 		return
-	}
-
-	w := &msgCore.MsgWrap{}
-	err := proto.Unmarshal(pk.GetBody(), w)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	switch s.UserRole() {
-	case auth.UserRole_User:
-		// send to server
-	case auth.UserRole_Server:
-		// send to user
 	}
 
 	// if targetuid == 0 {

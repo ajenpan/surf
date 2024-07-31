@@ -120,8 +120,8 @@ func (s *TcpConn) writeWork() error {
 func (s *TcpConn) readWork() error {
 	for {
 		s.conn.SetReadDeadline(time.Now().Add(s.timeOut))
-		pk := NewHVPacket()
 
+		pk := NewHVPacket()
 		n, err := pk.ReadFrom(s.conn)
 		if err != nil {
 			return err

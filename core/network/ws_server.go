@@ -91,19 +91,19 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.SetReadDeadline(deadline)
 	c.SetWriteDeadline(deadline)
 
-	if pk, err := conn.readPacket(); err != nil {
+	pk, err := conn.readPacket()
+	if err != nil {
 		return
-	} else {
-		if pk.GetFlag() != HVPacketFlagHandShake && len(pk.GetBody()) != 0 {
-			return
-		}
+	}
+	if pk.GetFlag() != hvpFlagInit || pk.GetSubFlag() != hvpSubFlagHandShake || len(pk.GetBody()) != 0 {
+		return
 	}
 
 	var us auth.User
 	if s.OnConnAuth != nil {
 		pk := NewHVPacket()
-		pk.SetFlag(HVPacketFlagCmd)
-		pk.SetSubFlag(1)
+		pk.SetFlag(hvpFlagInit)
+		pk.SetSubFlag(hvpSubFlagCmd)
 		pk.SetBody([]byte("auth"))
 		if err := conn.writePacket(pk); err != nil {
 			return
@@ -118,8 +118,8 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pk := NewHVPacket()
-	pk.SetFlag(HVPacketFlagHandShakeResult)
+	pk.SetFlag(hvpFlagInit)
+	pk.SetSubFlag(hvpSubFlagHandShakeFinish)
 	pk.SetBody([]byte(conn.ConnID()))
 	conn.writePacket(pk)
 
@@ -150,10 +150,14 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			switch packet.GetFlag() {
-			case HVPacketFlagHeartbeat:
-				conn.Send(packet)
-			case HVPacketFlagPacket:
+
+			if packet.GetFlag() == hvpFlagInit {
+				switch packet.GetSubFlag() {
+				case hvpSubFlagHeartbeat:
+					conn.Send(packet)
+
+				}
+			} else {
 				if s.OnConnPacket != nil {
 					s.OnConnPacket(conn, packet)
 				}

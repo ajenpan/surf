@@ -4,23 +4,22 @@ import (
 	"io"
 )
 
-type hvPacketFlag = uint8
-
 const (
+	hvpFlagInit uint8 = 255
 	// inner 224
-	HVPacketTypeInnerStartAt_   hvPacketFlag = 224
-	HVPacketFlagHandShake       hvPacketFlag = 225
-	HVPacketFlagCmd             hvPacketFlag = 226
-	HVPacketFlagCmdResult       hvPacketFlag = 227
-	HVPacketFlagHandShakeResult hvPacketFlag = 228
-	HVPacketFlagHeartbeat       hvPacketFlag = 229
-	HVPacketFlagPacket          hvPacketFlag = 230
-	HVPcketTypeInnerEndAt_      hvPacketFlag = 255
+	hvpSubFlagInnerStartAt_   uint8 = 224
+	hvpSubFlagHandShake       uint8 = 225
+	hvpSubFlagCmd             uint8 = 226
+	hvpSubFlagCmdResult       uint8 = 227
+	hvpSubFlagHandShakeFinish uint8 = 228
+	hvpSubFlagHeartbeat       uint8 = 229
+	hvpSubFlagInnerEndAt_     uint8 = 255
 )
 
-// const hvPacketMaxBodySize = 0x7FFFFF
-
-const hvPackMetaLen = 4
+// | flag | subflag | len |
+// | 1    | 1       | 2   |
+const HVPackMetaLen = 1 + 1 + 2
+const HVPacketMaxBodySize uint16 = (0xFFFF - 1)
 
 type hvHead []byte
 
@@ -30,7 +29,7 @@ type HVPacket struct {
 }
 
 func newHead() hvHead {
-	return make([]byte, hvPackMetaLen)
+	return make([]byte, HVPackMetaLen)
 }
 
 func NewHVPacket() *HVPacket {
@@ -89,7 +88,7 @@ func (p *HVPacket) ReadFrom(reader io.Reader) (int64, error) {
 			return 0, err
 		}
 	}
-	return int64(hvPackMetaLen + int(bodylen)), nil
+	return int64(HVPackMetaLen + int(bodylen)), nil
 }
 
 func (p *HVPacket) WriteTo(writer io.Writer) (int64, error) {
@@ -105,7 +104,7 @@ func (p *HVPacket) WriteTo(writer io.Writer) (int64, error) {
 		}
 	}
 
-	return int64(hvPackMetaLen + len(p.body)), nil
+	return int64(HVPackMetaLen + len(p.body)), nil
 }
 
 func (p *HVPacket) SetFlag(h byte) {

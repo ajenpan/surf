@@ -134,10 +134,13 @@ func (s *TcpServer) onAccept(c net.Conn) {
 			if !ok {
 				return
 			}
-			switch packet.GetFlag() {
-			case HVPacketFlagHeartbeat:
-				conn.Send(packet)
-			case HVPacketFlagPacket:
+
+			if packet.GetFlag() == 255 {
+				switch packet.GetSubFlag() {
+				case hvpSubFlagHeartbeat:
+					conn.Send(packet)
+				}
+			} else {
 				s.opts.OnConnPacket(conn, packet)
 			}
 
@@ -155,45 +158,38 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 		return nil, err
 	}
 
-	if pk.GetFlag() != HVPacketFlagHandShake && len(pk.GetBody()) != 0 {
+	if pk.GetFlag() != hvpFlagInit || pk.GetSubFlag() != hvpSubFlagHandShake || len(pk.GetBody()) != 0 {
 		return nil, ErrInvalidPacket
 	}
 
 	var us auth.User
 	if s.opts.OnConnAuth != nil {
-		pk.Reset()
-		pk.SetFlag(HVPacketFlagCmd)
+		pk.SetSubFlag(hvpSubFlagCmd)
+		pk.SetBody([]byte("auth"))
 		if _, err = pk.WriteTo(conn); err != nil {
 			return nil, err
 		}
 		if _, err = pk.ReadFrom(conn); err != nil {
 			return nil, err
 		}
+
+		if pk.GetFlag() != hvpFlagInit || pk.GetSubFlag() != hvpSubFlagCmdResult {
+			return nil, ErrInvalidPacket
+		}
+
 		if us, err = s.opts.OnConnAuth(pk.GetBody()); err != nil {
 			return nil, err
 		}
 	}
 
-	// var userinfo *UserInfo
-	// // auth token
-	// if s.opts.AuthFunc != nil {
-	// 	p.SetFlag(hvPacketFlagActionRequire)
-	// 	p.SetBody([]byte("auth"))
-	// 	if _, err = WritePacket(conn, p); err != nil {
-	// 		return nil, err
-	// 	}
-	// 	if p, err = ReadPacketT[*HVPacket](conn); err != nil || p.GetFlag() != hvPacketFlagDoAction {
-	// 		return nil, err
-	// 	}
-	// 	if userinfo, err = s.opts.AuthFunc(p.GetBody()); err != nil {
-	// 		p.SetFlag(hvPacketFlagAckResult)
-	// 		p.SetBody([]byte("fail"))
-	// 		WritePacket(conn, p)
-	// 		return nil, err
-	// 	}
-	// }
-
 	socketid := GenConnID()
+
+	pk.SetFlag(hvpFlagInit)
+	pk.SetSubFlag(hvpSubFlagHandShakeFinish)
+	pk.SetBody([]byte(socketid))
+	if _, err := pk.WriteTo(conn); err != nil {
+		return nil, err
+	}
 
 	socket := &TcpConn{
 		User:     us,
@@ -204,13 +200,6 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 		status:   Disconnected,
 		chWrite:  make(chan *HVPacket, 10),
 		chRead:   make(chan *HVPacket, 10),
-	}
-
-	pk.SetFlag(HVPacketFlagHandShakeResult)
-	pk.SetSubFlag(0)
-	pk.SetBody([]byte(socketid))
-	if _, err := pk.WriteTo(conn); err != nil {
-		return nil, err
 	}
 
 	return socket, nil
