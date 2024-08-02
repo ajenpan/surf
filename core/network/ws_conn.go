@@ -1,7 +1,6 @@
 package network
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 
 type WSConn struct {
 	auth.User
-	sync.Map
 
 	imp      *ws.Conn
 	status   ConnStatus
@@ -21,7 +19,16 @@ type WSConn struct {
 	chWrite chan *HVPacket
 	chRead  chan *HVPacket
 
-	id string
+	id       string
+	userdata any
+}
+
+func (c *WSConn) SetUserData(d any) {
+	c.userdata = d
+}
+
+func (c *WSConn) GetUserData() any {
+	return c.userdata
 }
 
 func (c *WSConn) Send(p *HVPacket) error {

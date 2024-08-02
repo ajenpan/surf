@@ -20,16 +20,11 @@ const (
 	Connected    ConnStatus = iota
 )
 
-type UserMeta interface {
-	LoadAndDelete(key any) (value any, loaded bool)
-	Swap(key, value any) (previous any, loaded bool)
-	Load(key any) (value any, ok bool)
-	Store(key, value any)
-}
-
 type Conn interface {
 	auth.User
-	UserMeta
+
+	SetUserData(any)
+	GetUserData() any
 
 	ConnID() string
 	Send(*HVPacket) error

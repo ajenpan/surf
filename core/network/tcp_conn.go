@@ -3,7 +3,6 @@ package network
 import (
 	"fmt"
 	"net"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,7 +21,6 @@ func GenConnID() string {
 
 type TcpConn struct {
 	auth.User
-	sync.Map
 
 	conn net.Conn
 	id   string
@@ -40,6 +38,14 @@ type TcpConn struct {
 
 	writeSize int64
 	readSize  int64
+	userdata  any
+}
+
+func (s *TcpConn) SetUserData(d any) {
+	s.userdata = d
+}
+func (s *TcpConn) GetUserData() any {
+	return s.userdata
 }
 
 func (s *TcpConn) ConnID() string {

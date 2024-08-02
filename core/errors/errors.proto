@@ -5,7 +5,7 @@ package errors;
 option go_package = "./errors;errors";
 
 message Error {
-  int32 code = 2;
+  int32 code = 2; // max int16
   string detail = 3;
 };
 

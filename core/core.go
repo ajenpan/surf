@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ajenpan/surf/core/log"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/network"
@@ -218,12 +219,12 @@ func (s *Surf) startTcpSvr() {
 func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 	// ctx := &Context{Session: s, UId: m.GetUid()}
 	// h.OnServerMsgWraper(ctx, m)
-	sf := pk.GetSubFlag()
-	switch sf {
-	case 1:
-		pk.GetBody()
-	default:
-	}
+	// sf := pk.GetSubFlag()
+	// switch sf {
+	// case 1:
+	// 	pk.GetBody()
+	// default:
+	// }
 }
 
 func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
@@ -234,28 +235,43 @@ func (h *Surf) onConnStatus(s network.Conn, enable bool) {
 	// log.Infof("route onstatus: %v, %v", s.SessionID(), enable)
 }
 
-// func (h *Surf) OnAsync(s network.Session, uid uint32, m *network.AsyncMsg) {
-// 	var err error
-// 	method := h.CT.Get(m.Name)
-// 	if method == nil {
-// 		log.Warnf("method not found: %s", m.Name)
-// 		return
-// 	}
-// 	pbmarshal := &marshal.ProtoMarshaler{}
-// 	req := method.NewRequest()
-// 	err = pbmarshal.Unmarshal(m.Body, req)
-// 	if err != nil {
-// 		log.Errorf("unmarshal error: %v", err)
-// 		return
-// 	}
-// 	result := method.Call(h, &Context{Session: s, UId: uid}, req)
-// 	if len(result) == 1 {
-// 		err = result[0].Interface().(error)
-// 	}
-// 	if err != nil {
-// 		log.Warnf("method call error: %v", err)
-// 	}
-// }
+func OnRouteAsync(ct *calltable.CallTable[uint32], conn network.Conn, rpk network.RoutePacketRaw) {
+	// var err error
+	// rpk := network.RoutePacketRaw(pk.GetBody())
+
+	method := ct.Get(rpk.GetMsgId())
+	if method == nil {
+		rpk.SetMsgType(network.RouteMsgType_HandleErr)
+		rpk.SetErrCode(network.RouteHandleErrCode_MethodNotFound)
+		pk := network.NewHVPacket()
+		pk.SetFlag(1)
+		pk.SetBody(rpk.GetHead())
+		conn.Send(pk)
+		return
+	}
+
+	msg := method.NewRequest()
+	mar := &proto.UnmarshalOptions{}
+	err := mar.Unmarshal(rpk.GetBody(), msg.(proto.Message))
+	if err != nil {
+		rpk.SetMsgType(network.RouteMsgType_HandleErr)
+		rpk.SetErrCode(network.RouteHandleErrCode_MethodParseErr)
+		pk := network.NewHVPacket()
+		pk.SetFlag(1)
+		pk.SetBody(rpk.GetHead())
+		conn.Send(pk)
+		return
+	}
+
+	// var ctx Context = &context{
+	// 	Conn: conn,
+	// 	Core: nil,
+	// 	Raw:  pk,
+	// }
+
+	// method.Call(ctx, msg)
+}
+
 // func (h *Surf) OnRequest(s network.Session, uid uint32, m *network.RequestMsg) {
 // 	var err error
 // 	method := h.CT.Get(m.Name)

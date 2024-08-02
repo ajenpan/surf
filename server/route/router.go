@@ -2,7 +2,6 @@ package route
 
 import (
 	"sync"
-	"time"
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
@@ -22,7 +21,7 @@ type Router struct {
 	// userSessionLock sync.RWMutex
 	// UserSessions *UserSessions
 
-	UserConn   sync.Map
+	ClientConn sync.Map
 	ServerConn sync.Map
 
 	Selfinfo *auth.UserInfo
@@ -30,69 +29,50 @@ type Router struct {
 
 func (r *Router) OnConnEnable(conn network.Conn, enable bool) {
 	log.Debugf("OnConnEnable: id:%v,addr:%v,uid:%v,urid:%v,enable:%v", conn.ConnID(), conn.RemoteAddr(), conn.UserID(), conn.UserRole(), enable)
-
-	switch conn.UserRole() {
-	case auth.UserRole_User:
-		if enable {
-			currConn, got := r.UserConn.Swap(conn.UserID(), conn)
-			if got {
-				r.onUserOffline(currConn.(network.Conn))
-			}
-			r.onUserOnline(conn)
-		} else {
-			currConn, got := r.UserConn.LoadAndDelete(conn.UserID())
-			if got {
-				r.onUserOffline(currConn.(network.Conn))
-				currConn.(network.Conn).Close()
-			}
+	if enable {
+		currConn, got := r.ClientConn.Swap(conn.UserID(), conn)
+		if got {
+			r.onUserOffline(currConn.(network.Conn))
 		}
-	case auth.UserRole_Server:
-		if enable {
-			currConn, got := r.ServerConn.Swap(conn.UserID(), conn)
-			if got {
-				r.onServerOffline(currConn.(network.Conn))
-			}
-			r.onServerOnline(conn)
-		} else {
-			currConn, got := r.ServerConn.LoadAndDelete(conn.UserID())
-			if got {
-				r.onServerOffline(currConn.(network.Conn))
-				currConn.(network.Conn).Close()
-			}
+		r.onUserOnline(conn)
+	} else {
+		currConn, got := r.ClientConn.LoadAndDelete(conn.UserID())
+		if got {
+			r.onUserOffline(currConn.(network.Conn))
+			currConn.(network.Conn).Close()
 		}
 	}
 }
 
 func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
-	// var err error
-	// targetuid := m.GetUid()
-
 	if pk.GetFlag() == 1 {
-		return
+		routepk := network.RoutePacketRaw(pk.GetBody())
+		svrid := routepk.GetServerId()
+
+		if svrid == 0 {
+			//TODO:
+			return
+		}
+
+		nodeid := routepk.GetNodeId()
+		if nodeid == 0 {
+			// TODO:
+			routepk.SetMsgType(network.RouteMsgType_RouteErr)
+			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
+			return
+		}
+
+		v, found := r.ServerConn.Load(nodeid)
+
+		if !found {
+			routepk.SetMsgType(network.RouteMsgType_RouteErr)
+			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
+			s.Send(pk)
+			return
+		}
+
+		v.(network.Conn).Send(pk)
 	}
-
-	// if targetuid == 0 {
-	// 	//call my self
-	// 	r.OnCall(s, m)
-	// 	return
-	// }
-
-	// targetSess := r.GetUserSession(targetuid)
-	// if targetSess == nil {
-	// 	//TODO: send err to source
-	// 	log.Warnf("session uid:%v not found", targetuid)
-	// 	return
-	// }
-
-	// if !r.forwardEnable(s, targetSess, m) {
-	// 	return
-	// }
-
-	// m.SetUid(s.UserID())
-	// err = targetSess.Send(m)
-	// if err != nil {
-	// 	log.Error(err)
-	// }
 }
 
 // func (r *Router) GetUserSession(uid uint32) network.Conn {
@@ -113,6 +93,53 @@ func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 //		delete(r.userSession, uid)
 //	}
 
+func (r *Router) OnNodeEnable(conn network.Conn, enable bool) {
+	if enable {
+		currConn, got := r.ServerConn.Swap(conn.UserID(), conn)
+		if got {
+			r.onServerOffline(currConn.(network.Conn))
+		}
+		r.onServerOnline(conn)
+	} else {
+		currConn, got := r.ServerConn.LoadAndDelete(conn.UserID())
+		if got {
+			r.onServerOffline(currConn.(network.Conn))
+			currConn.(network.Conn).Close()
+		}
+	}
+}
+
+func (r *Router) OnNodePacket(s network.Conn, pk *network.HVPacket) {
+	if pk.GetFlag() == 1 {
+		routepk := network.RoutePacketRaw(pk.GetBody())
+		svrid := routepk.GetServerId()
+
+		if svrid == 0 {
+			//TODO:
+			return
+		}
+
+		cid := routepk.GetClientId()
+		if cid == 0 {
+			//todo: forward
+			routepk.SetMsgType(network.RouteMsgType_RouteErr)
+			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
+			return
+		}
+
+		v, found := r.ClientConn.Load(cid)
+
+		if !found {
+			routepk.SetMsgType(network.RouteMsgType_RouteErr)
+			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
+			s.Send(pk)
+			return
+		}
+
+		v.(network.Conn).Send(pk)
+	}
+}
+
 func (r *Router) onServerOnline(s network.Conn) {
 
 }
@@ -122,12 +149,8 @@ func (r *Router) onServerOffline(s network.Conn) {
 }
 
 func (r *Router) onUserOnline(s network.Conn) {
-	s.Store("loginat", time.Now())
-
-	// uinfo.Groups.Range(func(k, v interface{}) bool {
-	// 	r.gm.AddTo(k.(string), uinfo.UID, s)
-	// 	return true
-	// })
+	ud := NewConnUserData()
+	s.SetUserData(ud)
 
 	r.PublishEvent("ConnEnable", map[string]any{
 		"sid":    s.ConnID(),
@@ -137,17 +160,12 @@ func (r *Router) onUserOnline(s network.Conn) {
 }
 
 func (r *Router) onUserOffline(s network.Conn) {
-
-	// uinfo.Groups.Range(func(k, v interface{}) bool {
-	// 	r.gm.RemoveFromGroup(k.(string), uinfo.UID, s)
-	// 	return true
-	// })
-
 	r.PublishEvent("ConnEnable", map[string]any{
 		"sid":    s.ConnID(),
 		"uid":    s.UserID(),
 		"enable": false,
 	})
+	s.SetUserData(nil)
 }
 
 func (r *Router) PublishEvent(ename string, event any) {
