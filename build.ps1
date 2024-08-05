@@ -6,7 +6,7 @@ If (!(test-path $release_dir)){
 }
 
 go env -w GOOS="linux"
-go build -o $release_dir/route ./route
+go build -o $release_dir/route ./cmd/route
 
-# go env -w GOOS="windows"
+go env -w GOOS="windows"
 # go build -o $release_dir/route.exe ./route

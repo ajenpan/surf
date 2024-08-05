@@ -14,6 +14,7 @@ import (
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
+	route "github.com/ajenpan/surf/server/route"
 )
 
 var (
@@ -90,22 +91,14 @@ func RealMain(c *cli.Context) error {
 
 	fmt.Println(jwt)
 
-	ws := network.NewWSServer(network.WSServerOptions{
-		ListenAddr: ":9999",
-		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
-			log.Printf("OnConnPacket %s ", c.ConnID())
+	r := route.NewRouter()
 
-		},
-		OnConnEnable: func(c network.Conn, b bool) {
-			log.Printf("OnConnEnable %s %v", c.ConnID(), b)
-		},
-		// OnConnAuth: func(data []byte) (auth.User, error) {
-		// 	return auth.VerifyToken(&ppk.PublicKey, data)
-		// },
+	ws := network.NewWSServer(network.WSServerOptions{
+		ListenAddr:   ":9999",
+		OnConnPacket: r.OnConnPacket,
+		OnConnEnable: r.OnConnEnable,
 	})
-	if err != nil {
-		return err
-	}
+
 	ws.Start()
 
 	s := utilSignal.WaitShutdown()

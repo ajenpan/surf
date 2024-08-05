@@ -135,9 +135,9 @@ func (s *TcpServer) onAccept(c net.Conn) {
 				return
 			}
 
-			if packet.GetFlag() == 255 {
-				switch packet.GetSubFlag() {
-				case hvpSubFlagHeartbeat:
+			if packet.Head.GetType() == (PacketType_Inner) {
+				switch packet.Head.GetSubFlag() {
+				case uint8(PacketType_Inner_Heartbeat):
 					conn.Send(packet)
 				}
 			} else {
@@ -158,13 +158,13 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 		return nil, err
 	}
 
-	if pk.GetFlag() != hvpFlagInit || pk.GetSubFlag() != hvpSubFlagHandShake || len(pk.GetBody()) != 0 {
+	if pk.Head.GetType() != PacketType_Inner || pk.Head.GetSubFlag() != PacketType_Inner_HandShake || len(pk.GetBody()) != 0 {
 		return nil, ErrInvalidPacket
 	}
 
 	var us auth.User
 	if s.opts.OnConnAuth != nil {
-		pk.SetSubFlag(hvpSubFlagCmd)
+		pk.Head.SetSubFlag(PacketType_Inner_Cmd)
 		pk.SetBody([]byte("auth"))
 		if _, err = pk.WriteTo(conn); err != nil {
 			return nil, err
@@ -173,7 +173,7 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 			return nil, err
 		}
 
-		if pk.GetFlag() != hvpFlagInit || pk.GetSubFlag() != hvpSubFlagCmdResult {
+		if pk.Head.GetType() != PacketType_Inner || pk.Head.GetSubFlag() != PacketType_Inner_CmdResult {
 			return nil, ErrInvalidPacket
 		}
 
@@ -184,8 +184,8 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 
 	socketid := GenConnID()
 
-	pk.SetFlag(hvpFlagInit)
-	pk.SetSubFlag(hvpSubFlagHandShakeFinish)
+	pk.Head.SetType(PacketType_Inner)
+	pk.Head.SetSubFlag(PacketType_Inner_HandShakeFinish)
 	pk.SetBody([]byte(socketid))
 	if _, err := pk.WriteTo(conn); err != nil {
 		return nil, err

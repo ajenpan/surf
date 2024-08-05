@@ -10,5 +10,5 @@ const (
 type User interface {
 	UserID() uint32
 	UserName() string
-	UserRole() uint8
+	UserRole() uint32
 }

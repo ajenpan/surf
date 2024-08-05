@@ -23,11 +23,13 @@ const (
 type Conn interface {
 	auth.User
 
+	ConnID() string
+
 	SetUserData(any)
 	GetUserData() any
 
-	ConnID() string
 	Send(*HVPacket) error
+
 	Close() error
 	Enable() bool
 	RemoteAddr() string

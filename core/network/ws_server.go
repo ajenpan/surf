@@ -2,6 +2,7 @@ package network
 
 import (
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -55,7 +56,12 @@ type WSServer struct {
 }
 
 func (s *WSServer) Start() error {
-	go s.listener.ListenAndServe()
+	go func() {
+		err := s.listener.ListenAndServe()
+		if err != nil {
+			os.Exit(-1)
+		}
+	}()
 	return nil
 }
 
@@ -95,15 +101,15 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	if pk.GetFlag() != hvpFlagInit || pk.GetSubFlag() != hvpSubFlagHandShake || len(pk.GetBody()) != 0 {
+	if pk.Head.GetType() != PacketType_Inner || pk.Head.GetSubFlag() != PacketType_Inner_HandShake || len(pk.GetBody()) != 0 {
 		return
 	}
 
 	var us auth.User
 	if s.OnConnAuth != nil {
 		pk := NewHVPacket()
-		pk.SetFlag(hvpFlagInit)
-		pk.SetSubFlag(hvpSubFlagCmd)
+		pk.Head.SetType(PacketType_Inner)
+		pk.Head.SetSubFlag(PacketType_Inner_Cmd)
 		pk.SetBody([]byte("auth"))
 		if err := conn.writePacket(pk); err != nil {
 			return
@@ -118,8 +124,8 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	pk.SetFlag(hvpFlagInit)
-	pk.SetSubFlag(hvpSubFlagHandShakeFinish)
+	pk.Head.SetType(PacketType_Inner)
+	pk.Head.SetSubFlag(PacketType_Inner_HandShakeFinish)
 	pk.SetBody([]byte(conn.ConnID()))
 	conn.writePacket(pk)
 
@@ -150,12 +156,10 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-
-			if packet.GetFlag() == hvpFlagInit {
-				switch packet.GetSubFlag() {
-				case hvpSubFlagHeartbeat:
+			if packet.Head.GetType() == PacketType_Inner {
+				switch packet.Head.GetSubFlag() {
+				case PacketType_Inner_Heartbeat:
 					conn.Send(packet)
-
 				}
 			} else {
 				if s.OnConnPacket != nil {

@@ -217,6 +217,7 @@ func (s *Surf) startTcpSvr() {
 }
 
 func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
+
 	// ctx := &Context{Session: s, UId: m.GetUid()}
 	// h.OnServerMsgWraper(ctx, m)
 	// sf := pk.GetSubFlag()
@@ -232,35 +233,38 @@ func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
 }
 
 func (h *Surf) onConnStatus(s network.Conn, enable bool) {
+	if enable {
+
+	}
 	// log.Infof("route onstatus: %v, %v", s.SessionID(), enable)
 }
 
-func OnRouteAsync(ct *calltable.CallTable[uint32], conn network.Conn, rpk network.RoutePacketRaw) {
+func OnRouteAsync(ct *calltable.CallTable[uint32], conn network.Conn, pk *network.HVPacket) {
 	// var err error
 	// rpk := network.RoutePacketRaw(pk.GetBody())
 
-	method := ct.Get(rpk.GetMsgId())
+	method := ct.Get(pk.Head.GetMsgId())
 	if method == nil {
-		rpk.SetMsgType(network.RouteMsgType_HandleErr)
-		rpk.SetErrCode(network.RouteHandleErrCode_MethodNotFound)
-		pk := network.NewHVPacket()
-		pk.SetFlag(1)
-		pk.SetBody(rpk.GetHead())
+		pk.Head.SetType(network.PacketType_HandleErr)
+		pk.Head.SetSubFlag(network.PacketType_HandleErr_MethodNotFound)
+		pk.SetBody(nil)
 		conn.Send(pk)
 		return
 	}
 
 	msg := method.NewRequest()
-	mar := &proto.UnmarshalOptions{}
-	err := mar.Unmarshal(rpk.GetBody(), msg.(proto.Message))
-	if err != nil {
-		rpk.SetMsgType(network.RouteMsgType_HandleErr)
-		rpk.SetErrCode(network.RouteHandleErrCode_MethodParseErr)
-		pk := network.NewHVPacket()
-		pk.SetFlag(1)
-		pk.SetBody(rpk.GetHead())
-		conn.Send(pk)
-		return
+
+	if pk.Head.GetBodyLen() > 0 {
+		mar := &proto.UnmarshalOptions{}
+		err := mar.Unmarshal(pk.GetBody(), msg.(proto.Message))
+		if err != nil {
+			pk.Head.SetType(network.PacketType_HandleErr)
+			pk.Head.SetSubFlag(network.PacketType_HandleErr_MethodParseErr)
+			pk.SetBody(nil)
+			conn.Send(pk)
+			return
+		}
+
 	}
 
 	// var ctx Context = &context{

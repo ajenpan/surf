@@ -6,25 +6,27 @@ import (
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
+	"github.com/ajenpan/surf/core/utils/marshal"
 )
 
 func NewRouter() *Router {
 	ret := &Router{
 		// userSession: make(map[uint32]network.Conn),
 		// UserSessions :
+		marshaler: &marshal.ProtoMarshaler{},
 	}
+	// ret.ct = calltable.ExtractAsyncMethodByMsgID()
 	return ret
 }
 
 type Router struct {
-	// userSession     map[uint32]network.Conn
-	// userSessionLock sync.RWMutex
-	// UserSessions *UserSessions
+	marshaler marshal.Marshaler
+
+	//ct *calltable.CallTable[uint32]
 
 	ClientConn sync.Map
 	ServerConn sync.Map
-
-	Selfinfo *auth.UserInfo
+	Selfinfo   *auth.UserInfo
 }
 
 func (r *Router) OnConnEnable(conn network.Conn, enable bool) {
@@ -45,34 +47,31 @@ func (r *Router) OnConnEnable(conn network.Conn, enable bool) {
 }
 
 func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
-	if pk.GetFlag() == 1 {
-		routepk := network.RoutePacketRaw(pk.GetBody())
-		svrid := routepk.GetServerId()
 
-		if svrid == 0 {
-			//TODO:
-			return
-		}
+	pk.Head.SetClientId(s.UserID())
+	svrtype := pk.Head.GetSvrType()
 
-		nodeid := routepk.GetNodeId()
-		if nodeid == 0 {
-			// TODO:
-			routepk.SetMsgType(network.RouteMsgType_RouteErr)
-			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
-			return
-		}
-
-		v, found := r.ServerConn.Load(nodeid)
-
-		if !found {
-			routepk.SetMsgType(network.RouteMsgType_RouteErr)
-			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
-			s.Send(pk)
-			return
-		}
-
-		v.(network.Conn).Send(pk)
+	if svrtype == 0 {
+		//TODO:
+		return
 	}
+
+	svrid := pk.Head.GetSvrId()
+	if svrid == 0 {
+		// TODO:
+		return
+	}
+
+	v, found := r.ServerConn.Load(svrid)
+
+	if !found {
+		pk.Head.SetType(network.PacketType_RouteErr)
+		pk.Head.SetSubFlag(network.PacketType_RouteErr_NodeNotFound)
+		s.Send(pk)
+		return
+	}
+
+	v.(network.Conn).Send(pk)
 }
 
 // func (r *Router) GetUserSession(uid uint32) network.Conn {
@@ -110,34 +109,20 @@ func (r *Router) OnNodeEnable(conn network.Conn, enable bool) {
 }
 
 func (r *Router) OnNodePacket(s network.Conn, pk *network.HVPacket) {
-	if pk.GetFlag() == 1 {
-		routepk := network.RoutePacketRaw(pk.GetBody())
-		svrid := routepk.GetServerId()
-
-		if svrid == 0 {
-			//TODO:
-			return
-		}
-
-		cid := routepk.GetClientId()
-		if cid == 0 {
-			//todo: forward
-			routepk.SetMsgType(network.RouteMsgType_RouteErr)
-			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
-			return
-		}
-
-		v, found := r.ClientConn.Load(cid)
-
-		if !found {
-			routepk.SetMsgType(network.RouteMsgType_RouteErr)
-			routepk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
-			s.Send(pk)
-			return
-		}
-
-		v.(network.Conn).Send(pk)
+	cid := pk.Head.GetClientId()
+	if cid == 0 {
+		// todo handler call
+		return
 	}
+
+	v, found := r.ClientConn.Load(cid)
+	if !found {
+		pk.Head.SetType(network.PacketType_RouteErr)
+		pk.Head.SetSubFlag(network.PacketType_RouteErr_NodeNotFound)
+		s.Send(pk)
+		return
+	}
+	v.(network.Conn).Send(pk)
 }
 
 func (r *Router) onServerOnline(s network.Conn) {
@@ -172,82 +157,92 @@ func (r *Router) PublishEvent(ename string, event any) {
 	log.Printf("[Mock PublishEvent] name:%v,event:%v", ename, event)
 }
 
-// func (r *Router) OnCall(s *network.Conn, msg *server.MsgWraper) {
-// var err error
+func (r *Router) OnCall(c network.Conn, pk *network.HVPacket) {
+	// var err error
 
-// msgid := int(head.GetMsgID())
+	// msgid := pk.GetMsgId()
+	// msgtype := pk.GetMsgType()
 
-// enable := r.callEnable(s, uint32(msgid))
-// if !enable {
-// 	log.Print("not enable to call this method:", msgid)
-// 	dealSocketErrCnt(s)
-// 	return
-// }
+	// if msgtype == network.RouteMsgType_Response {
 
-// askid := head.GetAskID()
-// method := r.ct.Get(msgid)
-// if method == nil {
-// 	log.Print("not found method,msgid:", msgid)
-// 	dealSocketErrCnt(s)
-// 	return
-// }
+	// } else {
+	// 	method := r.ct.Get(msgid)
+	// 	req := method.NewRequest()
+	// 	err = r.marshaler.Unmarshal(pk.GetBody(), req)
+	// 	if err != nil {
 
-// reqRaw := method.NewRequest()
-// if reqRaw == nil {
-// 	log.Print("not found request,msgid:", msgid)
-// 	return
-// }
+	// 		pk.SetMsgType(network.RouteMsgType_RouteErr)
+	// 		pk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
 
-// req := reqRaw.(proto.Message)
-// err = proto.Unmarshal(body, req)
+	// 		// c.Send(pk)
+	// 		// c.Send()
+	// 	}
+	// }
 
-// if err != nil {
-// 	fmt.Println(err)
-// 	return
-// }
+	// askid := head.GetAskID()
+	// method := r.ct.Get(msgid)
+	// if method == nil {
+	// 	log.Print("not found method,msgid:", msgid)
+	// 	dealSocketErrCnt(s)
+	// 	return
+	// }
 
-// ctx := context.WithValue(context.Background(), tcpSocketKey, s)
-// ctx = context.WithValue(ctx, tcpPacketKey, p)
+	// reqRaw := method.NewRequest()
+	// if reqRaw == nil {
+	// 	log.Print("not found request,msgid:", msgid)
+	// 	return
+	// }
 
-// result := method.Call(r, ctx, req)
+	// req := reqRaw.(proto.Message)
+	// err = proto.Unmarshal(body, req)
 
-// if len(result) != 2 {
-// 	return
-// }
-// // if err is not nil, only return err
-// resperrI := result[1].Interface()
-// if resperrI != nil {
-// 	var senderr error
-// 	switch resperr := resperrI.(type) {
-// 	case *msg.Error:
-// 		senderr = r.SendMessage(s, askid, RouteTypRespErr, resperr)
-// 	case error:
-// 		senderr = r.SendMessage(s, askid, RouteTypRespErr, &msg.Error{
-// 			Code:   -1,
-// 			Detail: resperr.Error(),
-// 		})
-// 	default:
-// 		log.Print("not support error type:")
-// 	}
-// 	if senderr != nil {
-// 		log.Print("send err failed:", senderr)
-// 	}
-// 	return
-// }
+	// if err != nil {
+	// 	fmt.Println(err)
+	// 	return
+	// }
 
-// respI := result[0].Interface()
-// if respI != nil {
-// 	resp, ok := respI.(proto.Message)
-// 	if !ok {
-// 		return
-// 	}
-// 	respMsgTyp := head.GetMsgTyp()
-// 	if respMsgTyp == RouteTypRequest {
-// 		respMsgTyp = RouteTypResponse
-// 	}
+	// ctx := context.WithValue(context.Background(), tcpSocketKey, s)
+	// ctx = context.WithValue(ctx, tcpPacketKey, p)
 
-// 	r.SendMessage(s, askid, respMsgTyp, resp)
-// 	log.Printf("oncall sid:%v,uid:%v,msgid:%v,askid:%v,req:%v,resp:%v\n", s.ID(), s.UID(), msgid, askid, req, resp)
-// 	return
-// }
-// }
+	// result := method.Call(r, ctx, req)
+
+	// if len(result) != 2 {
+	// 	return
+	// }
+	// // if err is not nil, only return err
+	// resperrI := result[1].Interface()
+	// if resperrI != nil {
+	// 	var senderr error
+	// 	switch resperr := resperrI.(type) {
+	// 	case *msg.Error:
+	// 		senderr = r.SendMessage(s, askid, RouteTypRespErr, resperr)
+	// 	case error:
+	// 		senderr = r.SendMessage(s, askid, RouteTypRespErr, &msg.Error{
+	// 			Code:   -1,
+	// 			Detail: resperr.Error(),
+	// 		})
+	// 	default:
+	// 		log.Print("not support error type:")
+	// 	}
+	// 	if senderr != nil {
+	// 		log.Print("send err failed:", senderr)
+	// 	}
+	// 	return
+	// }
+
+	// respI := result[0].Interface()
+	// if respI != nil {
+	// 	resp, ok := respI.(proto.Message)
+	// 	if !ok {
+	// 		return
+	// 	}
+	// 	respMsgTyp := head.GetMsgTyp()
+	// 	if respMsgTyp == RouteTypRequest {
+	// 		respMsgTyp = RouteTypResponse
+	// 	}
+
+	// 	r.SendMessage(s, askid, respMsgTyp, resp)
+	// 	log.Printf("oncall sid:%v,uid:%v,msgid:%v,askid:%v,req:%v,resp:%v\n", s.ID(), s.UID(), msgid, askid, req, resp)
+	// 	return
+	// }
+}
