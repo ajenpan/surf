@@ -6,11 +6,12 @@ import (
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
+	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/marshal"
 )
 
-func NewRouter() *Router {
-	ret := &Router{
+func NewGate() *Gate {
+	ret := &Gate{
 		// userSession: make(map[uint32]network.Conn),
 		// UserSessions :
 		marshaler: &marshal.ProtoMarshaler{},
@@ -19,24 +20,25 @@ func NewRouter() *Router {
 	return ret
 }
 
-type Router struct {
+type Gate struct {
 	marshaler marshal.Marshaler
 
-	//ct *calltable.CallTable[uint32]
+	ct *calltable.CallTable[uint32]
 
 	ClientConn sync.Map
 	ServerConn sync.Map
 	Selfinfo   *auth.UserInfo
 }
 
-func (r *Router) OnConnEnable(conn network.Conn, enable bool) {
+func (r *Gate) OnConnEnable(conn network.Conn, enable bool) {
 	log.Debugf("OnConnEnable: id:%v,addr:%v,uid:%v,urid:%v,enable:%v", conn.ConnID(), conn.RemoteAddr(), conn.UserID(), conn.UserRole(), enable)
 	if enable {
 		currConn, got := r.ClientConn.Swap(conn.UserID(), conn)
 		if got {
 			r.onUserOffline(currConn.(network.Conn))
+		} else {
+			r.onUserOnline(conn)
 		}
-		r.onUserOnline(conn)
 	} else {
 		currConn, got := r.ClientConn.LoadAndDelete(conn.UserID())
 		if got {
@@ -46,17 +48,24 @@ func (r *Router) OnConnEnable(conn network.Conn, enable bool) {
 	}
 }
 
-func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
-
-	pk.Head.SetClientId(s.UserID())
-	svrtype := pk.Head.GetSvrType()
-
-	if svrtype == 0 {
-		//TODO:
+func (r *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
+	if pk.Head.GetType() != network.PacketType_Route {
+		return
+	}
+	if len(pk.Body) < network.RoutePackHeadLen {
 		return
 	}
 
-	svrid := pk.Head.GetSvrId()
+	rpk := network.RoutePacketRaw(pk.GetBody())
+	rpk.SetClientId(s.UserID())
+	svrtype := rpk.GetSvrType()
+
+	if svrtype == 0 {
+		r.OnCall(s, pk.Head.GetSubFlag(), &rpk)
+		return
+	}
+
+	svrid := rpk.GetNodeId()
 	if svrid == 0 {
 		// TODO:
 		return
@@ -65,8 +74,9 @@ func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	v, found := r.ServerConn.Load(svrid)
 
 	if !found {
-		pk.Head.SetType(network.PacketType_RouteErr)
-		pk.Head.SetSubFlag(network.PacketType_RouteErr_NodeNotFound)
+		rpk.SetErrCode(network.RoutePackType_SubFlag_RouteErrCode_NodeNotFound)
+		pk.Head.SetSubFlag(network.RoutePackType_SubFlag_RouteErr)
+		pk.SetBody(rpk.GetHead())
 		s.Send(pk)
 		return
 	}
@@ -92,13 +102,14 @@ func (r *Router) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 //		delete(r.userSession, uid)
 //	}
 
-func (r *Router) OnNodeEnable(conn network.Conn, enable bool) {
+func (r *Gate) OnNodeEnable(conn network.Conn, enable bool) {
 	if enable {
 		currConn, got := r.ServerConn.Swap(conn.UserID(), conn)
 		if got {
 			r.onServerOffline(currConn.(network.Conn))
+		} else {
+			r.onServerOnline(conn)
 		}
-		r.onServerOnline(conn)
 	} else {
 		currConn, got := r.ServerConn.LoadAndDelete(conn.UserID())
 		if got {
@@ -108,32 +119,36 @@ func (r *Router) OnNodeEnable(conn network.Conn, enable bool) {
 	}
 }
 
-func (r *Router) OnNodePacket(s network.Conn, pk *network.HVPacket) {
-	cid := pk.Head.GetClientId()
-	if cid == 0 {
-		// todo handler call
-		return
+func (r *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
+	switch pk.Head.GetType() {
+	case network.PacketType_Route:
+		rpk := network.RoutePacketRaw(pk.GetBody())
+
+		cid := rpk.GetClientId()
+		if cid == 0 {
+			return
+		}
+
+		v, found := r.ClientConn.Load(cid)
+		if !found {
+			log.Warnf("client not found cid:%d", cid)
+			// pk = rpk.GenHVPacket(network.RouteMsgType_SubFlag_RouteErr)
+			// s.Send(pk)
+			return
+		}
+		v.(network.Conn).Send(pk)
 	}
-
-	v, found := r.ClientConn.Load(cid)
-	if !found {
-		pk.Head.SetType(network.PacketType_RouteErr)
-		pk.Head.SetSubFlag(network.PacketType_RouteErr_NodeNotFound)
-		s.Send(pk)
-		return
-	}
-	v.(network.Conn).Send(pk)
 }
 
-func (r *Router) onServerOnline(s network.Conn) {
+func (r *Gate) onServerOnline(s network.Conn) {
 
 }
 
-func (r *Router) onServerOffline(s network.Conn) {
+func (r *Gate) onServerOffline(s network.Conn) {
 
 }
 
-func (r *Router) onUserOnline(s network.Conn) {
+func (r *Gate) onUserOnline(s network.Conn) {
 	ud := NewConnUserData()
 	s.SetUserData(ud)
 
@@ -144,7 +159,7 @@ func (r *Router) onUserOnline(s network.Conn) {
 	})
 }
 
-func (r *Router) onUserOffline(s network.Conn) {
+func (r *Gate) onUserOffline(s network.Conn) {
 	r.PublishEvent("ConnEnable", map[string]any{
 		"sid":    s.ConnID(),
 		"uid":    s.UserID(),
@@ -153,15 +168,26 @@ func (r *Router) onUserOffline(s network.Conn) {
 	s.SetUserData(nil)
 }
 
-func (r *Router) PublishEvent(ename string, event any) {
+func (r *Gate) PublishEvent(ename string, event any) {
 	log.Printf("[Mock PublishEvent] name:%v,event:%v", ename, event)
 }
 
-func (r *Router) OnCall(c network.Conn, pk *network.HVPacket) {
-	// var err error
-
-	// msgid := pk.GetMsgId()
-	// msgtype := pk.GetMsgType()
+func (r *Gate) OnCall(c network.Conn, subflag uint8, pk *network.RoutePacketRaw) {
+	var err error
+	switch subflag {
+	case network.RoutePackType_SubFlag_Request:
+		method := r.ct.Get(pk.GetMsgId())
+		if method == nil {
+			return
+		}
+		req := method.NewRequest()
+		err = r.marshaler.Unmarshal(pk.GetBody(), req)
+		if err != nil {
+			return
+		}
+		// method.Call(r, ctx, req)
+	default:
+	}
 
 	// if msgtype == network.RouteMsgType_Response {
 

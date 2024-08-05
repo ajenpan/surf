@@ -19,7 +19,7 @@ import (
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/errors"
 	log "github.com/ajenpan/surf/core/log"
-	msg "github.com/ajenpan/surf/msg/uauth"
+	pb "github.com/ajenpan/surf/msg/openproto/uauth"
 	"github.com/ajenpan/surf/server/uauth/database/cache"
 	"github.com/ajenpan/surf/server/uauth/database/models"
 )
@@ -47,8 +47,8 @@ type Auth struct {
 	AuthOptions
 }
 
-func (h *Auth) AnonymousLogin(ctx core.Context, in *msg.AnonymousLoginRequest) {
-	out := &msg.AnonymousLoginResponse{}
+func (h *Auth) AnonymousLogin(ctx core.Context, in *pb.AnonymousLoginRequest) {
+	out := &pb.AnonymousLoginResponse{}
 	var err error
 
 	defer func() {
@@ -56,7 +56,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msg.AnonymousLoginRequest) {
 	}()
 
 	if !RegUname.MatchString(in.Uname) {
-		err = errors.New(int32(msg.ResponseFlag_PasswdWrong), "error")
+		err = errors.New(int32(pb.ResponseFlag_PasswdWrong), "error")
 		return
 	}
 
@@ -83,10 +83,10 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msg.AnonymousLoginRequest) {
 
 		res := h.DB.Create(user)
 		if res.Error != nil {
-			err = errors.New(int32(msg.ResponseFlag_DataBaseErr), "create failed")
+			err = errors.New(int32(pb.ResponseFlag_DataBaseErr), "create failed")
 		}
 		if res.RowsAffected == 0 {
-			err = errors.New(int32(msg.ResponseFlag_DataBaseErr), "create failed")
+			err = errors.New(int32(pb.ResponseFlag_DataBaseErr), "create failed")
 			return
 		}
 	}
@@ -105,7 +105,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msg.AnonymousLoginRequest) {
 	}, 0)
 
 	if err != nil {
-		err = errors.New(int32(msg.ResponseFlag_GenTokenErr), err.Error())
+		err = errors.New(int32(pb.ResponseFlag_GenTokenErr), err.Error())
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msg.AnonymousLoginRequest) {
 
 	out.AssessToken = assess
 
-	out.UserInfo = &msg.UserInfo{
+	out.UserInfo = &pb.UserInfo{
 		Uid:     user.UID,
 		Uname:   user.Uname,
 		Stat:    int32(user.Stat),
@@ -150,8 +150,8 @@ func (h *Auth) CTByName() *calltable.CallTable[string] {
 	return ct
 }
 
-func (h *Auth) Login(ctx core.Context, in *msg.LoginRequest) {
-	out := &msg.LoginResponse{}
+func (h *Auth) Login(ctx core.Context, in *pb.LoginRequest) {
+	out := &pb.LoginResponse{}
 	// var err = &err.Error{}
 	var err error
 
@@ -160,7 +160,7 @@ func (h *Auth) Login(ctx core.Context, in *msg.LoginRequest) {
 	}()
 
 	if !RegUname.MatchString(in.Uname) {
-		err = errors.New(int32(msg.ResponseFlag_PasswdWrong), "error")
+		err = errors.New(int32(pb.ResponseFlag_PasswdWrong), "error")
 		return
 	}
 
@@ -209,7 +209,7 @@ func (h *Auth) Login(ctx core.Context, in *msg.LoginRequest) {
 	}
 
 	out.AssessToken = assess
-	out.UserInfo = &msg.UserInfo{
+	out.UserInfo = &pb.UserInfo{
 		Uid:     user.UID,
 		Uname:   user.Uname,
 		Stat:    int32(user.Stat),
@@ -217,7 +217,7 @@ func (h *Auth) Login(ctx core.Context, in *msg.LoginRequest) {
 	}
 }
 
-func (h *Auth) UserInfo(ctx core.Context, in *msg.UserInfoRequest) {
+func (h *Auth) UserInfo(ctx core.Context, in *pb.UserInfoRequest) {
 	user := &models.Users{
 		UID: in.Uid,
 	}
@@ -235,8 +235,8 @@ func (h *Auth) UserInfo(ctx core.Context, in *msg.UserInfoRequest) {
 		h.Cache.StoreUser(context.Background(), &cache.AuthCacheInfo{User: user}, time.Hour)
 	}
 
-	out := &msg.UserInfoResponse{
-		Info: &msg.UserInfo{
+	out := &pb.UserInfoResponse{
+		Info: &pb.UserInfo{
 			Uid:     user.UID,
 			Uname:   user.Uname,
 			Stat:    int32(user.Stat),
@@ -247,7 +247,7 @@ func (h *Auth) UserInfo(ctx core.Context, in *msg.UserInfoRequest) {
 	ctx.Response(out, nil)
 }
 
-func (h *Auth) Register(ctx core.Context, in *msg.RegisterRequest) (*msg.RegisterResponse, error) {
+func (h *Auth) Register(ctx core.Context, in *pb.RegisterRequest) (*pb.RegisterResponse, error) {
 	if !RegUname.MatchString(in.Uname) {
 		return nil, nil
 	}
@@ -274,7 +274,7 @@ func (h *Auth) Register(ctx core.Context, in *msg.RegisterRequest) (*msg.Registe
 		return nil, fmt.Errorf("create user error")
 	}
 
-	return &msg.RegisterResponse{Msg: "ok"}, nil
+	return &pb.RegisterResponse{Msg: "ok"}, nil
 }
 
 func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {

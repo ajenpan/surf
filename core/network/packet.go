@@ -4,13 +4,7 @@ import (
 	"io"
 )
 
-const (
-	RoutePacketType byte = 1 // route
-	HVPacketType    byte = 0x10
-)
-
 type Packet interface {
-	PacketType() byte
 	io.ReaderFrom
 	io.WriterTo
 }

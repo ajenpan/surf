@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	proto "github.com/ajenpan/surf/msg/mailbox"
+	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
 	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
 

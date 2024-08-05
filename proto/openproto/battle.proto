@@ -1,8 +1,7 @@
 syntax = "proto3";
 
-package battle;
-
-option go_package = "service/battle/proto";
+package openproto.battle;
+option go_package = "openproto/battle";
 
 message JoinBattleRequest {
   enum MSGID {

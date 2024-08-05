@@ -1,21 +1,22 @@
 package handler
 
 import (
-	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
 	"github.com/google/uuid"
 	protobuf "google.golang.org/protobuf/proto"
 
+	"github.com/ajenpan/surf/core"
+	"github.com/ajenpan/surf/core/errors"
 	"github.com/ajenpan/surf/core/event"
 	log "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/calltable"
-	"github.com/ajenpan/surf/core/utils/marshal"
+	innermsg "github.com/ajenpan/surf/msg/innerproto/battle"
+	openmsg "github.com/ajenpan/surf/msg/openproto/battle"
+
 	"github.com/ajenpan/surf/server/battle"
-	"github.com/ajenpan/surf/server/battle/proto"
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
@@ -24,27 +25,33 @@ type Battle struct {
 
 	LogicCreator *battle.GameLogicCreator
 	ct           *calltable.CallTable[uint32]
-	marshal      marshal.Marshaler
 	Publisher    event.Publisher
 
-	createCounter int32
+	tableCreateIdx int32
 }
 
 func New() *Battle {
 	h := &Battle{
 		LogicCreator: &battle.GameLogicCreator{},
 	}
-	h.ct = calltable.ExtractAsyncMethodByMsgID(proto.File_service_battle_proto_battle_proto.Messages(), h)
+
 	return h
 }
 
-func (h *Battle) CreateBattle(ctx context.Context, in *proto.StartBattleRequest) (*proto.StartBattleResponse, error) {
+func (h *Battle) OnCreateBattleRequest(ctx core.Context, in *innermsg.StartBattleRequest) {
+	var err error
+	var resp *innermsg.StartBattleResponse = &innermsg.StartBattleResponse{}
+
+	defer func() {
+		ctx.Response(resp, err)
+	}()
+
 	logic, err := h.LogicCreator.CreateLogic(in.GameName)
 	if err != nil {
-		return nil, err
+		return
 	}
 
-	atomic.AddInt32(&h.createCounter, 1)
+	atomic.AddInt32(&h.tableCreateIdx, 1)
 
 	battleid := uuid.NewString()
 
@@ -59,20 +66,17 @@ func (h *Battle) CreateBattle(ctx context.Context, in *proto.StartBattleRequest)
 
 	players, err := table.NewPlayers(in.PlayerInfos)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	err = d.Init(logic, players, in.BattleConf)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	h.tables.Store(battleid, d)
 
-	out := &proto.StartBattleResponse{
-		BattleId: d.ID,
-	}
-	return out, nil
+	resp.BattleId = d.ID
 }
 
 func (h *Battle) onBattleFinished(battleid string) {
@@ -108,8 +112,10 @@ func (h *Battle) LoadBattleByUID(uid uint64) []*table.Table {
 	return nil
 }
 
-func (h *Battle) JoinBattle(ctx context.Context, in *proto.JoinBattleRequest) (*proto.JoinBattleResponse, error) {
-	out := &proto.JoinBattleResponse{
+func (h *Battle) OnJoinBattleRequest(ctx core.Context, in *openmsg.JoinBattleRequest) {
+	var err error
+
+	out := &openmsg.JoinBattleResponse{
 		BattleId:   in.BattleId,
 		SeatId:     in.SeatId,
 		ReadyState: in.ReadyState,
@@ -117,19 +123,20 @@ func (h *Battle) JoinBattle(ctx context.Context, in *proto.JoinBattleRequest) (*
 
 	d := h.getBattleById(in.BattleId)
 	if d == nil {
-		return nil, fmt.Errorf("battle not found")
+		err = errors.New(-1, "battle not found")
+		ctx.Response(out, err)
+		return
 	}
 
-	// socket := GetTcpSocket(ctx)
-
-	// d.OnPlayerReady(socket.Uid, in.ReadyState)
+	d.OnPlayerReady(uint64(ctx.Caller().UserID()), in.ReadyState, func(err error) {
+		ctx.Response(out, err)
+	})
 
 	// 是否需要保持 uid - battleid 映射?
 	// 1 uid -> n * battleid.
 	// 当uid掉线时, 需要遍历所有的battleid, 并且通知battleid.
 	// h.UIDBingBID(socket.Uid, in.BattleId)
-
-	return out, nil
+	// return out, nil
 }
 
 // func (h *Battle) OnBattleMessageWrap(s *tcp.Socket, msg *proto.LoigcMessageWrap) {

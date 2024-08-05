@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	proto "github.com/ajenpan/surf/msg/innerproto/battle"
 	"github.com/ajenpan/surf/server/battle"
 	"github.com/ajenpan/surf/server/battle/noop"
-	"github.com/ajenpan/surf/server/battle/proto"
 )
 
 type logicwarper struct {

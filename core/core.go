@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ajenpan/surf/core/log"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/network"
@@ -189,14 +188,18 @@ func (s *Surf) startHttpSvr() {
 func (s *Surf) startWsSvr() {
 	log.Infof("startWsSvr")
 
-	ws := network.NewWSServer(network.WSServerOptions{
+	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   s.WsListenAddr,
 		OnConnPacket: s.onConnPacket,
 		OnConnEnable: s.onConnStatus,
 		OnConnAuth:   s.onConnAuth,
 	})
+	if err != nil {
+		panic(err)
+	}
 
-	ws.Start()
+	s.wssvr = ws
+	s.wssvr.Start()
 }
 
 func (s *Surf) startTcpSvr() {
@@ -212,20 +215,18 @@ func (s *Surf) startTcpSvr() {
 	if err != nil {
 		panic(err)
 	}
+
 	s.tcpsvr = tcpsvr
-	tcpsvr.Start()
+	s.tcpsvr.Start()
 }
 
 func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
-
-	// ctx := &Context{Session: s, UId: m.GetUid()}
-	// h.OnServerMsgWraper(ctx, m)
-	// sf := pk.GetSubFlag()
-	// switch sf {
-	// case 1:
-	// 	pk.GetBody()
-	// default:
-	// }
+	switch pk.Head.GetType() {
+	case network.PacketType_Route:
+		h.onRoutePacket(s, pk.Head.GetSubFlag(), pk.GetBody())
+	case network.PacketType_NodeInner:
+	default:
+	}
 }
 
 func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
@@ -233,39 +234,74 @@ func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
 }
 
 func (h *Surf) onConnStatus(s network.Conn, enable bool) {
+	log.Infof("route onstatus: %v, %v", s.ConnID(), enable)
+
 	if enable {
 
+	} else {
+
 	}
-	// log.Infof("route onstatus: %v, %v", s.SessionID(), enable)
 }
+
+func (h *Surf) onRoutePacket(s network.Conn, subflag uint8, rpk network.RoutePacketRaw) {
+	switch subflag {
+	case network.RoutePackType_SubFlag_Async:
+		fallthrough
+	case network.RoutePackType_SubFlag_Request:
+		method := h.CTById.Get(int32(rpk.GetMsgId()))
+		if method == nil {
+			// todo:
+			return
+		}
+
+	case network.RoutePackType_SubFlag_Response:
+	case network.RoutePackType_SubFlag_RouteErr:
+	default:
+	}
+}
+
+// func (h *Surf) SendToClient(pk *network.HVPacket) error {
+// 	if pk.Head == nil {
+// 		return network.ErrInvalidPacket
+// 	}
+// 	clientid := pk.Head.GetClientId()
+// 	conn := h.GetClientConn(clientid)
+// 	if conn == nil {
+// 		return fmt.Errorf("not found route")
+// 	}
+// 	return conn.Send(pk)
+// }
+
+// func (h *Surf) GetClientConn(id uint32) network.Conn {
+// }
 
 func OnRouteAsync(ct *calltable.CallTable[uint32], conn network.Conn, pk *network.HVPacket) {
 	// var err error
 	// rpk := network.RoutePacketRaw(pk.GetBody())
 
-	method := ct.Get(pk.Head.GetMsgId())
-	if method == nil {
-		pk.Head.SetType(network.PacketType_HandleErr)
-		pk.Head.SetSubFlag(network.PacketType_HandleErr_MethodNotFound)
-		pk.SetBody(nil)
-		conn.Send(pk)
-		return
-	}
+	// method := ct.Get(pk.Head.GetMsgId())
+	// if method == nil {
+	// 	pk.Head.SetType(network.PacketType_HandleErr)
+	// 	pk.Head.SetSubFlag(network.PacketType_HandleErr_MethodNotFound)
+	// 	pk.SetBody(nil)
+	// 	conn.Send(pk)
+	// 	return
+	// }
 
-	msg := method.NewRequest()
+	// msg := method.NewRequest()
 
-	if pk.Head.GetBodyLen() > 0 {
-		mar := &proto.UnmarshalOptions{}
-		err := mar.Unmarshal(pk.GetBody(), msg.(proto.Message))
-		if err != nil {
-			pk.Head.SetType(network.PacketType_HandleErr)
-			pk.Head.SetSubFlag(network.PacketType_HandleErr_MethodParseErr)
-			pk.SetBody(nil)
-			conn.Send(pk)
-			return
-		}
+	// if pk.Head.GetBodyLen() > 0 {
+	// 	mar := &proto.UnmarshalOptions{}
+	// 	err := mar.Unmarshal(pk.GetBody(), msg.(proto.Message))
+	// 	if err != nil {
+	// 		pk.Head.SetType(network.PacketType_HandleErr)
+	// 		pk.Head.SetSubFlag(network.PacketType_HandleErr_MethodParseErr)
+	// 		pk.SetBody(nil)
+	// 		conn.Send(pk)
+	// 		return
+	// 	}
 
-	}
+	// }
 
 	// var ctx Context = &context{
 	// 	Conn: conn,

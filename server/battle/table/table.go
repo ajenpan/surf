@@ -11,14 +11,14 @@ import (
 	"github.com/ajenpan/surf/core/event"
 	log "github.com/ajenpan/surf/core/log"
 
+	innermsg "github.com/ajenpan/surf/msg/innerproto/battle"
 	"github.com/ajenpan/surf/server/battle"
-	pb "github.com/ajenpan/surf/server/battle/proto"
 )
 
 type TableOption struct {
 	ID             string
 	EventPublisher event.Publisher
-	Conf           *pb.BattleConfigure
+	Conf           *innermsg.BattleConfigure
 	FinishReporter func()
 }
 
@@ -159,7 +159,7 @@ func (d *Table) ReportBattleStatus(s battle.GameStatus) {
 	d.beforeBattleStat = d.currBattleStat
 	d.currBattleStat = s
 
-	event := &pb.BattleStatusChangeEvent{
+	event := &innermsg.BattleStatusChangeEvent{
 		StatusBefore: int32(d.beforeBattleStat),
 		StatusNow:    int32(s),
 		BattleId:     d.ID,
@@ -271,12 +271,17 @@ func (d *Table) Status() TableStatus {
 	return atomic.LoadInt32(&d.status)
 }
 
-func (d *Table) OnPlayerReady(uid uint64, rds int32) {
+func (d *Table) OnPlayerReady(uid uint64, rds int32, then func(error)) {
 	d.actQue <- func() {
 
 		if d.Status() == TableStatus_Inited {
 			p := d.Players.ByUID(uid)
 			p.Ready = rds
+
+			var err error
+			if then != nil {
+				defer then(err)
+			}
 
 			if rds == 0 {
 				return
@@ -298,10 +303,10 @@ func (d *Table) OnPlayerReady(uid uint64, rds int32) {
 				return
 			}
 
-			err := d.battle.OnStart(players)
+			starterr := d.battle.OnStart(players)
 
-			if err != nil {
-				log.Error(err)
+			if starterr != nil {
+				log.Error(starterr)
 			}
 
 			d.updateStatus(TableStatus_Running)

@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ajenpan/surf/core/log"
-	proto "github.com/ajenpan/surf/msg/mailbox"
+	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
 )
 
 type announcement struct {

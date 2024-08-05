@@ -1,9 +1,8 @@
 syntax = "proto3";
 
-package surf;
-
-option go_package = "./route;route";
-option csharp_namespace = "src.msg.surf";
+package openproto.gate;
+option go_package = "openproto/gate";
+// option csharp_namespace = "src.msg.surf";
 
 message ReqLinkSession {
   int32 target = 1;

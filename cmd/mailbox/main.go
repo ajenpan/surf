@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ajenpan/surf/core/log"
-	proto "github.com/ajenpan/surf/msg/mailbox"
+	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
 	"github.com/ajenpan/surf/server/mailbox"
 )
 

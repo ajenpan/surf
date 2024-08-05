@@ -14,7 +14,7 @@ import (
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
-	route "github.com/ajenpan/surf/server/route"
+	route "github.com/ajenpan/surf/server/gater"
 )
 
 var (
@@ -93,11 +93,14 @@ func RealMain(c *cli.Context) error {
 
 	r := route.NewRouter()
 
-	ws := network.NewWSServer(network.WSServerOptions{
+	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   ":9999",
 		OnConnPacket: r.OnConnPacket,
 		OnConnEnable: r.OnConnEnable,
 	})
+	if err != nil {
+		return err
+	}
 
 	ws.Start()
 

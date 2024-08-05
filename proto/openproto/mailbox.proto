@@ -1,6 +1,7 @@
 syntax = "proto3";
 
-option go_package = "./mailbox;mailbox";
+package openproto.route;
+option go_package = "openproto/mailbox";
 
 service MailBox {
   rpc RecvMail(RecvMailRequest) returns (RecvMailResponse) {}

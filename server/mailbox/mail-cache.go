@@ -12,7 +12,7 @@ import (
 	pb "google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/log"
-	proto "github.com/ajenpan/surf/msg/mailbox"
+	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
 	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
 

@@ -1,8 +1,7 @@
 syntax = "proto3";
 
-package battle;
-
-option go_package = "service/battle/proto";
+package innerproto.battle;
+option go_package = "innerproto/battle";
 
 message PlayerInfo {
   uint64 uid = 1;
