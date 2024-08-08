@@ -1,14 +1,15 @@
 package network
 
 import (
+	"net"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
 	ws "github.com/gorilla/websocket"
 
 	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/log"
 )
 
 type WSServerOptions struct {
@@ -34,7 +35,7 @@ func NewWSServer(opts WSServerOptions) (*WSServer, error) {
 	}
 	h := &http.ServeMux{}
 	h.HandleFunc("/", ret.ServeHTTP)
-	ret.listener = &http.Server{Addr: ret.ListenAddr, Handler: h}
+	ret.httpsvr = &http.Server{Addr: ret.ListenAddr, Handler: h}
 
 	if ret.OnConnAccpect == nil {
 		ret.upgrader.CheckOrigin = func(r *http.Request) bool { return true }
@@ -50,18 +51,22 @@ type WSServer struct {
 	mu       sync.RWMutex
 	sockets  map[string]*WSConn
 	die      chan bool
-	listener *http.Server
-
+	httpsvr  *http.Server
 	upgrader ws.Upgrader
 }
 
 func (s *WSServer) Start() error {
+	ln, err := net.Listen("tcp", s.httpsvr.Addr)
+	if err != nil {
+		return err
+	}
+
 	go func() {
-		err := s.listener.ListenAndServe()
-		if err != nil {
-			os.Exit(-1)
+		if err := s.httpsvr.Serve(ln); err != nil {
+			log.Error(err)
 		}
 	}()
+
 	return nil
 }
 
@@ -72,7 +77,7 @@ func (s *WSServer) Stop() error {
 	default:
 		close(s.die)
 	}
-	s.listener.Close()
+	s.httpsvr.Close()
 	return nil
 }
 
@@ -171,7 +176,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *WSServer) Address() string {
-	return s.listener.Addr
+	return s.httpsvr.Addr
 }
 
 func (s *WSServer) SocketCount() int {

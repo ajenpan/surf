@@ -44,6 +44,7 @@ type TcpConn struct {
 func (s *TcpConn) SetUserData(d any) {
 	s.userdata = d
 }
+
 func (s *TcpConn) GetUserData() any {
 	return s.userdata
 }

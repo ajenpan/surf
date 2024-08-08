@@ -1,12 +1,12 @@
 package network
 
 import (
-	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/log"
 )
 
 type TcpServerOptions struct {
@@ -80,7 +80,7 @@ func (s *TcpServer) Start() error {
 						time.Sleep(tempDelay)
 						continue
 					}
-					fmt.Println(err)
+					log.Error(err)
 					return
 				}
 				tempDelay = 0

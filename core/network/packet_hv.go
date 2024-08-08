@@ -52,21 +52,21 @@ func (hr *PacketHead) SetType(f Packet_MsgType) {
 	(*hr)[0] = uint8(f)
 }
 
-func (hr PacketHead) GetSubFlag() uint8 {
-	return hr[1]
+func (hr *PacketHead) GetSubFlag() uint8 {
+	return (*hr)[1]
 }
 
-func (hr PacketHead) SetSubFlag(f uint8) {
-	hr[1] = f
+func (hr *PacketHead) SetSubFlag(f uint8) {
+	(*hr)[1] = f
 }
 
-func (hr PacketHead) GetBodyLen() uint16 {
-	return uint16(hr[2]) | uint16(hr[3])<<8
+func (hr *PacketHead) GetBodyLen() uint16 {
+	return uint16((*hr)[2]) | uint16((*hr)[3])<<8
 }
 
-func (hr PacketHead) SetBodyLen(l uint16) {
-	hr[2] = uint8(l)
-	hr[3] = uint8(l >> 8)
+func (hr *PacketHead) SetBodyLen(l uint16) {
+	(*hr)[2] = uint8(l)
+	(*hr)[3] = uint8(l >> 8)
 }
 
 func (hr *PacketHead) Reset() {

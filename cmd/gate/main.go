@@ -14,11 +14,11 @@ import (
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
-	route "github.com/ajenpan/surf/server/gater"
+	gate "github.com/ajenpan/surf/server/gate"
 )
 
 var (
-	Name       string = "route"
+	Name       string = "gate"
 	Version    string = "unknow"
 	GitCommit  string = "unknow"
 	BuildAt    string = "unknow"
@@ -91,18 +91,35 @@ func RealMain(c *cli.Context) error {
 
 	fmt.Println(jwt)
 
-	r := route.NewRouter()
+	r := gate.NewGate()
 
 	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   ":9999",
 		OnConnPacket: r.OnConnPacket,
 		OnConnEnable: r.OnConnEnable,
+		OnConnAuth: func(data []byte) (auth.User, error) {
+			return auth.VerifyToken(&ppk.PublicKey, data)
+		},
 	})
 	if err != nil {
 		return err
 	}
-
 	ws.Start()
+	defer ws.Stop()
+
+	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
+		ListenAddr:   ":9998",
+		OnConnPacket: r.OnNodePacket,
+		OnConnEnable: r.OnNodeEnable,
+		OnConnAuth: func(data []byte) (auth.User, error) {
+			return auth.VerifyToken(&ppk.PublicKey, data)
+		}},
+	)
+	if err != nil {
+		return err
+	}
+	tcpsvr.Start()
+	defer tcpsvr.Stop()
 
 	s := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", s.String())
