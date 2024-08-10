@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -18,43 +19,52 @@ func main() {
 	}
 
 	fmt.Println("start to work")
+	wg := &sync.WaitGroup{}
+	for cnt := 0; cnt < 100; cnt++ {
+		wg.Add(1)
 
-	for i := 0; i < 10000; i++ {
-		if i%100 == 0 {
-			fmt.Print(i, "-")
-		}
-		work(remoteAddr)
-		if i%100 == 0 {
-			fmt.Println(i)
-		}
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 100; i++ {
+				work(remoteAddr)
+			}
+		}()
 	}
+	fmt.Println("wait.")
+
+	wg.Wait()
+
+	fmt.Println("work finished")
+
 }
 
 func work(remoteaddr string) {
-
-	// net.DialTCP("tcp",remoteaddr)
-	conn, err := net.DialTimeout("tcp", remoteaddr, 100*time.Microsecond)
+	conn, err := net.DialTimeout("tcp", remoteaddr, 100*time.Millisecond)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("conn err:%v\n", err)
 		return
 	}
 	defer conn.Close()
+
+	conn.SetDeadline(time.Now().Add(15 * time.Second))
 
 	l := rand.Int31n(math.MaxInt16)
 	data := make([]byte, l)
 	_, err = rand.Read(data)
 	if err != nil {
-		fmt.Println(err)
+		// fmt.Println(err)
 		return
 	}
 
 	_, err = conn.Write(data)
 	if err != nil {
+		// fmt.Printf("Write err:%v\n", err)
 		return
 	}
 
 	_, err = conn.Read(data)
 	if err != nil {
+		// fmt.Printf("Read err:%v\n", err)
 		return
 	}
 	fmt.Println("pass")

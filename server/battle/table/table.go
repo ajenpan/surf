@@ -119,14 +119,14 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{
 	return nil
 }
 
-func (d *Table) PushAction(f func()) {
+func (d *Table) Do(f func()) {
 	d.actQue <- f
 }
 
 func (d *Table) AfterFunc(td time.Duration, f func()) {
 	//TODO: upgrade this function perfermance
 	time.AfterFunc(td, func() {
-		d.PushAction(f)
+		d.Do(f)
 	})
 }
 

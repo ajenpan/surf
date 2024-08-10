@@ -149,7 +149,7 @@ func (s *TcpServer) onAccept(c net.Conn) {
 }
 
 func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
-	deadline := time.Now().Add(s.opts.HeatbeatInterval * 2)
+	deadline := time.Now().Add(s.opts.HeatbeatInterval)
 	conn.SetReadDeadline(deadline)
 	conn.SetWriteDeadline(deadline)
 	pk := NewHVPacket()

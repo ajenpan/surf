@@ -5,14 +5,12 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
-	protobuf "google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/errors"
 	"github.com/ajenpan/surf/core/event"
 	log "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
-	"github.com/ajenpan/surf/core/utils/calltable"
 	innermsg "github.com/ajenpan/surf/msg/innerproto/battle"
 	openmsg "github.com/ajenpan/surf/msg/openproto/battle"
 
@@ -24,7 +22,6 @@ type Battle struct {
 	tables sync.Map
 
 	LogicCreator *battle.GameLogicCreator
-	ct           *calltable.CallTable[uint32]
 	Publisher    event.Publisher
 
 	tableCreateIdx int32
@@ -92,10 +89,6 @@ func (h *Battle) onBattleFinished(battleid string) {
 
 	d.Close()
 	h.tables.Delete(battleid)
-}
-
-func (h *Battle) OnEvent(topc string, msg protobuf.Message) {
-
 }
 
 func (h *Battle) UIDBingBID(uid uint64, bid string) error {
