@@ -2,7 +2,6 @@ package handler
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -23,8 +22,6 @@ type Battle struct {
 
 	LogicCreator *battle.GameLogicCreator
 	Publisher    event.Publisher
-
-	tableCreateIdx int32
 }
 
 func New() *Battle {
@@ -47,8 +44,6 @@ func (h *Battle) OnCreateBattleRequest(ctx core.Context, in *innermsg.StartBattl
 	if err != nil {
 		return
 	}
-
-	atomic.AddInt32(&h.tableCreateIdx, 1)
 
 	battleid := uuid.NewString()
 
@@ -83,7 +78,7 @@ func (h *Battle) onBattleFinished(battleid string) {
 	}
 
 	d.Players.Range(func(p *table.Player) bool {
-		h.UIDUnBingBID(uint64(p.Uid), battleid)
+		h.UIDUnBindBattleID(uint64(p.Uid), battleid)
 		return true
 	})
 
@@ -91,16 +86,16 @@ func (h *Battle) onBattleFinished(battleid string) {
 	h.tables.Delete(battleid)
 }
 
-func (h *Battle) UIDBingBID(uid uint64, bid string) error {
+func (h *Battle) UIDBindBattleID(uid uint64, bid string) error {
 	// TODO:
 	return nil
 }
 
-func (h *Battle) UIDUnBingBID(uid uint64, bid string) {
+func (h *Battle) UIDUnBindBattleID(uid uint64, bid string) {
 
 }
 
-func (h *Battle) LoadBattleByUID(uid uint64) []*table.Table {
+func (h *Battle) LoadBattleByUID(uid uint64) map[string]table.Table {
 	// TODO:
 	return nil
 }

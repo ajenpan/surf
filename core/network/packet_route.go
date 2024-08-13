@@ -83,7 +83,7 @@ func (r RoutePacketRaw) SetErrCode(d int16) {
 
 func (r RoutePacketRaw) GenHVPacket(subflag uint8) *HVPacket {
 	ret := NewHVPacket()
-	ret.Head.SetType(PacketType_Route)
-	ret.Head.SetSubFlag(subflag)
+	ret.Meta.SetType(PacketType_Route)
+	ret.Meta.SetSubFlag(subflag)
 	return ret
 }

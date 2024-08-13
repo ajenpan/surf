@@ -9,6 +9,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
@@ -77,6 +78,9 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		panic(err)
 	}
+
+	surf := core.NewSurf(core.Options{})
+	surf.Start()
 
 	h := battleHandler.New()
 

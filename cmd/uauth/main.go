@@ -138,7 +138,7 @@ func RealMain(c *cli.Context) error {
 	})
 	ct := h.CTByName()
 
-	surf := core.New(core.Options{
+	surf := core.NewSurf(core.Options{
 		ServerId:       1,
 		HttpListenAddr: ":9999",
 		CTByName:       ct,

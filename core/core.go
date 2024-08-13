@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/rsa"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/ajenpan/surf/core/registry"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/marshal"
+	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 )
 
 type Options struct {
@@ -27,9 +29,11 @@ type Options struct {
 
 	CTByName *calltable.CallTable[string]
 	CTById   *calltable.CallTable[int32]
+
+	Marshaler marshal.Marshaler
 }
 
-func New(opt Options) *Surf {
+func NewSurf(opt Options) *Surf {
 	s := &Surf{
 		Options: opt,
 		// routeClient: make(map[string]*network.TcpClient),
@@ -128,7 +132,15 @@ func (s *Surf) init() error {
 }
 
 func (s *Surf) Close() error {
-
+	if s.tcpsvr != nil {
+		s.tcpsvr.Stop()
+	}
+	if s.wssvr != nil {
+		s.wssvr.Stop()
+	}
+	if s.httpsvr != nil {
+		s.httpsvr.Close()
+	}
 	return nil
 }
 
@@ -161,6 +173,16 @@ func (s *Surf) Start() error {
 	// 	}
 	// }()
 
+	return nil
+}
+
+func (s *Surf) Run() error {
+	if err := s.Start(); err != nil {
+		return err
+	}
+
+	sig := utilSignal.WaitShutdown()
+	log.Infof("recv signal: %v", sig.String())
 	return nil
 }
 
@@ -221,9 +243,9 @@ func (s *Surf) startTcpSvr() {
 }
 
 func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
-	switch pk.Head.GetType() {
+	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
-		h.onRoutePacket(s, pk.Head.GetSubFlag(), pk.GetBody())
+		h.onRoutePacket(s, pk.Meta.GetSubFlag(), pk.GetBody())
 	case network.PacketType_NodeInner:
 	default:
 	}
@@ -236,11 +258,6 @@ func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
 func (h *Surf) onConnStatus(s network.Conn, enable bool) {
 	log.Infof("route onstatus: %v, %v", s.ConnID(), enable)
 
-	if enable {
-
-	} else {
-
-	}
 }
 
 func (h *Surf) onRoutePacket(s network.Conn, subflag uint8, rpk network.RoutePacketRaw) {
@@ -253,27 +270,49 @@ func (h *Surf) onRoutePacket(s network.Conn, subflag uint8, rpk network.RoutePac
 			// todo:
 			return
 		}
-
 	case network.RoutePackType_SubFlag_Response:
 	case network.RoutePackType_SubFlag_RouteErr:
 	default:
 	}
 }
 
-// func (h *Surf) SendToClient(pk *network.HVPacket) error {
-// 	if pk.Head == nil {
-// 		return network.ErrInvalidPacket
-// 	}
-// 	clientid := pk.Head.GetClientId()
-// 	conn := h.GetClientConn(clientid)
-// 	if conn == nil {
-// 		return fmt.Errorf("not found route")
-// 	}
-// 	return conn.Send(pk)
-// }
+func (h *Surf) SendToClient(uid uint32, msgid uint32, body any) error {
+	conn := h.GetClientConn(uid)
+	if conn == nil {
+		return fmt.Errorf("not found route")
+	}
 
-// func (h *Surf) GetClientConn(id uint32) network.Conn {
-// }
+	// raw, err := h.Marshaler.Marshal(body)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// head := network.RoutePacketRaw(make([]byte, network.RoutePackHeadLen))
+
+	// network.HVPacket
+
+	// if pk.Head == nil {
+	// 	return network.ErrInvalidPacket
+	// }
+	// conn := h.GetClientConn(uid)
+	// if conn == nil {
+	// 	return fmt.Errorf("not found route")
+	// }
+	// return conn.Send(pk)
+	return nil
+}
+
+func (h *Surf) SendToNode(nodeid uint32, pk *network.HVPacket) error {
+	return nil
+}
+
+func (h *Surf) GetClientConn(id uint32) network.Conn {
+	return nil
+}
+
+func (h *Surf) GetNodeConn(id uint32) network.Conn {
+	return nil
+}
 
 func OnRouteAsync(ct *calltable.CallTable[uint32], conn network.Conn, pk *network.HVPacket) {
 	// var err error

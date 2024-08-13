@@ -49,7 +49,7 @@ func (r *Gate) OnConnEnable(conn network.Conn, enable bool) {
 }
 
 func (r *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
-	if pk.Head.GetType() != network.PacketType_Route {
+	if pk.Meta.GetType() != network.PacketType_Route {
 		return
 	}
 	if len(pk.Body) < network.RoutePackHeadLen {
@@ -61,7 +61,7 @@ func (r *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	svrtype := rpk.GetSvrType()
 
 	if svrtype == 0 {
-		r.OnCall(s, pk.Head.GetSubFlag(), &rpk)
+		r.OnCall(s, pk.Meta.GetSubFlag(), &rpk)
 		return
 	}
 
@@ -75,7 +75,7 @@ func (r *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 
 	if !found {
 		rpk.SetErrCode(network.RoutePackType_SubFlag_RouteErrCode_NodeNotFound)
-		pk.Head.SetSubFlag(network.RoutePackType_SubFlag_RouteErr)
+		pk.Meta.SetSubFlag(network.RoutePackType_SubFlag_RouteErr)
 		pk.SetBody(rpk.GetHead())
 		s.Send(pk)
 		return
@@ -120,7 +120,7 @@ func (r *Gate) OnNodeEnable(conn network.Conn, enable bool) {
 }
 
 func (r *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
-	switch pk.Head.GetType() {
+	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		rpk := network.RoutePacketRaw(pk.GetBody())
 
