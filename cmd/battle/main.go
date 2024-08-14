@@ -79,7 +79,7 @@ func RealMain(c *cli.Context) error {
 		panic(err)
 	}
 
-	surf := core.NewSurf(core.Options{})
+	surf := core.NewSurf(&core.Options{})
 	surf.Start()
 
 	h := battleHandler.New()

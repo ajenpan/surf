@@ -3,20 +3,19 @@ package core
 import (
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/network"
 )
 
 type Context interface {
 	Response(msg proto.Message, err error)
-	Caller() auth.User
+	Caller() uint32
 }
 
 type context struct {
 	Conn   network.Conn
 	Core   *Surf
 	Pk     *network.HVPacket
-	Client *auth.UserInfo
+	caller uint32
 }
 
 func (ctx *context) Response(msg proto.Message, err error) {
@@ -38,6 +37,6 @@ func (ctx *context) SendAsync(msg proto.Message) error {
 	return nil
 }
 
-func (ctx *context) Caller() auth.User {
-	return ctx.Client
+func (ctx *context) Caller() uint32 {
+	return ctx.caller
 }

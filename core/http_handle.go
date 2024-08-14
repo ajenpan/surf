@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/network"
 	"google.golang.org/protobuf/proto"
 )
@@ -46,6 +45,6 @@ func (ctx *HttpCallContext) Async(msg interface{}) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 
-func (ctx *HttpCallContext) Caller() auth.User {
-	return nil
+func (ctx *HttpCallContext) Caller() uint32 {
+	return 0
 }

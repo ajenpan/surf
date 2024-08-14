@@ -2,8 +2,6 @@ package network
 
 import "encoding/binary"
 
-type RoutePacketRaw []byte
-
 // | client | nodeid | msgid | syn | svrtype | errcode | body |
 // | 4      | 4      | 4     | 4   | 2       | 2       | n    |
 const RoutePackHeadLen = 4 + 2 + 4 + 4 + 4 + 2 // 20
@@ -25,63 +23,74 @@ const (
 	RoutePackType_SubFlag_RouteErrCode_MethodParseErr = 3
 )
 
-func (r RoutePacketRaw) GetClientId() uint32 {
+func NewRoutePacket(subflag uint8, head, body []uint8) *HVPacket {
+	ret := NewHVPacket()
+	ret.SetBody(body)
+	ret.SetHead(head)
+	ret.Meta.SetSubFlag(subflag)
+	ret.Meta.SetType(PacketType_Route)
+	return ret
+}
+
+type RoutePacketHead []uint8
+
+func (r RoutePacketHead) GetClientId() uint32 {
 	return binary.LittleEndian.Uint32(r[0:4])
 }
 
-func (r RoutePacketRaw) GetNodeId() uint32 {
+func (r RoutePacketHead) GetNodeId() uint32 {
 	return binary.LittleEndian.Uint32(r[4:8])
 }
 
-func (r RoutePacketRaw) GetMsgId() uint32 {
+func (r RoutePacketHead) GetMsgId() uint32 {
 	return binary.LittleEndian.Uint32(r[8:12])
 }
 
-func (r RoutePacketRaw) GetSYN() uint32 {
+func (r RoutePacketHead) GetSYN() uint32 {
 	return binary.LittleEndian.Uint32(r[12:16])
 }
 
-func (r RoutePacketRaw) GetSvrType() uint32 {
+func (r RoutePacketHead) GetSvrType() uint32 {
 	return binary.LittleEndian.Uint32(r[16:18])
 }
 
-func (r RoutePacketRaw) GetErrCode() int16 {
+func (r RoutePacketHead) GetErrCode() int16 {
 	return (int16)(binary.LittleEndian.Uint16(r[18:20]))
 }
 
-func (r RoutePacketRaw) GetHead() []byte {
+func (r RoutePacketHead) GetHead() []byte {
 	return r[:RoutePackHeadLen]
 }
 
-func (r RoutePacketRaw) GetBody() []byte {
+func (r RoutePacketHead) GetBody() []byte {
 	return r[RoutePackHeadLen:]
 }
 
-func (r RoutePacketRaw) SetClientId(d uint32) {
+func (r RoutePacketHead) SetClientId(d uint32) {
 	binary.LittleEndian.PutUint32(r[0:4], d)
 }
 
-func (r RoutePacketRaw) SetNodeId(d uint32) {
+func (r RoutePacketHead) SetNodeId(d uint32) {
 	binary.LittleEndian.PutUint32(r[4:8], d)
 }
 
-func (r RoutePacketRaw) SetMsgId(d uint32) {
+func (r RoutePacketHead) SetMsgId(d uint32) {
 	binary.LittleEndian.PutUint32(r[8:12], d)
 }
 
-func (r RoutePacketRaw) SetSYN(d uint32) {
+func (r RoutePacketHead) SetSYN(d uint32) {
 	binary.LittleEndian.PutUint32(r[12:16], d)
 }
 
-func (r RoutePacketRaw) SetSvrType(d uint32) {
+func (r RoutePacketHead) SetSvrType(d uint32) {
 	binary.LittleEndian.PutUint32(r[16:18], d)
 }
 
-func (r RoutePacketRaw) SetErrCode(d int16) {
+func (r RoutePacketHead) SetErrCode(d int16) {
 	binary.LittleEndian.PutUint16(r[18:20], uint16(d))
 }
 
-func (r RoutePacketRaw) GenHVPacket(subflag uint8) *HVPacket {
+func (r RoutePacketHead) GenHVPacket(subflag uint8) *HVPacket {
 	ret := NewHVPacket()
 	ret.Meta.SetType(PacketType_Route)
 	ret.Meta.SetSubFlag(subflag)

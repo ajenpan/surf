@@ -124,9 +124,18 @@ func (p *HVPacket) WriteTo(writer io.Writer) (int64, error) {
 	return int64(PacketHeadLen + len(p.Body)), nil
 }
 
+func (p *HVPacket) SetHead(b []uint8) {
+	p.Meta.SetHeadLen(uint8(len(b)))
+	p.Head = b
+}
+
+func (p *HVPacket) GetHead() []uint8 {
+	return p.Head
+}
+
 func (p *HVPacket) SetBody(b []uint8) {
-	p.Body = b
 	p.Meta.SetBodyLen(uint16(len(b)))
+	p.Body = b
 }
 
 func (p *HVPacket) GetBody() []uint8 {

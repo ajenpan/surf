@@ -56,7 +56,7 @@ func (r *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		return
 	}
 
-	rpk := network.RoutePacketRaw(pk.GetBody())
+	rpk := network.RoutePacketHead(pk.GetBody())
 	rpk.SetClientId(s.UserID())
 	svrtype := rpk.GetSvrType()
 
@@ -122,7 +122,7 @@ func (r *Gate) OnNodeEnable(conn network.Conn, enable bool) {
 func (r *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
-		rpk := network.RoutePacketRaw(pk.GetBody())
+		rpk := network.RoutePacketHead(pk.GetBody())
 
 		cid := rpk.GetClientId()
 		if cid == 0 {
@@ -172,7 +172,7 @@ func (r *Gate) PublishEvent(ename string, event any) {
 	log.Printf("[Mock PublishEvent] name:%v,event:%v", ename, event)
 }
 
-func (r *Gate) OnCall(c network.Conn, subflag uint8, pk *network.RoutePacketRaw) {
+func (r *Gate) OnCall(c network.Conn, subflag uint8, pk *network.RoutePacketHead) {
 	var err error
 	switch subflag {
 	case network.RoutePackType_SubFlag_Request:

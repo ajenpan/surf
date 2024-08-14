@@ -116,7 +116,7 @@ func (h *Battle) OnJoinBattleRequest(ctx core.Context, in *openmsg.JoinBattleReq
 		return
 	}
 
-	d.OnPlayerReady(uint64(ctx.Caller().UserID()), in.ReadyState, func(err error) {
+	d.OnPlayerReady(uint64(ctx.Caller()), in.ReadyState, func(err error) {
 		ctx.Response(out, err)
 	})
 
