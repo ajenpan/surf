@@ -6,21 +6,15 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"gorm.io/driver/mysql"
-
-	// "gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 
 	"github.com/ajenpan/surf/core"
-
+	log "github.com/ajenpan/surf/core/log"
+	"github.com/ajenpan/surf/core/utils/rsagen"
+	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 	auth "github.com/ajenpan/surf/server/uauth"
 	"github.com/ajenpan/surf/server/uauth/database/cache"
-
-	utilSignal "github.com/ajenpan/surf/core/utils/signal"
-
-	"github.com/ajenpan/surf/core/utils/rsagen"
-
-	log "github.com/ajenpan/surf/core/log"
 )
 
 var Version string = "unknown"
@@ -139,7 +133,7 @@ func RealMain(c *cli.Context) error {
 	ct := h.CTByName()
 
 	surf := core.NewSurf(&core.Options{
-		ServerId:       1,
+		ServerType:     1,
 		HttpListenAddr: ":9999",
 		CTByName:       ct,
 	})

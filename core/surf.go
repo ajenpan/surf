@@ -20,7 +20,7 @@ import (
 )
 
 type Options struct {
-	ServerId   uint16
+	ServerType uint16
 	RouteToken string
 
 	HttpListenAddr string
@@ -31,6 +31,7 @@ type Options struct {
 	CTById   *calltable.CallTable[uint32]
 
 	Marshaler marshal.Marshaler
+	PublicKey *rsa.PublicKey
 }
 
 func NewSurf(opt *Options) *Surf {
@@ -62,7 +63,6 @@ type RequestCallbackCache struct {
 
 type Surf struct {
 	*Options
-	pk  *rsa.PublicKey
 	Reg *registry.Registry
 
 	tcpsvr  *network.TcpServer
@@ -125,6 +125,11 @@ func (s *Surf) Start() error {
 }
 
 func (s *Surf) Run() error {
+	s.CTById.Range(func(key uint32, value *calltable.Method) bool {
+		log.Infof("handle func,msgid:%d, funcname:%s", key, value.FuncName)
+		return true
+	})
+
 	if err := s.Start(); err != nil {
 		return err
 	}
@@ -194,8 +199,8 @@ func (h *Surf) GetNodeId() uint32 {
 	return h.nodeid
 }
 
-func (h *Surf) GetServerId() uint16 {
-	return uint16(h.ServerId)
+func (h *Surf) GetServerType() uint16 {
+	return uint16(h.ServerType)
 }
 
 func (h *Surf) GetSYN() uint32 {
@@ -341,7 +346,6 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 			core: s,
 		}
 
-		// here call method
 		method.Call(ctx, req)
 	}
 }
@@ -356,12 +360,11 @@ func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 }
 
 func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
-	return auth.VerifyToken(h.pk, data)
+	return auth.VerifyToken(h.PublicKey, data)
 }
 
 func (h *Surf) onConnStatus(s network.Conn, enable bool) {
 	log.Infof("route onstatus: %v, %v", s.ConnID(), enable)
-
 }
 
 func (h *Surf) getClientInfo(uid uint32) *auth.UserInfo {

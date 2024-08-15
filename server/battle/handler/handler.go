@@ -18,8 +18,7 @@ import (
 )
 
 type Battle struct {
-	tables sync.Map
-
+	tables       sync.Map
 	LogicCreator *battle.GameLogicCreator
 	Publisher    event.Publisher
 }
@@ -30,6 +29,14 @@ func New() *Battle {
 	}
 
 	return h
+}
+
+func (h *Battle) ServerType() uint16 {
+	return 1
+}
+
+func (h *Battle) ServerName() string {
+	return "battle"
 }
 
 func (h *Battle) OnCreateBattleRequest(ctx core.Context, in *innermsg.StartBattleRequest) {

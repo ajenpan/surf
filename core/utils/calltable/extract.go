@@ -128,7 +128,7 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 	return uint32(IDDesc.Number())
 }
 
-func ExtractAsyncMethodByMsgID(ms protoreflect.MessageDescriptors, h interface{}) *CallTable[uint32] {
+func ExtractMethodByMsgID(ms protoreflect.MessageDescriptors, h interface{}) *CallTable[uint32] {
 	const MethodPrefix string = "On"
 	hvalue := reflect.TypeOf(h)
 
@@ -147,11 +147,11 @@ func ExtractAsyncMethodByMsgID(ms protoreflect.MessageDescriptors, h interface{}
 			continue
 		}
 
-		if method.Type.NumIn() != 2 {
+		if method.Type.NumIn() != 3 {
 			continue
 		}
 
-		reqMsgType := method.Type.In(1)
+		reqMsgType := method.Type.In(2)
 		if reqMsgType.Kind() != reflect.Ptr {
 			continue
 		}

@@ -10,11 +10,10 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ajenpan/surf/core"
-	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
-	"github.com/ajenpan/surf/core/network"
+	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
-	utilSignal "github.com/ajenpan/surf/core/utils/signal"
+	battleMsg "github.com/ajenpan/surf/msg/openproto/battle"
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
 	_ "github.com/ajenpan/surf/server/games/niuniu"
 )
@@ -74,33 +73,26 @@ func LoadAuthPublicKey() (*rsa.PublicKey, error) {
 }
 
 func RealMain(c *cli.Context) error {
+	log.Default.SetOutput(os.Stdin)
+
 	pk, err := LoadAuthPublicKey()
 	if err != nil {
 		panic(err)
 	}
 
-	surf := core.NewSurf(&core.Options{})
-	surf.Start()
-
 	h := battleHandler.New()
-
-	listener, err := network.NewTcpServer(network.TcpServerOptions{
-		ListenAddr:   listenAt,
-		OnConnPacket: h.OnMessage,
-		OnConnEnable: h.OnConn,
-		OnConnAuth: func(tokenRaw []byte) (auth.User, error) {
-			return auth.VerifyToken(pk, tokenRaw)
-		},
+	ct := calltable.ExtractMethodByMsgID(battleMsg.File_battle_proto.Messages(), h)
+	err = core.Init(&core.Options{
+		ServerType:    h.ServerType(),
+		TcpListenAddr: listenAt,
+		CTById:        ct,
+		PublicKey:     pk,
 	})
 
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	go listener.Start()
-	defer listener.Stop()
-
-	s := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", s.String())
-	return nil
+	err = core.Run()
+	return err
 }
