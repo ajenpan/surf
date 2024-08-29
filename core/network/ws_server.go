@@ -106,7 +106,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketType_Inner_HandShake || len(pk.GetBody()) != 0 {
+	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_HandShake || len(pk.GetBody()) != 0 {
 		return
 	}
 
@@ -114,8 +114,8 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.OnConnAuth != nil {
 		pk := NewHVPacket()
 		pk.Meta.SetType(PacketType_Inner)
-		pk.Meta.SetSubFlag(PacketType_Inner_Cmd)
-		pk.SetBody([]byte("auth"))
+		pk.Meta.SetSubFlag(PacketInnerSubType_Cmd)
+		pk.SetHead([]byte("auth"))
 		if err := conn.writePacket(pk); err != nil {
 			return
 		}
@@ -130,7 +130,8 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pk.Meta.SetType(PacketType_Inner)
-	pk.Meta.SetSubFlag(PacketType_Inner_HandShakeFinish)
+	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFinish)
+	pk.SetHead([]byte("socketid"))
 	pk.SetBody([]byte(conn.ConnID()))
 	conn.writePacket(pk)
 
@@ -163,7 +164,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if packet.Meta.GetType() == PacketType_Inner {
 				switch packet.Meta.GetSubFlag() {
-				case PacketType_Inner_Heartbeat:
+				case PacketInnerSubType_Heartbeat:
 					conn.Send(packet)
 				}
 			} else {

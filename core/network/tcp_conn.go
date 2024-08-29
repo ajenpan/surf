@@ -19,6 +19,21 @@ func GenConnID() string {
 	return fmt.Sprintf("%d_%d", atomic.AddUint64(&sid, 1), time.Now().Unix())
 }
 
+func newTcpConn(id string, uinfo auth.User, conn net.Conn, rwtimeout time.Duration) *TcpConn {
+	return &TcpConn{
+		User:       uinfo,
+		id:         id,
+		conn:       conn,
+		timeOut:    rwtimeout,
+		status:     Initing,
+		chClosed:   make(chan struct{}),
+		chWrite:    make(chan *HVPacket, 10),
+		chRead:     make(chan *HVPacket, 10),
+		lastSendAt: time.Now().Unix(),
+		lastRecvAt: time.Now().Unix(),
+	}
+}
+
 type TcpConn struct {
 	auth.User
 
@@ -66,15 +81,12 @@ func (s *TcpConn) Send(p *HVPacket) error {
 }
 
 func (c *TcpConn) Close() error {
-	old := atomic.SwapInt32((*int32)(&c.status), int32(Disconnected))
-	if old != Connected {
-		return nil
-	}
-
 	select {
 	case <-c.chClosed:
 		return nil
 	default:
+		atomic.StoreInt32((*int32)(&c.status), int32(Closed))
+
 		close(c.chClosed)
 		close(c.chWrite)
 		close(c.chRead)
@@ -119,7 +131,7 @@ func (s *TcpConn) writeWork() error {
 				return err
 			}
 			s.writeSize += n
-			s.lastSendAt = time.Now().Unix()
+			atomic.SwapInt64(&s.lastSendAt, time.Now().Unix())
 		}
 	}
 }
@@ -135,7 +147,7 @@ func (s *TcpConn) readWork() error {
 		}
 
 		s.readSize += n
-		s.lastRecvAt = time.Now().Unix()
+		atomic.SwapInt64(&s.lastRecvAt, time.Now().Unix())
 		select {
 		case <-s.chClosed:
 			return nil

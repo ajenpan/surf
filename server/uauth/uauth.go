@@ -138,7 +138,6 @@ func (h *Auth) CTByName() *calltable.CallTable[string] {
 		}
 		ret := &calltable.Method{
 			Func:        refv,
-			Style:       calltable.StyleAsync,
 			RequestType: refv.Type().In(1).Elem(),
 		}
 		return ret

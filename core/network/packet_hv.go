@@ -4,27 +4,30 @@ import (
 	"io"
 )
 
-// | pktype | subtype | headlen | bodylen | body |
-// | 1      | 1       | 1       | 2       | n    |
-const PacketHeadLen = 1 + 1 + 1 + 2
+// | Packet Meta                          | Packet Body       |
+// | pktype | subtype | headlen | bodylen | head    | body    |
+// | 1      | 1       | 1       | 2       | headlen | bodylen |
+const PacketMetaLen = 1 + 1 + 1 + 2
+
 const PacketMaxBodySize uint16 = (0xFFFF - 1)
+const PacketMaxHeadSize uint8 = (0xFF - 1)
 
 type Packet_MsgType uint8
 
 const (
-	PacketType_Route     Packet_MsgType = 0
-	PacketType_Inner     Packet_MsgType = 1
-	PacketType_NodeInner Packet_MsgType = 2
+	PacketType_Route     Packet_MsgType = 1
+	PacketType_NodeInner Packet_MsgType = 254
+	PacketType_Inner     Packet_MsgType = 255
 )
 
-type Packet_Inner = uint8
+type PacketInnerSubType = uint8
 
 const (
-	PacketType_Inner_HandShake       Packet_Inner = 5
-	PacketType_Inner_Cmd             Packet_Inner = 6
-	PacketType_Inner_CmdResult       Packet_Inner = 7
-	PacketType_Inner_HandShakeFinish Packet_Inner = 8
-	PacketType_Inner_Heartbeat       Packet_Inner = 9
+	PacketInnerSubType_HandShake       PacketInnerSubType = 5
+	PacketInnerSubType_Cmd             PacketInnerSubType = 6
+	PacketInnerSubType_CmdResult       PacketInnerSubType = 7
+	PacketInnerSubType_HandShakeFinish PacketInnerSubType = 8
+	PacketInnerSubType_Heartbeat       PacketInnerSubType = 9
 )
 
 type PacketMeta []uint8
@@ -35,13 +38,15 @@ type HVPacket struct {
 	Body []uint8
 }
 
-func NewHead() PacketMeta {
-	return make([]uint8, PacketHeadLen)
+func NewMeta() PacketMeta {
+	return make([]uint8, PacketMetaLen)
 }
 
 func NewHVPacket() *HVPacket {
 	return &HVPacket{
-		Meta: NewHead(),
+		Meta: NewMeta(),
+		Head: nil,
+		Body: nil,
 	}
 }
 
@@ -74,8 +79,8 @@ func (hr *PacketMeta) GetBodyLen() uint16 {
 }
 
 func (hr *PacketMeta) SetBodyLen(l uint16) {
-	(*hr)[2] = uint8(l)
-	(*hr)[3] = uint8(l >> 8)
+	(*hr)[3] = uint8(l)
+	(*hr)[4] = uint8(l >> 8)
 }
 
 func (hr *PacketMeta) Reset() {
@@ -91,7 +96,7 @@ func (p *HVPacket) ReadFrom(reader io.Reader) (int64, error) {
 	headlen := p.Meta.GetHeadLen()
 	if headlen > 0 {
 		p.Head = make([]uint8, headlen)
-		_, err = io.ReadFull(reader, p.Body)
+		_, err = io.ReadFull(reader, p.Head)
 		if err != nil {
 			return 0, err
 		}
@@ -105,7 +110,7 @@ func (p *HVPacket) ReadFrom(reader io.Reader) (int64, error) {
 			return 0, err
 		}
 	}
-	return int64(PacketHeadLen + int(bodylen)), nil
+	return int64(PacketMetaLen + int(bodylen)), nil
 }
 
 func (p *HVPacket) WriteTo(writer io.Writer) (int64, error) {
@@ -113,7 +118,12 @@ func (p *HVPacket) WriteTo(writer io.Writer) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-
+	if len(p.Head) > 0 {
+		_, err = writer.Write(p.Head)
+		if err != nil {
+			return 0, err
+		}
+	}
 	if len(p.Body) > 0 {
 		_, err = writer.Write(p.Body)
 		if err != nil {
@@ -121,7 +131,7 @@ func (p *HVPacket) WriteTo(writer io.Writer) (int64, error) {
 		}
 	}
 
-	return int64(PacketHeadLen + len(p.Body)), nil
+	return int64(PacketMetaLen + len(p.Head) + len(p.Body)), nil
 }
 
 func (p *HVPacket) SetHead(b []uint8) {
@@ -144,6 +154,6 @@ func (p *HVPacket) GetBody() []uint8 {
 
 func (p *HVPacket) Reset() {
 	p.Meta.Reset()
-	p.Meta = nil
+	p.Head = nil
 	p.Body = nil
 }

@@ -137,7 +137,7 @@ func (s *TcpServer) onAccept(c net.Conn) {
 
 			if packet.Meta.GetType() == (PacketType_Inner) {
 				switch packet.Meta.GetSubFlag() {
-				case uint8(PacketType_Inner_Heartbeat):
+				case uint8(PacketInnerSubType_Heartbeat):
 					conn.Send(packet)
 				}
 			} else {
@@ -158,14 +158,14 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 		return nil, err
 	}
 
-	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketType_Inner_HandShake || len(pk.GetBody()) != 0 {
+	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_HandShake || len(pk.GetBody()) != 0 {
 		return nil, ErrInvalidPacket
 	}
 
 	var us auth.User
 	if s.opts.OnConnAuth != nil {
-		pk.Meta.SetSubFlag(PacketType_Inner_Cmd)
-		pk.SetBody([]byte("auth"))
+		pk.Meta.SetSubFlag(PacketInnerSubType_Cmd)
+		pk.SetHead([]byte("auth"))
 		if _, err = pk.WriteTo(conn); err != nil {
 			return nil, err
 		}
@@ -173,7 +173,7 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 			return nil, err
 		}
 
-		if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketType_Inner_CmdResult {
+		if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_CmdResult {
 			return nil, ErrInvalidPacket
 		}
 
@@ -185,24 +185,14 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 	socketid := GenConnID()
 
 	pk.Meta.SetType(PacketType_Inner)
-	pk.Meta.SetSubFlag(PacketType_Inner_HandShakeFinish)
+	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFinish)
+	pk.SetHead([]byte("socketid"))
 	pk.SetBody([]byte(socketid))
 	if _, err := pk.WriteTo(conn); err != nil {
 		return nil, err
 	}
 
-	socket := &TcpConn{
-		User:     us,
-		id:       socketid,
-		conn:     conn,
-		timeOut:  s.opts.HeatbeatInterval,
-		chClosed: make(chan struct{}),
-		status:   Disconnected,
-		chWrite:  make(chan *HVPacket, 10),
-		chRead:   make(chan *HVPacket, 10),
-	}
-
-	return socket, nil
+	return newTcpConn(socketid, us, conn, s.opts.HeatbeatInterval), nil
 }
 
 func (s *TcpServer) Address() net.Addr {

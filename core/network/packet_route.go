@@ -32,7 +32,23 @@ func NewRoutePacket(subflag uint8, head, body []uint8) *HVPacket {
 	return ret
 }
 
+func NewRoutePacketHead() RoutePacketHead {
+	return make(RoutePacketHead, RoutePackHeadLen)
+}
+
+func ParseRoutePacket(pk *HVPacket) *RoutePacket {
+	return &RoutePacket{
+		RoutePacketHead: pk.GetHead(),
+		Body:            pk.GetBody(),
+	}
+}
+
 type RoutePacketHead []uint8
+
+type RoutePacket struct {
+	RoutePacketHead
+	Body []byte
+}
 
 func (r RoutePacketHead) GetClientId() uint32 {
 	return binary.LittleEndian.Uint32(r[0:4])
@@ -50,8 +66,8 @@ func (r RoutePacketHead) GetSYN() uint32 {
 	return binary.LittleEndian.Uint32(r[12:16])
 }
 
-func (r RoutePacketHead) GetSvrType() uint32 {
-	return binary.LittleEndian.Uint32(r[16:18])
+func (r RoutePacketHead) GetSvrType() uint16 {
+	return binary.LittleEndian.Uint16(r[16:18])
 }
 
 func (r RoutePacketHead) GetErrCode() int16 {
@@ -82,8 +98,8 @@ func (r RoutePacketHead) SetSYN(d uint32) {
 	binary.LittleEndian.PutUint32(r[12:16], d)
 }
 
-func (r RoutePacketHead) SetSvrType(d uint32) {
-	binary.LittleEndian.PutUint32(r[16:18], d)
+func (r RoutePacketHead) SetSvrType(d uint16) {
+	binary.LittleEndian.PutUint16(r[16:18], d)
 }
 
 func (r RoutePacketHead) SetErrCode(d int16) {

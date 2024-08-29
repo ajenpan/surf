@@ -11,8 +11,7 @@ import (
 var GSurf = &Surf{}
 
 func Init(opt *Options) error {
-	GSurf.Options = opt
-	return nil
+	return GSurf.init(opt)
 }
 
 func Run() error {
@@ -41,7 +40,7 @@ func SendRequestToClient[T proto.Message](uid uint32, msgid uint32, msg any, cb 
 		cb(false, nil, resp)
 	}
 
-	err := GSurf.SendRequestToClient(uid, msgid, msg, wrapfn)
+	err := GSurf.SendRequestToClientByUId(uid, msgid, msg, wrapfn)
 
 	if err != nil && cb != nil {
 		cb(false, err, nil)

@@ -5,20 +5,9 @@ import (
 	"sync"
 )
 
-type MethodStyle int
-
-const (
-	StyleAsync   MethodStyle = iota // func (any, proto.Message) error
-	StyleRequest MethodStyle = iota // func (any, proto.Message) (proto.Message, error)
-	StyleMicro   MethodStyle = iota // func (context.Context, proto.Message, proto.Message) ( error)
-	StyleGRpc    MethodStyle = iota // func (context.Context, proto.Message) (proto.Message, error)
-)
-
 type Method struct {
 	Func     reflect.Value
 	FuncName string
-
-	Style MethodStyle
 
 	RequestType  reflect.Type
 	ResponseType reflect.Type

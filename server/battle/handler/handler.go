@@ -39,7 +39,7 @@ func (h *Battle) ServerName() string {
 	return "battle"
 }
 
-func (h *Battle) OnCreateBattleRequest(ctx core.Context, in *innermsg.StartBattleRequest) {
+func (h *Battle) OnStartBattleRequest(ctx core.Context, in *innermsg.StartBattleRequest) {
 	var err error
 	var resp *innermsg.StartBattleResponse = &innermsg.StartBattleResponse{}
 

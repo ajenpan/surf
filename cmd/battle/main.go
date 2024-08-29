@@ -13,7 +13,9 @@ import (
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
+	innerbattleMsg "github.com/ajenpan/surf/msg/innerproto/battle"
 	battleMsg "github.com/ajenpan/surf/msg/openproto/battle"
+
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
 	_ "github.com/ajenpan/surf/server/games/niuniu"
 )
@@ -73,7 +75,7 @@ func LoadAuthPublicKey() (*rsa.PublicKey, error) {
 }
 
 func RealMain(c *cli.Context) error {
-	log.Default.SetOutput(os.Stdin)
+	log.Default.SetOutput(os.Stdout)
 
 	pk, err := LoadAuthPublicKey()
 	if err != nil {
@@ -82,11 +84,14 @@ func RealMain(c *cli.Context) error {
 
 	h := battleHandler.New()
 	ct := calltable.ExtractMethodByMsgID(battleMsg.File_battle_proto.Messages(), h)
+	ct.Merge(calltable.ExtractMethodByMsgID(innerbattleMsg.File_battle_inner_proto.Messages(), h), false)
+
 	err = core.Init(&core.Options{
-		ServerType:    h.ServerType(),
-		TcpListenAddr: listenAt,
-		CTById:        ct,
-		PublicKey:     pk,
+		Server:         h,
+		TcpListenAddr:  listenAt,
+		HttpListenAddr: ":18080",
+		CTById:         ct,
+		PublicKey:      pk,
 	})
 
 	if err != nil {

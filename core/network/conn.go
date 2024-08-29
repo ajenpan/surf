@@ -15,9 +15,11 @@ var DefaultMinTimeoutSec = 10
 type ConnStatus = int32
 
 const (
-	Disconnected ConnStatus = iota
+	Initing      ConnStatus = iota
 	Connectting  ConnStatus = iota
 	Connected    ConnStatus = iota
+	Disconnected ConnStatus = iota
+	Closed       ConnStatus = iota
 )
 
 type Conn interface {

@@ -5,29 +5,36 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/errors"
 	"github.com/ajenpan/surf/core/network"
 	"google.golang.org/protobuf/proto"
 )
 
 type HttpCallContext struct {
-	w    http.ResponseWriter
-	r    *http.Request
-	core *Surf
+	w     http.ResponseWriter
+	r     *http.Request
+	core  *Surf
+	uinfo *auth.UserInfo
 }
-
-// Request(msg proto.Message, cb func(pk *network.HVPacket, err error))
-// Response(msg proto.Message, err error)
-// Async(msg proto.Message) error
-// Caller() auth.User
 
 func (ctx *HttpCallContext) Response(msg proto.Message, err error) {
 	type httpWrap struct {
-		Error error       `json:"err"`
-		Data  interface{} `json:"data"`
+		ErrCode int         `json:"errcode"`
+		ErrMsg  string      `json:"errmsg"`
+		Data    interface{} `json:"data"`
 	}
 
 	enc := json.NewEncoder(ctx.w)
-	encerr := enc.Encode(&httpWrap{Data: msg, Error: err})
+	wrap := &httpWrap{Data: msg, ErrMsg: err.Error()}
+
+	if errs, ok := err.(*errors.Error); ok {
+		wrap.ErrCode = int(errs.Code)
+	} else {
+		wrap.ErrCode = -1
+	}
+
+	encerr := enc.Encode(wrap)
 
 	if encerr != nil {
 		ctx.w.WriteHeader(http.StatusInternalServerError)
@@ -38,7 +45,7 @@ func (ctx *HttpCallContext) Response(msg proto.Message, err error) {
 }
 
 func (ctx *HttpCallContext) Request(msg proto.Message, cb func(pk *network.HVPacket, err error)) {
-
+	// do nothing
 }
 
 func (ctx *HttpCallContext) Async(msg interface{}) error {
@@ -46,5 +53,5 @@ func (ctx *HttpCallContext) Async(msg interface{}) error {
 }
 
 func (ctx *HttpCallContext) Caller() uint32 {
-	return 0
+	return ctx.uinfo.UId
 }

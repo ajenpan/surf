@@ -2,6 +2,7 @@ package calltable
 
 import (
 	"reflect"
+	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -53,7 +54,6 @@ func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *
 			m := &Method{
 				FuncName:     rpcMethodName,
 				Func:         methodv.Func,
-				Style:        StyleGRpc,
 				RequestType:  reqType,
 				ResponseType: respType,
 			}
@@ -95,7 +95,6 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 		m := &Method{
 			FuncName:    method.Name,
 			Func:        method.Func,
-			Style:       StyleAsync,
 			RequestType: reqMsgType.Elem(),
 		}
 		m.InitPool()
@@ -130,6 +129,10 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 
 func ExtractMethodByMsgID(ms protoreflect.MessageDescriptors, h interface{}) *CallTable[uint32] {
 	const MethodPrefix string = "On"
+
+	const FNamePrefix string = ""
+	const FNameSuffix string = "Request"
+
 	hvalue := reflect.TypeOf(h)
 
 	ret := NewCallTable[uint32]()
@@ -159,9 +162,14 @@ func ExtractMethodByMsgID(ms protoreflect.MessageDescriptors, h interface{}) *Ca
 		if !reqMsgType.Implements(pbMsgType) {
 			continue
 		}
+
+		fname := msgName
+		fname = strings.TrimPrefix(fname, FNamePrefix)
+		fname = strings.TrimSuffix(fname, FNameSuffix)
+
 		m := &Method{
+			FuncName:    fname,
 			Func:        method.Func,
-			Style:       StyleAsync,
 			RequestType: reqMsgType.Elem(),
 		}
 		m.InitPool()

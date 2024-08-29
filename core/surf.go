@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -19,8 +20,13 @@ import (
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 )
 
+type Server interface {
+	ServerType() uint16
+	ServerName() string
+}
+
 type Options struct {
-	ServerType uint16
+	Server     Server
 	RouteToken string
 
 	HttpListenAddr string
@@ -34,23 +40,25 @@ type Options struct {
 	PublicKey *rsa.PublicKey
 }
 
-func NewSurf(opt *Options) *Surf {
-	s := &Surf{
-		Options: opt,
-		// routeClient: make(map[string]*network.TcpClient),
+func converCalltable(source *calltable.CallTable[uint32]) *calltable.CallTable[string] {
+	result := calltable.NewCallTable[string]()
+	if source == nil {
+		return result
 	}
 
-	// for _, addr := range opt.RouteAddrs {
-	// 	opts := &network.TcpClientOptions{
-	// 		RemoteAddress:     addr,
-	// 		AuthToken:         s.JWToken,
-	// 		OnMessage:         s.onMessage,
-	// 		OnStatus:          s.onStatus,
-	// 		ReconnectDelaySec: 10,
-	// 	}
-	// 	client := network.NewTcpClient(opts)
-	// 	s.routeClient[addr] = client
-	// }
+	source.Range(func(key uint32, value *calltable.Method) bool {
+		result.Add(value.FuncName, value)
+		return true
+	})
+	return result
+}
+
+func NewSurf(opt *Options) *Surf {
+	s := &Surf{}
+	err := s.init(opt)
+	if err != nil {
+		panic(err)
+	}
 	return s
 }
 
@@ -74,7 +82,19 @@ type Surf struct {
 	synIdx     uint32
 }
 
-func (s *Surf) init() error {
+func (s *Surf) init(opt *Options) error {
+	s.Options = opt
+	if s.Options == nil {
+		s.Options = &Options{}
+	}
+	if s.CTById == nil {
+		s.CTById = calltable.NewCallTable[uint32]()
+	}
+	if s.CTByName == nil {
+		s.CTByName = converCalltable(s.CTById)
+	} else {
+		s.CTByName.Merge(converCalltable(s.CTById), false)
+	}
 	return nil
 }
 
@@ -110,16 +130,7 @@ func (s *Surf) Start() error {
 	// 	Marshal: &marshal.JSONPb{},
 	// 	Mux:     http.NewServeMux(),
 	// }
-
 	// s.httpsvr.ServerCallTable(&s.CTByName)
-
-	// go func() {
-	// 	err := s.httpsvr.Run()
-	// 	select {
-	// 	case <-quit:
-	// 	case errchan <- err:
-	// 	}
-	// }()
 
 	return nil
 }
@@ -140,15 +151,23 @@ func (s *Surf) Run() error {
 }
 
 func (s *Surf) startHttpSvr() {
-	log.Infof("startHttpSvr")
+	log.Info("start http server, listenaddr ", s.HttpListenAddr)
 
 	mux := http.NewServeMux()
+
 	s.CTByName.Range(func(key string, method *calltable.Method) bool {
-		if !strings.HasPrefix(key, "/") {
+
+		svrname := s.Server.ServerName()
+
+		if len(svrname) > 0 {
+			key = "/" + svrname + "/" + key
+		} else {
 			key = "/" + key
 		}
+
 		cb := s.WrapMethod(method)
 		mux.HandleFunc(key, cb)
+		log.Info("http handle func: ", key)
 		return true
 	})
 
@@ -156,12 +175,17 @@ func (s *Surf) startHttpSvr() {
 		Addr:    s.HttpListenAddr,
 		Handler: mux,
 	}
+	ln, err := net.Listen("tcp", svr.Addr)
+	if err != nil {
+		panic(err)
+	}
+
 	s.httpsvr = svr
-	go svr.ListenAndServe()
+	go svr.Serve(ln)
 }
 
 func (s *Surf) startWsSvr() {
-	log.Infof("startWsSvr")
+	log.Info("start ws server, listenaddr ", s.WsListenAddr)
 
 	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   s.WsListenAddr,
@@ -178,10 +202,10 @@ func (s *Surf) startWsSvr() {
 }
 
 func (s *Surf) startTcpSvr() {
-	log.Infof("startTcpSvr")
+	log.Info("start tcp server, listenaddr ", s.TcpListenAddr)
 
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
-		ListenAddr:       ":9999",
+		ListenAddr:       s.TcpListenAddr,
 		HeatbeatInterval: 30 * time.Second,
 		OnConnPacket:     s.onConnPacket,
 		OnConnEnable:     s.onConnStatus,
@@ -195,25 +219,25 @@ func (s *Surf) startTcpSvr() {
 	s.tcpsvr.Start()
 }
 
-func (h *Surf) GetNodeId() uint32 {
-	return h.nodeid
+func (s *Surf) GetNodeId() uint32 {
+	return s.nodeid
 }
 
-func (h *Surf) GetServerType() uint16 {
-	return uint16(h.ServerType)
+func (s *Surf) GetServerType() uint16 {
+	return uint16(s.Server.ServerType())
 }
 
-func (h *Surf) GetSYN() uint32 {
-	ret := atomic.AddUint32(&h.synIdx, 1)
+func (s *Surf) GetSYN() uint32 {
+	ret := atomic.AddUint32(&s.synIdx, 1)
 	if ret == 0 {
-		return atomic.AddUint32(&h.synIdx, 1)
+		return atomic.AddUint32(&s.synIdx, 1)
 	}
 	return ret
 }
 
-func (h *Surf) pushRespCallback(syn uint32, cb RequestCallbackFunc) error {
+func (s *Surf) pushRespCallback(syn uint32, cb RequestCallbackFunc) error {
 	timeout := time.AfterFunc(3*time.Second, func() {
-		info := h.popRespCallback(syn)
+		info := s.popRespCallback(syn)
 		if info != nil && info.cbfun != nil {
 			info.cbfun(true, nil)
 		}
@@ -229,71 +253,69 @@ func (h *Surf) pushRespCallback(syn uint32, cb RequestCallbackFunc) error {
 		timeout: timeout,
 	}
 
-	h.respWatier.Store(syn, cache)
+	s.respWatier.Store(syn, cache)
 	return nil
 }
 
-func (h *Surf) popRespCallback(syn uint32) *RequestCallbackCache {
-	cache, ok := h.respWatier.Load(syn)
+func (s *Surf) popRespCallback(syn uint32) *RequestCallbackCache {
+	cache, ok := s.respWatier.Load(syn)
 	if !ok {
 		return nil
 	}
 	return cache.(*RequestCallbackCache)
 }
 
-func (h *Surf) SendResponeToClient(uid uint32, syn uint32, errcode uint16, msgid uint32, msg any) error {
-	conn := h.GetClientConn(uid)
+// func (s *Surf) SendResponeToClient(uid uint32, syn uint32, errcode uint16, msgid uint32, msg any) error {
+// 	conn := s.GetClientConn(uid)
+// 	if conn == nil {
+// 		return fmt.Errorf("not found route")
+// 	}
+// 	body, err := s.Marshaler.Marshal(msg)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	head := network.RoutePacketHead(make([]byte, network.RoutePackHeadLen))
+// 	head.SetClientId(uid)
+// 	head.SetMsgId(msgid)
+// 	head.SetNodeId(s.GetNodeId())
+// 	head.SetSYN(syn)
+// 	pk := network.NewRoutePacket(network.RoutePackType_SubFlag_Response, head, body)
+// 	return conn.Send(pk)
+// }
+
+func (s *Surf) SendRequestToClientByUId(uid uint32, msgid uint32, msg any, cb RequestCallbackFunc) error {
+	conn := s.GetClientConn(uid)
 	if conn == nil {
 		return fmt.Errorf("not found route")
 	}
-	body, err := h.Marshaler.Marshal(msg)
-	if err != nil {
-		return err
-	}
-	head := network.RoutePacketHead(make([]byte, network.RoutePackHeadLen))
-	head.SetClientId(uid)
-	head.SetMsgId(msgid)
-	head.SetNodeId(h.GetNodeId())
-	head.SetSYN(syn)
-	pk := network.NewRoutePacket(network.RoutePackType_SubFlag_Response, head, body)
-	return conn.Send(pk)
+	return s.SendRequestToClient(conn, uid, msgid, msg, cb)
 }
 
-func (h *Surf) SendRequestToClient(uid uint32, msgid uint32, msg any, cb RequestCallbackFunc) error {
-	conn := h.GetClientConn(uid)
-	if conn == nil {
-		return fmt.Errorf("not found route")
-	}
-
-	body, err := h.Marshaler.Marshal(msg)
+func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any, cb RequestCallbackFunc) error {
+	body, err := s.Marshaler.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	syn := h.GetSYN()
+	syn := s.GetSYN()
 	head := network.RoutePacketHead(make([]byte, network.RoutePackHeadLen))
 	head.SetClientId(uid)
 	head.SetMsgId(msgid)
-	head.SetNodeId(h.GetNodeId())
+	head.SetNodeId(s.GetNodeId())
 	head.SetSYN(syn)
 
-	h.pushRespCallback(syn, cb)
+	s.pushRespCallback(syn, cb)
 
 	pk := network.NewRoutePacket(network.RoutePackType_SubFlag_Request, head, body)
 
 	err = conn.Send(pk)
 	if err != nil {
-		h.popRespCallback(syn)
+		s.popRespCallback(syn)
 	}
 	return err
 }
 
-func (h *Surf) SendAsyncToClient(uid uint32, msgid uint32, msg any) error {
-	conn := h.GetClientConn(uid)
-	if conn == nil {
-		return fmt.Errorf("not found route")
-	}
-
-	body, err := h.Marshaler.Marshal(msg)
+func (s *Surf) SendAsyncToClient(conn network.Conn, uid uint32, msgid uint32, msg any) error {
+	body, err := s.Marshaler.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -301,27 +323,51 @@ func (h *Surf) SendAsyncToClient(uid uint32, msgid uint32, msg any) error {
 	head := network.RoutePacketHead(make([]byte, network.RoutePackHeadLen))
 	head.SetClientId(uid)
 	head.SetMsgId(msgid)
-	head.SetNodeId(h.GetNodeId())
-	head.SetSYN(h.GetSYN())
+	head.SetNodeId(s.GetNodeId())
+	head.SetSYN(s.GetSYN())
 
 	pk := network.NewRoutePacket(network.RoutePackType_SubFlag_Async, head, body)
 	return conn.Send(pk)
 }
 
-func (h *Surf) SendToNode(nodeid uint32, pk *network.HVPacket) error {
+func (s *Surf) SendAsyncToClientByUId(uid uint32, msgid uint32, msg any) error {
+	conn := s.GetClientConn(uid)
+	if conn == nil {
+		return fmt.Errorf("not found route")
+	}
+	return s.SendAsyncToClient(conn, uid, msgid, msg)
+}
+
+func (s *Surf) SendToNode(nodeid uint32, pk *network.HVPacket) error {
+	// todo
 	return nil
 }
 
-func (h *Surf) GetClientConn(id uint32) network.Conn {
+func (s *Surf) GetClientConn(id uint32) network.Conn {
+	// todo
 	return nil
 }
 
-func (h *Surf) GetNodeConn(id uint32) network.Conn {
+func (s *Surf) GetNodeConn(id uint32) network.Conn {
+	// todo
 	return nil
 }
 
 func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		authdata := r.Header.Get("Authorization")
+		if len(authdata) < 5 {
+			http.Error(w, "Authorization failed", http.StatusUnauthorized)
+			return
+		}
+		authdata = strings.TrimPrefix(authdata, "bearer ")
+
+		uinfo, err := auth.VerifyToken(s.PublicKey, []byte(authdata))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -331,6 +377,7 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 
 		req := method.NewRequest()
 
+		// TODO: select other marshal
 		if err = (&marshal.JSONPb{}).Unmarshal(raw, req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
@@ -341,12 +388,13 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 		w.Header().Set("Content-Type", contenttype)
 
 		var ctx Context = &HttpCallContext{
-			w:    w,
-			r:    r,
-			core: s,
+			w:     w,
+			r:     r,
+			core:  s,
+			uinfo: uinfo,
 		}
 
-		method.Call(ctx, req)
+		method.Call(s.Server, ctx, req)
 	}
 }
 
@@ -355,6 +403,7 @@ func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 	case network.PacketType_Route:
 		h.onRoutePacket(s, pk)
 	case network.PacketType_NodeInner:
+		h.onNodeInnerPacket(s, pk)
 	default:
 	}
 }
@@ -363,26 +412,31 @@ func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
 	return auth.VerifyToken(h.PublicKey, data)
 }
 
-func (h *Surf) onConnStatus(s network.Conn, enable bool) {
-	log.Infof("route onstatus: %v, %v", s.ConnID(), enable)
+func (h *Surf) onConnStatus(c network.Conn, enable bool) {
+	log.Infof("route onstatus: %v, %v", c.ConnID(), enable)
 }
 
-func (h *Surf) getClientInfo(uid uint32) *auth.UserInfo {
+func (s *Surf) getClientInfo(uid uint32) *auth.UserInfo {
+	// todo
 	return nil
 }
 
-func (h *Surf) catch() {
+func (s *Surf) catch() {
 	if err := recover(); err != nil {
 		log.Error(err)
 	}
 }
 
-func (h *Surf) onRoutePacket(s network.Conn, pk *network.HVPacket) {
-	defer h.catch()
+func (s *Surf) onNodeInnerPacket(c network.Conn, pk *network.HVPacket) {
+	//todo:
+}
+
+func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
+	defer s.catch()
 
 	head := network.RoutePacketHead(pk.Head)
 
-	clientinfo := h.getClientInfo(head.GetClientId())
+	clientinfo := s.getClientInfo(head.GetClientId())
 	if clientinfo == nil {
 		return
 	}
@@ -391,7 +445,7 @@ func (h *Surf) onRoutePacket(s network.Conn, pk *network.HVPacket) {
 	case network.RoutePackType_SubFlag_Async:
 		fallthrough
 	case network.RoutePackType_SubFlag_Request:
-		method := h.CTById.Get(head.GetMsgId())
+		method := s.CTById.Get(head.GetMsgId())
 		if method == nil {
 			// todo:
 			return
@@ -399,22 +453,22 @@ func (h *Surf) onRoutePacket(s network.Conn, pk *network.HVPacket) {
 
 		// decode msg
 		req := method.NewRequest()
-		err := h.Marshaler.Unmarshal(pk.GetBody(), req)
+		err := s.Marshaler.Unmarshal(pk.GetBody(), req)
 		if err != nil {
 			// todo:
 			return
 		}
 
 		ctx := &context{
-			Conn:   s,
-			Core:   h,
+			Conn:   c,
+			Core:   s,
 			Pk:     pk,
 			caller: head.GetClientId(),
 		}
 
-		method.Call(ctx, req)
+		method.Call(s.Server, ctx, req)
 	case network.RoutePackType_SubFlag_Response:
-		cbinfo := h.popRespCallback(head.GetSYN())
+		cbinfo := s.popRespCallback(head.GetSYN())
 		if cbinfo == nil {
 			return
 		}
