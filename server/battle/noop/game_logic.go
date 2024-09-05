@@ -13,15 +13,13 @@ func NewGameLogic() battle.Logic {
 type NoopLogic struct {
 }
 
-func (gl *NoopLogic) OnInit(battle.Table, interface{}) error {
+func (gl *NoopLogic) OnInit(battle.Table, []battle.Player, interface{}) error {
 	return nil
 }
 func (gl *NoopLogic) OnPlayerJoin(p []battle.Player) error {
 	return nil
 }
-func (gl *NoopLogic) OnStart([]battle.Player) error {
-	return nil
-}
+
 func (gl *NoopLogic) OnTick(time.Duration) {
 
 }
@@ -32,5 +30,8 @@ func (gl *NoopLogic) OnPlayerMessage(p battle.Player, msgid uint32, data []byte)
 
 }
 func (gl *NoopLogic) OnCommand(topic string, data []byte) {
+
+}
+func (gl *NoopLogic) OnPlayerConnStatus(player battle.Player, enable bool) {
 
 }

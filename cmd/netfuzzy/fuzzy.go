@@ -49,23 +49,38 @@ func work(remoteaddr string) {
 	conn.SetDeadline(time.Now().Add(15 * time.Second))
 
 	l := rand.Int31n(math.MaxInt16)
-	data := make([]byte, l)
-	_, err = rand.Read(data)
-	if err != nil {
-		// fmt.Println(err)
-		return
-	}
 
-	_, err = conn.Write(data)
-	if err != nil {
-		// fmt.Printf("Write err:%v\n", err)
-		return
-	}
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
 
-	_, err = conn.Read(data)
-	if err != nil {
-		// fmt.Printf("Read err:%v\n", err)
-		return
-	}
+		data := make([]byte, l)
+		_, err = rand.Read(data)
+		if err != nil {
+			// fmt.Println(err)
+			return
+		}
+
+		_, err = conn.Write(data)
+		if err != nil {
+			// fmt.Printf("Write err:%v\n", err)
+			return
+		}
+
+	}()
+
+	go func() {
+		defer wg.Done()
+		data := make([]byte, l)
+		_, err = conn.Read(data)
+		if err != nil {
+			// fmt.Printf("Read err:%v\n", err)
+			return
+		}
+	}()
+
+	wg.Wait()
+
 	fmt.Println("pass")
 }

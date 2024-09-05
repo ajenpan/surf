@@ -1,6 +1,8 @@
 package network
 
 import (
+	"encoding/binary"
+	"fmt"
 	"net"
 	"net/http"
 	"sync"
@@ -30,8 +32,8 @@ func NewWSServer(opts WSServerOptions) (*WSServer, error) {
 		sockets:         make(map[string]*WSConn),
 		die:             make(chan bool),
 	}
-	if ret.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec)*time.Second {
-		ret.HeatbeatInterval = time.Duration(DefaultTimeoutSec) * time.Second
+	if ret.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec/2)*time.Second {
+		ret.HeatbeatInterval = time.Duration(DefaultTimeoutSec/2) * time.Second
 	}
 	h := &http.ServeMux{}
 	h.HandleFunc("/", ret.ServeHTTP)
@@ -89,13 +91,13 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 
 	conn := &WSConn{
-		timeOut:  s.HeatbeatInterval,
-		imp:      c,
-		status:   Connectting,
-		id:       GenConnID(),
-		chClosed: make(chan struct{}),
-		chWrite:  make(chan *HVPacket, 10),
-		chRead:   make(chan *HVPacket, 10),
+		rwtimeout: s.HeatbeatInterval * 2,
+		imp:       c,
+		status:    Connectting,
+		id:        GenConnID(),
+		chClosed:  make(chan struct{}),
+		chWrite:   make(chan *HVPacket, 10),
+		chRead:    make(chan *HVPacket, 10),
 	}
 
 	deadline := time.Now().Add(s.HeatbeatInterval * 2)
@@ -136,14 +138,23 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn.writePacket(pk)
 
 	// the connection is established here
+
+	conn.status = Connected
+
 	go func() {
 		defer conn.Close()
-		conn.writeWork()
+		err := conn.writeWork()
+		if err != nil {
+			fmt.Println(err)
+		}
 	}()
 
 	go func() {
 		defer conn.Close()
-		conn.readWork()
+		err := conn.readWork()
+		if err != nil {
+			fmt.Println(err)
+		}
 	}()
 
 	if s.OnConnEnable != nil {
@@ -165,6 +176,9 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if packet.Meta.GetType() == PacketType_Inner {
 				switch packet.Meta.GetSubFlag() {
 				case PacketInnerSubType_Heartbeat:
+					body := make([]byte, 8)
+					binary.LittleEndian.PutUint64(body, uint64(time.Now().UnixMilli()))
+					packet.SetBody(body)
 					conn.Send(packet)
 				}
 			} else {

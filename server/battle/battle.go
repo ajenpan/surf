@@ -25,10 +25,13 @@ type Player interface {
 	SeatID() SeatID
 	Score() int64 //game jetton
 	Role() RoleType
+	SetUserData(any)
+	GetUserData() any
 }
 
 type Table interface {
 	SendMessageToPlayer(p Player, msgid uint32, data proto.Message)
+
 	BroadcastMessage(msgid uint32, data proto.Message)
 
 	ReportBattleStatus(GameStatus)
@@ -38,9 +41,9 @@ type Table interface {
 }
 
 type Logic interface {
-	OnInit(c Table, conf interface{}) error
-	OnStart([]Player) error
-	OnTick(time.Duration)
+	OnInit(c Table, players []Player, conf interface{}) error
+	OnTick(df time.Duration)
 	OnReset()
+	OnPlayerConnStatus(p Player, enable bool)
 	OnPlayerMessage(p Player, msgid uint32, data []byte)
 }

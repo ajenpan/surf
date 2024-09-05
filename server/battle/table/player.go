@@ -40,6 +40,16 @@ type Player struct {
 	*innermsg.PlayerInfo
 	Ready  int32
 	sender func(msgname uint32, raw []byte) error
+	online bool
+	ud     any
+}
+
+func (p *Player) SetUserData(ud any) {
+	p.ud = ud
+}
+
+func (p *Player) GetUserData() any {
+	return p.ud
 }
 
 func (p *Player) Score() int64 {
@@ -55,10 +65,7 @@ func (p *Player) SeatID() battle.SeatID {
 }
 
 func (p *Player) Role() bf.RoleType {
-	if p.PlayerInfo.IsRobot {
-		return bf.RoleType_Robot
-	}
-	return bf.RoleType_Player
+	return bf.RoleType(p.PlayerInfo.Role)
 }
 
 func (p *Player) Send(msgid uint32, raw []byte) error {

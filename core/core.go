@@ -10,7 +10,7 @@ import (
 
 var GSurf = &Surf{}
 
-func Init(opt *Options) error {
+func Init(opt Options) error {
 	return GSurf.init(opt)
 }
 

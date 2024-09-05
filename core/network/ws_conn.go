@@ -8,19 +8,56 @@ import (
 	ws "github.com/gorilla/websocket"
 )
 
+func newWSConn(id string, uinfo auth.User, conn *ws.Conn, rwtimeout time.Duration) *WSConn {
+	return &WSConn{
+		User:       uinfo,
+		id:         id,
+		imp:        conn,
+		rwtimeout:  rwtimeout,
+		status:     Initing,
+		chClosed:   make(chan struct{}),
+		chWrite:    make(chan *HVPacket, 10),
+		chRead:     make(chan *HVPacket, 10),
+		lastSendAt: time.Now().Unix(),
+		lastRecvAt: time.Now().Unix(),
+	}
+}
+
+func wsconnWritePacket(conn *ws.Conn, p *HVPacket) error {
+	writer, err := conn.NextWriter(ws.BinaryMessage)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	_, err = p.WriteTo(writer)
+	return err
+}
+
+func wsconnReadPacket(conn *ws.Conn) (*HVPacket, error) {
+	_, reader, err := conn.NextReader()
+	if err != nil {
+		return nil, err
+	}
+	pk := NewHVPacket()
+	_, err = pk.ReadFrom(reader)
+	return pk, err
+}
+
 type WSConn struct {
 	auth.User
 
-	imp      *ws.Conn
-	status   ConnStatus
-	chClosed chan struct{}
-	timeOut  time.Duration
+	imp       *ws.Conn
+	status    ConnStatus
+	chClosed  chan struct{}
+	rwtimeout time.Duration
 
 	chWrite chan *HVPacket
 	chRead  chan *HVPacket
 
-	id       string
-	userdata any
+	id         string
+	userdata   any
+	lastSendAt int64
+	lastRecvAt int64
 }
 
 func (c *WSConn) SetUserData(d any) {
@@ -32,7 +69,15 @@ func (c *WSConn) GetUserData() any {
 }
 
 func (c *WSConn) Send(p *HVPacket) error {
-	return c.writePacket(p)
+	if !c.Enable() {
+		return ErrDisconn
+	}
+	select {
+	case c.chWrite <- p:
+	case <-c.chClosed:
+		return ErrDisconn
+	}
+	return nil
 }
 
 func (c *WSConn) ConnID() string {
@@ -71,25 +116,12 @@ func (c *WSConn) Status() ConnStatus {
 	return ConnStatus(atomic.LoadInt32((*int32)(&c.status)))
 }
 
-func (c *WSConn) writePacket(h *HVPacket) error {
-	writer, err := c.imp.NextWriter(ws.BinaryMessage)
-	if err != nil {
-		return err
-	}
-	defer writer.Close()
-	_, err = h.WriteTo(writer)
-	return err
-
+func (c *WSConn) writePacket(p *HVPacket) error {
+	return wsconnWritePacket(c.imp, p)
 }
 
 func (c *WSConn) readPacket() (*HVPacket, error) {
-	_, reader, err := c.imp.NextReader()
-	if err != nil {
-		return nil, err
-	}
-	pk := NewHVPacket()
-	_, err = pk.ReadFrom(reader)
-	return pk, err
+	return wsconnReadPacket(c.imp)
 }
 
 func (c *WSConn) writeWork() error {
@@ -101,27 +133,28 @@ func (c *WSConn) writeWork() error {
 			if !ok {
 				return nil
 			}
-			c.imp.SetWriteDeadline(time.Now().Add(c.timeOut))
+			c.imp.SetWriteDeadline(time.Now().Add(c.rwtimeout))
 			err := c.writePacket(p)
 			if err != nil {
 				return err
 			}
+			atomic.SwapInt64(&c.lastSendAt, time.Now().UnixMilli())
 		}
 	}
 }
 
 func (c *WSConn) readWork() error {
 	for {
-		c.imp.SetReadDeadline(time.Now().Add(c.timeOut))
+		c.imp.SetReadDeadline(time.Now().Add(c.rwtimeout))
 		pk, err := c.readPacket()
 		if err != nil {
-			return nil
+			return err
 		}
+		atomic.SwapInt64(&c.lastRecvAt, time.Now().UnixMilli())
 		select {
 		case <-c.chClosed:
 			return nil
 		case c.chRead <- pk:
-
 		}
 	}
 }

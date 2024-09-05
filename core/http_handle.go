@@ -26,12 +26,16 @@ func (ctx *HttpCallContext) Response(msg proto.Message, err error) {
 	}
 
 	enc := json.NewEncoder(ctx.w)
-	wrap := &httpWrap{Data: msg, ErrMsg: err.Error()}
+	wrap := &httpWrap{Data: msg}
 
-	if errs, ok := err.(*errors.Error); ok {
-		wrap.ErrCode = int(errs.Code)
-	} else {
-		wrap.ErrCode = -1
+	if err != nil {
+		wrap.ErrMsg = err.Error()
+
+		if errs, ok := err.(*errors.Error); ok {
+			wrap.ErrCode = int(errs.Code)
+		} else {
+			wrap.ErrCode = -1
+		}
 	}
 
 	encerr := enc.Encode(wrap)
@@ -39,8 +43,6 @@ func (ctx *HttpCallContext) Response(msg proto.Message, err error) {
 	if encerr != nil {
 		ctx.w.WriteHeader(http.StatusInternalServerError)
 		ctx.w.Write([]byte(encerr.Error()))
-	} else {
-		ctx.w.WriteHeader(http.StatusOK)
 	}
 }
 

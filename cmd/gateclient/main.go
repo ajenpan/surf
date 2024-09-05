@@ -103,7 +103,7 @@ func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 		UInfo:          uinfo,
 		ReconnectDelay: time.Second,
 		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
-			fmt.Println("conn recv pk:", h.Meta.GetType())
+			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
 		},
 		OnConnEnable: func(c network.Conn, b bool) {
 			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
@@ -117,46 +117,46 @@ func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 	}, nil
 }
 
-// func StartWs(ppk *rsa.PrivateKey) (func(), error) {
-// 	uinfo := &auth.UserInfo{
-// 		UId:   10001,
-// 		UName: "gdclient",
-// 		URole: 0,
-// 	}
-// 	jwt, _ := auth.GenerateToken(ppk, uinfo, 2400*time.Hour)
-// 	fmt.Println(jwt)
+func StartWs(ppk *rsa.PrivateKey) (func(), error) {
+	uinfo := &auth.UserInfo{
+		UId:   10001,
+		UName: "gdclient",
+		URole: 0,
+	}
+	jwt, _ := auth.GenerateToken(ppk, uinfo, 2400*time.Hour)
+	fmt.Println(jwt)
 
-// 	tcpsvr, err := network.NewWSServer(network.WSServerOptions{
-// 		ListenAddr:   ":19999",
-// 		OnConnPacket: gatesvr.OnNodePacket,
-// 		OnConnEnable: gatesvr.OnNodeEnable,
-// 		OnConnAuth: func(data []byte) (auth.User, error) {
-// 			return auth.VerifyToken(&ppk.PublicKey, data)
-// 		}},
-// 	)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	tcpsvr.Start()
+	tcpsvr, err := network.NewWSServer(network.WSServerOptions{
+		ListenAddr:   ":18888",
+		OnConnPacket: gatesvr.OnNodePacket,
+		OnConnEnable: gatesvr.OnNodeEnable,
+		OnConnAuth: func(data []byte) (auth.User, error) {
+			return auth.VerifyToken(&ppk.PublicKey, data)
+		}},
+	)
+	if err != nil {
+		return nil, err
+	}
+	tcpsvr.Start()
 
-// 	client := network.NewTcpClient(network.TcpClientOptions{
-// 		RemoteAddress:  "localhost:19999",
-// 		AuthToken:      []byte(jwt),
-// 		UInfo:          uinfo,
-// 		ReconnectDelay: time.Second,
-// 		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
-// 			fmt.Println("conn recv pk:", h.Meta.GetType())
-// 		},
-// 		OnConnEnable: func(c network.Conn, b bool) {
-// 			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
-// 		},
-// 	})
-// 	client.Start()
-// 	return func() {
-// 		tcpsvr.Stop()
-// 		client.Close()
-// 	}, nil
-// }
+	client := network.NewWSClient(network.WSClientOptions{
+		RemoteAddress:  "ws://localhost:18888",
+		AuthToken:      []byte(jwt),
+		UInfo:          uinfo,
+		ReconnectDelay: time.Second,
+		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
+			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
+		},
+		OnConnEnable: func(c network.Conn, b bool) {
+			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
+		},
+	})
+	client.Start()
+	return func() {
+		tcpsvr.Stop()
+		client.Close()
+	}, nil
+}
 
 func RealMain(c *cli.Context) error {
 	privateRaw, _, err := ReadRSAKey()
@@ -168,11 +168,17 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	tcpclose, err := StartTcp(ppk)
+	// tcpclose, err := StartTcp(ppk)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer tcpclose()
+
+	wsclose, err := StartWs(ppk)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer tcpclose()
+	defer wsclose()
 
 	s := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", s.String())

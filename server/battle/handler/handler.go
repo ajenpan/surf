@@ -25,7 +25,7 @@ type Battle struct {
 
 func New() *Battle {
 	h := &Battle{
-		LogicCreator: &battle.GameLogicCreator{},
+		LogicCreator: battle.LogicCreator,
 	}
 
 	return h
@@ -41,7 +41,7 @@ func (h *Battle) ServerName() string {
 
 func (h *Battle) OnStartBattleRequest(ctx core.Context, in *innermsg.StartBattleRequest) {
 	var err error
-	var resp *innermsg.StartBattleResponse = &innermsg.StartBattleResponse{}
+	var resp = &innermsg.StartBattleResponse{}
 
 	defer func() {
 		ctx.Response(resp, err)
@@ -52,23 +52,23 @@ func (h *Battle) OnStartBattleRequest(ctx core.Context, in *innermsg.StartBattle
 		return
 	}
 
+	players, err := table.NewPlayers(in.PlayerInfos)
+	if err != nil {
+		return
+	}
+
 	battleid := uuid.NewString()
 
 	d := table.NewTable(table.TableOption{
 		ID:             battleid,
-		Conf:           in.BattleConf,
+		Conf:           in.TableConf,
 		EventPublisher: h.Publisher,
 		FinishReporter: func() {
 			h.onBattleFinished(battleid)
 		},
 	})
 
-	players, err := table.NewPlayers(in.PlayerInfos)
-	if err != nil {
-		return
-	}
-
-	err = d.Init(logic, players, in.BattleConf)
+	err = d.Init(logic, players, in.GameConf)
 	if err != nil {
 		return
 	}
@@ -123,10 +123,11 @@ func (h *Battle) OnJoinBattleRequest(ctx core.Context, in *openmsg.JoinBattleReq
 		return
 	}
 
-	d.OnPlayerReady(uint64(ctx.Caller()), in.ReadyState, func(err error) {
-		ctx.Response(out, err)
-	})
+	d.OnPlayerConn(uint64(ctx.Caller()), true)
 
+	ctx.Response(out, nil)
+
+	// TODO:
 	// 是否需要保持 uid - battleid 映射?
 	// 1 uid -> n * battleid.
 	// 当uid掉线时, 需要遍历所有的battleid, 并且通知battleid.

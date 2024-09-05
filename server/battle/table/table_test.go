@@ -36,7 +36,7 @@ func TestTableTicker(t *testing.T) {
 		Conf: &proto.BattleConfigure{},
 	})
 
-	if err := logic.OnInit(d, nil); err != nil {
+	if err := logic.OnInit(d, []battle.Player{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	d.Init(logic, nil, nil)

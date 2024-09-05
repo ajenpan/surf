@@ -26,11 +26,12 @@ func (g *NodeConnGroup) Add(uid uint64, s network.Conn) {
 }
 
 func (g *NodeConnGroup) Swap(s network.Conn) (network.Conn, bool) {
-
+	// TODO:
 	return nil, false
 }
 
 func (g *NodeConnGroup) GetOneByType(t uint32) *network.Conn {
+	// TODO:
 	return nil
 }
 

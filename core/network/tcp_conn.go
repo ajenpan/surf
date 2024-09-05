@@ -19,11 +19,11 @@ func GenConnID() string {
 	return fmt.Sprintf("%d_%d", atomic.AddUint64(&sid, 1), time.Now().Unix())
 }
 
-func newTcpConn(id string, uinfo auth.User, conn net.Conn, rwtimeout time.Duration) *TcpConn {
+func newTcpConn(id string, uinfo auth.User, imp net.Conn, rwtimeout time.Duration) *TcpConn {
 	return &TcpConn{
 		User:       uinfo,
 		id:         id,
-		conn:       conn,
+		imp:        imp,
 		timeOut:    rwtimeout,
 		status:     Initing,
 		chClosed:   make(chan struct{}),
@@ -37,8 +37,8 @@ func newTcpConn(id string, uinfo auth.User, conn net.Conn, rwtimeout time.Durati
 type TcpConn struct {
 	auth.User
 
-	conn net.Conn
-	id   string
+	imp net.Conn
+	id  string
 
 	chWrite  chan *HVPacket
 	chRead   chan *HVPacket
@@ -98,14 +98,14 @@ func (s *TcpConn) RemoteAddr() string {
 	if !s.Enable() {
 		return ""
 	}
-	return s.conn.RemoteAddr().String()
+	return s.imp.RemoteAddr().String()
 }
 
 func (s *TcpConn) LocalAddr() net.Addr {
 	if !s.Enable() {
 		return nil
 	}
-	return s.conn.LocalAddr()
+	return s.imp.LocalAddr()
 }
 
 func (s *TcpConn) Enable() bool {
@@ -116,38 +116,38 @@ func (s *TcpConn) Status() ConnStatus {
 	return ConnStatus(atomic.LoadInt32((*int32)(&s.status)))
 }
 
-func (s *TcpConn) writeWork() error {
+func (c *TcpConn) writeWork() error {
 	for {
 		select {
-		case <-s.chClosed:
+		case <-c.chClosed:
 			return nil
-		case p, ok := <-s.chWrite:
+		case p, ok := <-c.chWrite:
 			if !ok {
 				return nil
 			}
-			s.conn.SetWriteDeadline(time.Now().Add(s.timeOut))
-			n, err := p.WriteTo(s.conn)
+			c.imp.SetWriteDeadline(time.Now().Add(c.timeOut))
+			n, err := p.WriteTo(c.imp)
 			if err != nil {
 				return err
 			}
-			s.writeSize += n
-			atomic.SwapInt64(&s.lastSendAt, time.Now().Unix())
+			c.writeSize += n
+			atomic.SwapInt64(&c.lastSendAt, time.Now().UnixMilli())
 		}
 	}
 }
 
 func (s *TcpConn) readWork() error {
 	for {
-		s.conn.SetReadDeadline(time.Now().Add(s.timeOut))
+		s.imp.SetReadDeadline(time.Now().Add(s.timeOut))
 
 		pk := NewHVPacket()
-		n, err := pk.ReadFrom(s.conn)
+		n, err := pk.ReadFrom(s.imp)
 		if err != nil {
 			return err
 		}
 
 		s.readSize += n
-		atomic.SwapInt64(&s.lastRecvAt, time.Now().Unix())
+		atomic.SwapInt64(&s.lastRecvAt, time.Now().UnixMilli())
 		select {
 		case <-s.chClosed:
 			return nil

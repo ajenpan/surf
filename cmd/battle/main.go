@@ -6,18 +6,20 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/ajenpan/surf/core"
+	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	innerbattleMsg "github.com/ajenpan/surf/msg/innerproto/battle"
 	battleMsg "github.com/ajenpan/surf/msg/openproto/battle"
 
+	_ "github.com/ajenpan/surf/game/niuniu"
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
-	_ "github.com/ajenpan/surf/server/games/niuniu"
 )
 
 var (
@@ -65,12 +67,12 @@ func Run() error {
 
 var listenAt string = ":12345"
 
-func LoadAuthPublicKey() (*rsa.PublicKey, error) {
-	publicRaw, err := os.ReadFile("public.pem")
+func LoadAuthPublicKey() (*rsa.PrivateKey, error) {
+	publicRaw, err := os.ReadFile("private.pem")
 	if err != nil {
 		return nil, err
 	}
-	pk, err := rsagen.ParseRsaPublicKeyFromPem(publicRaw)
+	pk, err := rsagen.ParseRsaPrivateKeyFromPem(publicRaw)
 	return pk, err
 }
 
@@ -86,12 +88,27 @@ func RealMain(c *cli.Context) error {
 	ct := calltable.ExtractMethodByMsgID(battleMsg.File_battle_proto.Messages(), h)
 	ct.Merge(calltable.ExtractMethodByMsgID(innerbattleMsg.File_battle_inner_proto.Messages(), h), false)
 
-	err = core.Init(&core.Options{
+	uinfo := &auth.UserInfo{
+		UId:   20001,
+		UName: "battle",
+		URole: 1,
+	}
+	jwt, err := auth.GenerateToken(pk, uinfo, 2400*time.Hour)
+	if err != nil {
+		return err
+	}
+
+	err = core.Init(core.Options{
 		Server:         h,
 		TcpListenAddr:  listenAt,
 		HttpListenAddr: ":18080",
 		CTById:         ct,
-		PublicKey:      pk,
+		PublicKey:      &pk.PublicKey,
+		GateAddrList: []string{
+			"ws://localhost:9998",
+		},
+		GateToken: []byte(jwt),
+		UInfo:     uinfo,
 	})
 
 	if err != nil {

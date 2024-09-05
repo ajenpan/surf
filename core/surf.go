@@ -26,12 +26,14 @@ type Server interface {
 }
 
 type Options struct {
-	Server     Server
-	RouteToken string
+	Server    Server
+	GateToken []byte
+	UInfo     auth.User
 
 	HttpListenAddr string
 	WsListenAddr   string
 	TcpListenAddr  string
+	GateAddrList   []string
 
 	CTByName *calltable.CallTable[string]
 	CTById   *calltable.CallTable[uint32]
@@ -53,7 +55,7 @@ func converCalltable(source *calltable.CallTable[uint32]) *calltable.CallTable[s
 	return result
 }
 
-func NewSurf(opt *Options) *Surf {
+func NewSurf(opt Options) *Surf {
 	s := &Surf{}
 	err := s.init(opt)
 	if err != nil {
@@ -70,7 +72,7 @@ type RequestCallbackCache struct {
 }
 
 type Surf struct {
-	*Options
+	Options
 	Reg *registry.Registry
 
 	tcpsvr  *network.TcpServer
@@ -82,11 +84,8 @@ type Surf struct {
 	synIdx     uint32
 }
 
-func (s *Surf) init(opt *Options) error {
+func (s *Surf) init(opt Options) error {
 	s.Options = opt
-	if s.Options == nil {
-		s.Options = &Options{}
-	}
 	if s.CTById == nil {
 		s.CTById = calltable.NewCallTable[uint32]()
 	}
@@ -136,6 +135,18 @@ func (s *Surf) Start() error {
 }
 
 func (s *Surf) Run() error {
+	for _, addr := range s.GateAddrList {
+		client := network.NewWSClient(network.WSClientOptions{
+			RemoteAddress:  addr,
+			OnConnPacket:   s.onConnPacket,
+			OnConnEnable:   s.onConnStatus,
+			AuthToken:      []byte(s.Options.GateToken),
+			UInfo:          s.Options.UInfo,
+			ReconnectDelay: 3 * time.Second,
+		})
+		client.Start()
+	}
+
 	s.CTById.Range(func(key uint32, value *calltable.Method) bool {
 		log.Infof("handle func,msgid:%d, funcname:%s", key, value.FuncName)
 		return true
@@ -360,7 +371,7 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 			http.Error(w, "Authorization failed", http.StatusUnauthorized)
 			return
 		}
-		authdata = strings.TrimPrefix(authdata, "bearer ")
+		authdata = strings.TrimPrefix(authdata, "Bearer ")
 
 		uinfo, err := auth.VerifyToken(s.PublicKey, []byte(authdata))
 		if err != nil {

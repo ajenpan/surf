@@ -24,6 +24,7 @@ func CreateNiuniu() *Niuniu {
 		players: make(map[int32]*NNPlayer),
 		info:    &GameInfo{},
 		conf:    &Config{},
+		log:     logrus.New(),
 	}
 	return ret
 }
@@ -41,7 +42,7 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 }
 
 func init() {
-	battle.RegisterGame("niuniu", "1.0.0", CreateLogic)
+	battle.RegisterGame("niuniu", CreateLogic)
 }
 
 type NNPlayer struct {
@@ -51,11 +52,18 @@ type NNPlayer struct {
 }
 
 type Config struct {
-	Downtime time.Duration
+	DowntimeSec int
+}
+
+var defaultConf = &Config{
+	DowntimeSec: 5,
 }
 
 func ParseConfig(raw []byte) (*Config, error) {
-	ret := &Config{}
+	ret := defaultConf
+	if len(raw) <= 2 {
+		return ret, nil
+	}
 	err := json.Unmarshal(raw, ret)
 	if err != nil {
 		return nil, err
@@ -85,19 +93,25 @@ func (nn *Niuniu) Send2Player(p battle.Player, msg protobuf.Message) {
 
 }
 
-func (nn *Niuniu) OnPlayerJoin(players []battle.Player) error {
-	if len(players) == 0 {
-		return nil
+func (nn *Niuniu) OnPlayerConnStatus(player battle.Player, enable bool) {
+	switch nn.getLogicStep() {
+	case GameStep_COUNTDOWN:
+		if enable {
+
+		}
+	}
+}
+
+func (nn *Niuniu) OnInit(d battle.Table, players []battle.Player, conf interface{}) error {
+	if len(players) < 2 {
+		return fmt.Errorf("player is not enrough")
 	}
 	for _, v := range players {
 		if _, err := nn.addPlayer(v); err != nil {
 			return err
 		}
 	}
-	return nil
-}
 
-func (nn *Niuniu) OnInit(d battle.Table, conf interface{}) error {
 	switch v := conf.(type) {
 	case []byte:
 		var err error
@@ -112,9 +126,10 @@ func (nn *Niuniu) OnInit(d battle.Table, conf interface{}) error {
 	}
 	nn.table = d
 	nn.info = &GameInfo{
-		Status: GameStep_IDLE,
+		Status: GameStep_COUNTDOWN,
 	}
 	nn.gameTime = 0
+
 	return nil
 }
 
@@ -237,6 +252,10 @@ func (nn *Niuniu) OnTick(duration time.Duration) {
 		fallthrough
 	case GameStep_IDLE:
 		//do nothing, when the game create but not start
+	case GameStep_COUNTDOWN:
+		if nn.StepTimeover() || nn.checkPlayerStep(GameStep_COUNTDOWN) {
+			nn.ChangeLogicStep(GameStep_BEGIN)
+		}
 	case GameStep_BEGIN:
 		nn.ChangeLogicStep(GameStep_BANKER)
 
@@ -282,8 +301,7 @@ func (nn *Niuniu) getLogicStep() GameStep {
 }
 
 func (nn *Niuniu) getStageDowntime(s GameStep) time.Duration {
-	//TODO:
-	return nn.conf.Downtime
+	return time.Duration(nn.conf.DowntimeSec) * time.Second
 }
 
 func nextStep(status GameStep) GameStep {
@@ -491,11 +509,6 @@ func (nn *Niuniu) beginTally() {
 
 func (nn *Niuniu) resetDesk() {
 	nn.players = make(map[int32]*NNPlayer)
-	for _, p := range nn.players {
-		p.GamePlayerInfo.Reset()
-		p.GamePlayerInfo.Status = GameStep_IDLE
-		p.GamePlayerInfo.SeatId = p.SeatId
-	}
 	nn.ChangeLogicStep(GameStep_IDLE)
 }
 

@@ -1,6 +1,7 @@
 package network
 
 import (
+	"encoding/binary"
 	"net"
 	"sync"
 	"time"
@@ -138,6 +139,9 @@ func (s *TcpServer) onAccept(c net.Conn) {
 			if packet.Meta.GetType() == (PacketType_Inner) {
 				switch packet.Meta.GetSubFlag() {
 				case uint8(PacketInnerSubType_Heartbeat):
+					body := make([]byte, 8)
+					binary.LittleEndian.PutUint64(body, uint64(time.Now().UnixMilli()))
+					packet.SetBody(body)
 					conn.Send(packet)
 				}
 			} else {

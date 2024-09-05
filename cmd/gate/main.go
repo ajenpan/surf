@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/rsa"
 	"fmt"
 	"os"
 	"runtime"
@@ -72,7 +73,61 @@ func ReadRSAKey() ([]byte, []byte, error) {
 	return privateRaw, publicRaw, nil
 }
 
+func StartClientListener(ppk *rsa.PrivateKey, r *gate.Gate) (func(), error) {
+	ws, err := network.NewWSServer(network.WSServerOptions{
+		ListenAddr:   ":9999",
+		OnConnPacket: r.OnConnPacket,
+		OnConnEnable: r.OnConnEnable,
+		OnConnAuth: func(data []byte) (auth.User, error) {
+			return auth.VerifyToken(&ppk.PublicKey, data)
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	ws.Start()
+	return func() {
+		ws.Stop()
+	}, nil
+}
+
+func StartNodeListener(ppk *rsa.PrivateKey, r *gate.Gate) (func(), error) {
+	ws, err := network.NewWSServer(network.WSServerOptions{
+		ListenAddr:   ":9998",
+		OnConnPacket: r.OnNodePacket,
+		OnConnEnable: r.OnNodeEnable,
+		OnConnAuth: func(data []byte) (auth.User, error) {
+			return auth.VerifyToken(&ppk.PublicKey, data)
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	ws.Start()
+	return func() {
+		ws.Stop()
+	}, nil
+
+	// tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
+	// 	ListenAddr:   ":9998",
+	// 	OnConnPacket: r.OnNodePacket,
+	// 	OnConnEnable: r.OnNodeEnable,
+	// 	OnConnAuth: func(data []byte) (auth.User, error) {
+	// 		return auth.VerifyToken(&ppk.PublicKey, data)
+	// 	}},
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// tcpsvr.Start()
+	// return func() {
+	// 	tcpsvr.Stop()
+	// }, nil
+}
+
 func RealMain(c *cli.Context) error {
+	log.Default.SetOutput(os.Stdout)
+
 	privateRaw, _, err := ReadRSAKey()
 	if err != nil {
 		panic(err)
@@ -92,34 +147,17 @@ func RealMain(c *cli.Context) error {
 	fmt.Println(jwt)
 
 	r := gate.NewGate()
-
-	ws, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   ":9999",
-		OnConnPacket: r.OnConnPacket,
-		OnConnEnable: r.OnConnEnable,
-		OnConnAuth: func(data []byte) (auth.User, error) {
-			return auth.VerifyToken(&ppk.PublicKey, data)
-		},
-	})
+	closer, err := StartClientListener(ppk, r)
 	if err != nil {
 		return err
 	}
-	ws.Start()
-	defer ws.Stop()
+	defer closer()
 
-	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
-		ListenAddr:   ":9998",
-		OnConnPacket: r.OnNodePacket,
-		OnConnEnable: r.OnNodeEnable,
-		OnConnAuth: func(data []byte) (auth.User, error) {
-			return auth.VerifyToken(&ppk.PublicKey, data)
-		}},
-	)
+	nodeCloser, err := StartNodeListener(ppk, r)
 	if err != nil {
 		return err
 	}
-	tcpsvr.Start()
-	defer tcpsvr.Stop()
+	defer nodeCloser()
 
 	s := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", s.String())

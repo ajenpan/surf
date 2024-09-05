@@ -3,15 +3,18 @@ package network
 import (
 	"encoding/binary"
 	"fmt"
-	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	ws "github.com/gorilla/websocket"
+
 	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/log"
 )
 
-type TcpClientOptions struct {
+type WSClientOptions struct {
 	RemoteAddress    string
 	HeatbeatInterval time.Duration
 
@@ -22,68 +25,100 @@ type TcpClientOptions struct {
 	ReconnectDelay time.Duration
 }
 
-func NewTcpClient(opts TcpClientOptions) *TcpClient {
-	ret := &TcpClient{
+type WSClientOption func(*WSClientOptions)
+
+func NewWSClient(opts WSClientOptions) *WSClient {
+	ret := &WSClient{
 		opts:   opts,
 		closed: make(chan struct{}),
 	}
-	if ret.opts.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec)*time.Second {
-		ret.opts.HeatbeatInterval = time.Duration(DefaultTimeoutSec) * time.Second
+	if ret.opts.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec/2)*time.Second {
+		ret.opts.HeatbeatInterval = time.Duration(DefaultTimeoutSec/2) * time.Second
 	}
 	return ret
 }
 
-type TcpClient struct {
-	*TcpConn
-	opts   TcpClientOptions
+type WSClient struct {
+	*WSConn
+	opts   WSClientOptions
 	mutex  sync.RWMutex
 	closed chan struct{}
+
+	timefix int64
 }
 
-func (c *TcpClient) onConnEnable(enable bool) {
+func (c *WSClient) GetSvrTimeFix() int64 {
+	return atomic.LoadInt64(&c.timefix)
+}
+
+func (c *WSClient) Start() error {
+	return c.connect()
+}
+
+func (c *WSClient) Close() error {
+	select {
+	case <-c.closed:
+	default:
+		close(c.closed)
+		c.opts.ReconnectDelay = -1
+		if c.WSConn != nil {
+			return c.WSConn.Close()
+		}
+	}
+	return nil
+}
+
+func (c *WSClient) onConnEnable(enable bool) {
 	if c.opts.OnConnEnable != nil {
 		c.opts.OnConnEnable(c, enable)
 	}
-	if c.opts.ReconnectDelay > 0 {
-		time.AfterFunc(time.Second*c.opts.ReconnectDelay, func() {
 
-		})
+	if !enable {
+		c.reconnect()
 	}
 }
 
-func (c *TcpClient) reconnect() {
+func (c *WSClient) reconnect() {
 	if c.opts.ReconnectDelay > 0 {
-		time.AfterFunc(c.opts.ReconnectDelay*time.Second, func() {
+		time.AfterFunc(c.opts.ReconnectDelay, func() {
 			c.connect()
 		})
 	}
 }
 
-func (c *TcpClient) connect() error {
+func (c *WSClient) connect() error {
 	var err error
-	connraw, err := net.DialTimeout("tcp", c.opts.RemoteAddress, c.opts.HeatbeatInterval/2)
+	dialer := &ws.Dialer{
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: c.opts.HeatbeatInterval,
+	}
+
+	connraw, _, err := dialer.Dial(c.opts.RemoteAddress, nil)
 	if err != nil {
 		c.reconnect()
 		return err
 	}
+
 	conn, err := c.handshake(connraw)
 	if err != nil {
+		log.Errorf("connect handshake err:%v", err)
 		return err
 	}
+
 	go c.work(conn)
 	return nil
 }
 
-func (c *TcpClient) work(conn *TcpConn) error {
+func (c *WSClient) work(conn *WSConn) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	defer conn.imp.Close()
 
-	tk := time.NewTicker(c.opts.HeatbeatInterval / 2)
+	tk := time.NewTicker(c.opts.HeatbeatInterval)
 	defer tk.Stop()
 	defer c.onConnEnable(false)
 
-	c.TcpConn = conn
+	conn.status = Connected
+	c.WSConn = conn
 	defer conn.Close()
 
 	go func() {
@@ -93,7 +128,8 @@ func (c *TcpClient) work(conn *TcpConn) error {
 
 	go func() {
 		defer conn.Close()
-		conn.readWork()
+		err := conn.readWork()
+		fmt.Println(err)
 	}()
 
 	c.onConnEnable(true)
@@ -117,6 +153,10 @@ func (c *TcpClient) work(conn *TcpConn) error {
 				pk.SetHead(head)
 
 				conn.Send(pk)
+
+				log.Infof("send Heartbeat")
+			} else {
+				log.Info("pass heartbeat ", unix-lastSendAt, now)
 			}
 		case packet, ok := <-conn.chRead:
 			if !ok {
@@ -125,7 +165,13 @@ func (c *TcpClient) work(conn *TcpConn) error {
 			if packet.Meta.GetType() == (PacketType_Inner) {
 				switch packet.Meta.GetSubFlag() {
 				case uint8(PacketInnerSubType_Heartbeat):
-					// TODO:
+					now := time.Now().UnixMilli()
+					sendat := int64(binary.LittleEndian.Uint64(packet.GetHead()))
+					svrtime := (int64)(binary.LittleEndian.Uint64(packet.GetBody()))
+					fix := now - (svrtime - (now-sendat)/2)
+					atomic.StoreInt64(&c.timefix, fix)
+
+					log.Infof("recv Heartbeat")
 				default:
 					return nil
 				}
@@ -139,16 +185,15 @@ func (c *TcpClient) work(conn *TcpConn) error {
 	}
 }
 
-func (c *TcpClient) doAckAction(conn net.Conn, body []byte) error {
+func (c *WSClient) doAckAction(conn *ws.Conn, body []byte) error {
 	p := NewHVPacket()
 	p.Meta.SetType(PacketType_Inner)
 	p.Meta.SetSubFlag(PacketInnerSubType_CmdResult)
 	p.SetBody(body)
-	_, err := p.WriteTo(conn)
-	return err
+	return wsconnWritePacket(conn, p)
 }
 
-func (c *TcpClient) handshake(conn net.Conn) (*TcpConn, error) {
+func (c *WSClient) handshake(conn *ws.Conn) (*WSConn, error) {
 	var err error
 	timeout := c.opts.HeatbeatInterval
 
@@ -159,8 +204,7 @@ func (c *TcpClient) handshake(conn net.Conn) (*TcpConn, error) {
 	pk := NewHVPacket()
 	pk.Meta.SetType(PacketType_Inner)
 	pk.Meta.SetSubFlag(PacketInnerSubType_HandShake)
-
-	if _, err := pk.WriteTo(conn); err != nil {
+	if err := wsconnWritePacket(conn, pk); err != nil {
 		return nil, err
 	}
 
@@ -171,9 +215,7 @@ func (c *TcpClient) handshake(conn net.Conn) (*TcpConn, error) {
 	socketid := ""
 
 	for {
-		pk.Reset()
-
-		_, err = pk.ReadFrom(conn)
+		pk, err = wsconnReadPacket(conn)
 		if err != nil {
 			break
 		}
@@ -207,29 +249,5 @@ func (c *TcpClient) handshake(conn net.Conn) (*TcpConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTcpConn(socketid, c.opts.UInfo, conn, c.opts.HeatbeatInterval), nil
-}
-
-func (c *TcpClient) Start() error {
-	return c.connect()
-}
-
-func (c *TcpClient) Stop() error {
-	return c.Close()
-}
-
-func (c *TcpClient) Close() error {
-	select {
-	case <-c.closed:
-	default:
-
-		close(c.closed)
-
-		if c.TcpConn != nil {
-			c.TcpConn.Close()
-		}
-
-		c.opts.ReconnectDelay = -1
-	}
-	return nil
+	return newWSConn(socketid, c.opts.UInfo, conn, c.opts.HeatbeatInterval*2), nil
 }

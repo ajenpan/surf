@@ -2,14 +2,13 @@ package battle
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 )
 
 var LogicCreator = &GameLogicCreator{}
 
-func RegisterGame(name, version string, creator func() Logic) error {
-	return LogicCreator.Add(strings.Join([]string{name, version}, "-"), creator)
+func RegisterGame(name string, creator func() Logic) error {
+	return LogicCreator.Add(name, creator)
 }
 
 type GameLogicCreator struct {

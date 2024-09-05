@@ -6,7 +6,7 @@ import (
 	"github.com/ajenpan/surf/core/auth"
 )
 
-var ErrDisconn = errors.New("socket disconnected")
+var ErrDisconn = errors.New("conn disconnected")
 var ErrInvalidPacket = errors.New("invalid packet")
 
 var DefaultTimeoutSec = 30
