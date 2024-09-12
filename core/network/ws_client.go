@@ -203,7 +203,7 @@ func (c *WSClient) handshake(conn *ws.Conn) (*WSConn, error) {
 
 	pk := NewHVPacket()
 	pk.Meta.SetType(PacketType_Inner)
-	pk.Meta.SetSubFlag(PacketInnerSubType_HandShake)
+	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeStart)
 	if err := wsconnWritePacket(conn, pk); err != nil {
 		return nil, err
 	}

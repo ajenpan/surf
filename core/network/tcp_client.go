@@ -158,7 +158,7 @@ func (c *TcpClient) handshake(conn net.Conn) (*TcpConn, error) {
 
 	pk := NewHVPacket()
 	pk.Meta.SetType(PacketType_Inner)
-	pk.Meta.SetSubFlag(PacketInnerSubType_HandShake)
+	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeStart)
 
 	if _, err := pk.WriteTo(conn); err != nil {
 		return nil, err

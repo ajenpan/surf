@@ -108,7 +108,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_HandShake || len(pk.GetBody()) != 0 {
+	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_HandShakeStart || len(pk.GetBody()) != 0 {
 		return
 	}
 
@@ -125,6 +125,9 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		} else {
 			if us, err = s.OnConnAuth(pk.GetBody()); err != nil {
+				pk.Meta.SetType(PacketType_Inner)
+				pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFailed)
+				pk.SetBody([]byte(err.Error()))
 				return
 			}
 			conn.User = us
@@ -133,7 +136,6 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	pk.Meta.SetType(PacketType_Inner)
 	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFinish)
-	pk.SetHead([]byte("socketid"))
 	pk.SetBody([]byte(conn.ConnID()))
 	conn.writePacket(pk)
 

@@ -162,7 +162,7 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 		return nil, err
 	}
 
-	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_HandShake || len(pk.GetBody()) != 0 {
+	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_HandShakeStart || len(pk.GetBody()) != 0 {
 		return nil, ErrInvalidPacket
 	}
 
@@ -182,6 +182,9 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 		}
 
 		if us, err = s.opts.OnConnAuth(pk.GetBody()); err != nil {
+			pk.Meta.SetType(PacketType_Inner)
+			pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFailed)
+			pk.SetBody([]byte(err.Error()))
 			return nil, err
 		}
 	}
@@ -190,7 +193,6 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 
 	pk.Meta.SetType(PacketType_Inner)
 	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFinish)
-	pk.SetHead([]byte("socketid"))
 	pk.SetBody([]byte(socketid))
 	if _, err := pk.WriteTo(conn); err != nil {
 		return nil, err

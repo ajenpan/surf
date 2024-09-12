@@ -23,11 +23,12 @@ const (
 type PacketInnerSubType = uint8
 
 const (
-	PacketInnerSubType_HandShake       PacketInnerSubType = 5
+	PacketInnerSubType_HandShakeStart  PacketInnerSubType = 5
 	PacketInnerSubType_Cmd             PacketInnerSubType = 6
 	PacketInnerSubType_CmdResult       PacketInnerSubType = 7
-	PacketInnerSubType_HandShakeFinish PacketInnerSubType = 8
-	PacketInnerSubType_Heartbeat       PacketInnerSubType = 9
+	PacketInnerSubType_HandShakeFailed PacketInnerSubType = 8
+	PacketInnerSubType_HandShakeFinish PacketInnerSubType = 9
+	PacketInnerSubType_Heartbeat       PacketInnerSubType = 10
 )
 
 type PacketMeta []uint8
