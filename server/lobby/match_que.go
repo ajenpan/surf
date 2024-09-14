@@ -1,9 +1,7 @@
-package matcher
+package lobby
 
 import (
 	"sync"
-
-	"github.com/ajenpan/surf/server/lobby/user"
 )
 
 type MatchQue struct {
@@ -19,11 +17,11 @@ type Matcher interface {
 
 type StaticMatcher struct {
 	rwlock sync.RWMutex
-	users  []*user.UserInfo
+	users  []*UserInfo
 }
 
 // TODO:
-func (sm *StaticMatcher) Add(u *user.UserInfo) {
+func (sm *StaticMatcher) Add(u *UserInfo) {
 	sm.rwlock.Lock()
 	defer sm.rwlock.Unlock()
 

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package openproto.gate;
 option go_package = "openproto/gate";
-// option csharp_namespace = "src.msg.surf";
+option csharp_namespace = "src.msg.Gate";
 
 message ReqLinkSession {
   int32 target = 1;

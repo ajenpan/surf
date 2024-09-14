@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package openproto.uauth;
 option go_package = "openproto/uauth";
-// option csharp_namespace = "src.openproto.uauth";
+option csharp_namespace = "src.openproto.UAuth";
 
 // service UAuth {
 //   rpc Captcha(CaptchaRequest) returns (CaptchaResponse) {}

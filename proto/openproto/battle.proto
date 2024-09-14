@@ -1,7 +1,9 @@
 syntax = "proto3";
 
 package openproto.battle;
+
 option go_package = "openproto/battle";
+option csharp_namespace = "src.msg.Battle";
 
 message JoinBattleRequest {
   enum MSGID {

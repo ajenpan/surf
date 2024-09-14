@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package openproto.lobby;
+option go_package = "openproto/lobby";
+option csharp_namespace = "src.msg.Lobby";
+
+message UserBaseInfo {
+  string nickname = 1;
+  string avatar = 2;
+  int64 reg_time = 3;
+  int64 reg_channel_id = 4;
+}
+
+message Prop {
+  int32 prop_id = 1;
+  int32 prop_group = 2;
+  int64 count = 3;
+}
+
+message NumberMeta {
+  int32 meta_id = 1;
+  int32 meta_group = 2;
+  int64 value = 3;
+}
+
+message StringMeta {
+  int32 meta_id = 1;
+  int32 meta_group = 2;
+  bytes value = 3;
+}
+
+message PlayerInfo {
+  int32 seat_id = 2;
+}
+
+message GameInfo {}
+
+message PlayingInfo {
+  int32 player_status = 1;
+  int32 battle_node_id = 2;
+  string battle_id = 3;
+  int32 seat_id = 4;
+}
+
+message ReqLoginLobby {
+  enum MSGID {
+    __inval_msgid = 0;
+    ID = 12001;
+  }
+  int64 uid = 1;
+}
+
+message RespLoginLobby {
+  enum MSGID {
+    __inval_msgid = 0;
+    ID = 12002;
+  }
+  int32 flag = 1;
+
+  UserBaseInfo base_info = 11;
+  Prop props = 12;
+  NumberMeta num_meta = 13;
+  StringMeta str_meta = 14;
+  PlayingInfo playing_info = 15;
+}
+
+message ReqDispatchQue {
+  enum MSGID {
+    __inval_msgid = 0;
+    ID = 12003;
+  }
+  int32 join_type = 1;
+  int32 game_id = 2;
+}
+
+message RespDispatchQue {
+  enum MSGID {
+    __inval_msgid = 0;
+    ID = 12004;
+  }
+  int32 flag = 1;
+}
+
+message NotifyDispatchResult {
+  enum MSGID {
+    __inval_msgid = 0;
+    ID = 12005;
+  }
+}
+
+message NotifyBattleInfo {
+  enum MSGID {
+    __invalid = 0;
+    ID = 12006;
+  }
+}
+
+message ReqLogoutLobby {
+  enum MSGID {
+    __invalid = 0;
+    ID = 12010;
+  }
+}
+
+message RespLogoutLobby {
+  enum MSGID {
+    __invalid = 0;
+    ID = 12011;
+  }
+  int32 flag = 1;
+}
+
+message NotifyTableStatus {
+  enum MSGID {
+    __invalid = 0;
+    ID = 12020;
+  }
+
+  enum TableStatus {
+    None = 0;
+    ContinuePlay = 100;
+  }
+
+  TableStatus status = 1;
+  int64 status_deadline = 3; // 状态截至时间戳, 0表示没有
+}
+
+// message NotifyPlayerBeKickouted {
+//   enum MSGID {
+//     __invalid = 0;
+//     ID = 12021;
+//   }
+//   enum Reason {
+//     kUnknow = 0;
+//     kMinSrLimit = 1; // 金币低于房间限制
+//     kMaxSrLimit = 2; // 金币超过房间限制
+//   }
+//   Reason reason = 1;
+// }

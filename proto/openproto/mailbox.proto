@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package openproto.route;
 option go_package = "openproto/mailbox";
+option csharp_namespace = "src.msg.Mailbox";
 
 service MailBox {
   rpc RecvMail(RecvMailRequest) returns (RecvMailResponse) {}
