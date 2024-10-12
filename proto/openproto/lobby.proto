@@ -11,7 +11,7 @@ message UserBaseInfo {
   int64 reg_channel_id = 4;
 }
 
-message Prop {
+message PropItem {
   int32 prop_id = 1;
   int32 prop_group = 2;
   int64 count = 3;
@@ -58,9 +58,9 @@ message RespLoginLobby {
   int32 flag = 1;
 
   UserBaseInfo base_info = 11;
-  Prop props = 12;
-  NumberMeta num_meta = 13;
-  StringMeta str_meta = 14;
+  repeated PropItem props = 12;
+  repeated NumberMeta num_meta = 13;
+  repeated StringMeta str_meta = 14;
   PlayingInfo playing_info = 15;
 }
 
