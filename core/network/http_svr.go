@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/utils/calltable"
-	"github.com/ajenpan/surf/core/utils/marshal"
 )
 
 type HttpSvr struct {

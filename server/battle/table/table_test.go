@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	proto "github.com/ajenpan/surf/msg/innerproto/battle"
+	msgBattle "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle"
 	"github.com/ajenpan/surf/server/battle/noop"
 )
@@ -33,7 +33,7 @@ func TestTableTicker(t *testing.T) {
 	}
 
 	d := NewTable(TableOption{
-		Conf: &proto.BattleConfigure{},
+		Conf: &msgBattle.TableConfigure{},
 	})
 
 	if err := logic.OnInit(d, []battle.Player{}, nil); err != nil {

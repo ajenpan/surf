@@ -19,7 +19,7 @@ import (
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/errors"
 	log "github.com/ajenpan/surf/core/log"
-	pb "github.com/ajenpan/surf/msg/openproto/uauth"
+	msgUAuth "github.com/ajenpan/surf/msg/uauth"
 	"github.com/ajenpan/surf/server/uauth/database/cache"
 	"github.com/ajenpan/surf/server/uauth/database/models"
 )
@@ -47,8 +47,8 @@ type Auth struct {
 	AuthOptions
 }
 
-func (h *Auth) AnonymousLogin(ctx core.Context, in *pb.AnonymousLoginRequest) {
-	out := &pb.AnonymousLoginResponse{}
+func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.AnonymousLoginRequest) {
+	out := &msgUAuth.AnonymousLoginResponse{}
 	var err error
 
 	defer func() {
@@ -56,7 +56,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *pb.AnonymousLoginRequest) {
 	}()
 
 	if !RegUname.MatchString(in.Uname) {
-		err = errors.New(int32(pb.ResponseFlag_PasswdWrong), "error")
+		err = errors.New(int32(msgUAuth.ResponseFlag_PasswdWrong), "error")
 		return
 	}
 
@@ -83,10 +83,10 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *pb.AnonymousLoginRequest) {
 
 		res := h.DB.Create(user)
 		if res.Error != nil {
-			err = errors.New(int32(pb.ResponseFlag_DataBaseErr), "create failed")
+			err = errors.New(int32(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
 		}
 		if res.RowsAffected == 0 {
-			err = errors.New(int32(pb.ResponseFlag_DataBaseErr), "create failed")
+			err = errors.New(int32(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
 			return
 		}
 	}
@@ -105,7 +105,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *pb.AnonymousLoginRequest) {
 	}, 0)
 
 	if err != nil {
-		err = errors.New(int32(pb.ResponseFlag_GenTokenErr), err.Error())
+		err = errors.New(int32(msgUAuth.ResponseFlag_GenTokenErr), err.Error())
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *pb.AnonymousLoginRequest) {
 
 	out.AssessToken = assess
 
-	out.UserInfo = &pb.UserInfo{
+	out.UserInfo = &msgUAuth.UserInfo{
 		Uid:     user.UID,
 		Uname:   user.Uname,
 		Stat:    int32(user.Stat),
@@ -130,7 +130,6 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *pb.AnonymousLoginRequest) {
 }
 
 func (h *Auth) CTByName() *calltable.CallTable[string] {
-
 	NewMethod := func(f interface{}) *calltable.Method {
 		refv := reflect.ValueOf(f)
 		if refv.Kind() != reflect.Func {
@@ -149,8 +148,8 @@ func (h *Auth) CTByName() *calltable.CallTable[string] {
 	return ct
 }
 
-func (h *Auth) Login(ctx core.Context, in *pb.LoginRequest) {
-	out := &pb.LoginResponse{}
+func (h *Auth) Login(ctx core.Context, in *msgUAuth.LoginRequest) {
+	out := &msgUAuth.LoginResponse{}
 	// var err = &err.Error{}
 	var err error
 
@@ -159,7 +158,7 @@ func (h *Auth) Login(ctx core.Context, in *pb.LoginRequest) {
 	}()
 
 	if !RegUname.MatchString(in.Uname) {
-		err = errors.New(int32(pb.ResponseFlag_PasswdWrong), "error")
+		err = errors.New(int32(msgUAuth.ResponseFlag_PasswdWrong), "error")
 		return
 	}
 
@@ -208,7 +207,7 @@ func (h *Auth) Login(ctx core.Context, in *pb.LoginRequest) {
 	}
 
 	out.AssessToken = assess
-	out.UserInfo = &pb.UserInfo{
+	out.UserInfo = &msgUAuth.UserInfo{
 		Uid:     user.UID,
 		Uname:   user.Uname,
 		Stat:    int32(user.Stat),
@@ -216,7 +215,7 @@ func (h *Auth) Login(ctx core.Context, in *pb.LoginRequest) {
 	}
 }
 
-func (h *Auth) UserInfo(ctx core.Context, in *pb.UserInfoRequest) {
+func (h *Auth) UserInfo(ctx core.Context, in *msgUAuth.UserInfoRequest) {
 	user := &models.Users{
 		UID: in.Uid,
 	}
@@ -234,8 +233,8 @@ func (h *Auth) UserInfo(ctx core.Context, in *pb.UserInfoRequest) {
 		h.Cache.StoreUser(context.Background(), &cache.AuthCacheInfo{User: user}, time.Hour)
 	}
 
-	out := &pb.UserInfoResponse{
-		Info: &pb.UserInfo{
+	out := &msgUAuth.UserInfoResponse{
+		Info: &msgUAuth.UserInfo{
 			Uid:     user.UID,
 			Uname:   user.Uname,
 			Stat:    int32(user.Stat),
@@ -246,7 +245,7 @@ func (h *Auth) UserInfo(ctx core.Context, in *pb.UserInfoRequest) {
 	ctx.Response(out, nil)
 }
 
-func (h *Auth) Register(ctx core.Context, in *pb.RegisterRequest) (*pb.RegisterResponse, error) {
+func (h *Auth) Register(ctx core.Context, in *msgUAuth.RegisterRequest) (*msgUAuth.RegisterResponse, error) {
 	if !RegUname.MatchString(in.Uname) {
 		return nil, nil
 	}
@@ -273,7 +272,7 @@ func (h *Auth) Register(ctx core.Context, in *pb.RegisterRequest) (*pb.RegisterR
 		return nil, fmt.Errorf("create user error")
 	}
 
-	return &pb.RegisterResponse{Msg: "ok"}, nil
+	return &msgUAuth.RegisterResponse{Msg: "ok"}, nil
 }
 
 func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {

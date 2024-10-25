@@ -12,12 +12,13 @@ import (
 	"gorm.io/gorm/schema"
 
 	"github.com/ajenpan/surf/core/log"
-	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
-	"github.com/ajenpan/surf/server/mailbox/database"
+	msgMailbox "github.com/ajenpan/surf/msg/mailbox"
 	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
 
 type RecvMailMark = uint32
+
+type MailID = uint64
 
 const MailMarkRead RecvMailMark = 0b001   //1
 const MailMarkRecv RecvMailMark = 0b010   //2
@@ -45,7 +46,6 @@ func createMysqlClient(dsn string) *gorm.DB {
 func NewHandler(c *Config) *Handler {
 	ret := &Handler{
 		conf: c,
-		ann:  &announcement{},
 	}
 
 	ret.WLogDB = createMysqlClient(DefaultConf.WLogDBDSN)
@@ -76,13 +76,11 @@ type Handler struct {
 	WPropsDB *gorm.DB
 	WLogDB   *gorm.DB
 	Rds      *redis.Client
-
-	ann *announcement
 }
 
 func (h *Handler) Init() error {
 	h.cache = &MailCache{
-		infos: make(map[uint32]*MailDetail),
+		infos: make(map[MailID]*MailDetail),
 	}
 
 	lists := []*gamedbMod.MailList{}
@@ -119,88 +117,88 @@ func (h *Handler) Init() error {
 		log.Error(err)
 	}
 
-	if err := h.ann.Init(); err != nil {
-		return err
-	}
+	// if err := h.ann.Init(); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
 
-func (h *Handler) RecvMail(ctx context.Context, in *proto.RecvMailRequest, out *proto.RecvMailResponse) error {
+func (h *Handler) RecvMail(ctx context.Context, in *msgMailbox.ReqRecvMail, out *msgMailbox.RespRecvMail) error {
 	// get user info
-	user, err := GetUserFromCtx(ctx)
-	if err != nil {
-		return err
-	}
+	// user, err := GetUserFromCtx(ctx)
+	// if err != nil {
+	// 	return err
+	// }
 
 	//there's no new mail
-	if in.LatestMailid >= h.cache.LatestMailID() {
-		out.LatestCheckMailid = in.LatestMailid
-		return nil
-	}
+	// if in.LatestMailid >= h.cache.LatestMailID() {
+	// 	out.LatestCheckMailid = in.LatestMailid
+	// 	return nil
+	// }
 
 	// get the latest mail id
-	RecvLatestMailID := database.UserRecvLatestMailID(user.UID)
+	// RecvLatestMailID := database.UserRecvLatestMailID(user.UID)
 
-	checkPoint := in.LatestMailid
-	if in.LatestMailid < RecvLatestMailID {
-		checkPoint = RecvLatestMailID
-	}
+	// checkPoint := in.LatestMailid
+	// if in.LatestMailid < RecvLatestMailID {
+	// 	checkPoint = RecvLatestMailID
+	// }
 
-	// recv new mail
-	newMail := h.cache.RecvNewMail(checkPoint, user, MailMaxKeepCount)
-	if len(newMail) > 0 {
+	// // recv new mail
+	// newMail := h.cache.RecvNewMail(checkPoint, user, MailMaxKeepCount)
+	// if len(newMail) > 0 {
 
-		newRecord := []*gamedbMod.MailRecv{}
+	// 	newRecord := []*gamedbMod.MailRecv{}
 
-		for _, v := range newMail {
-			if v.GetMailID() <= uint32(RecvLatestMailID) {
-				continue
-			}
-			newRecord = append(newRecord, &gamedbMod.MailRecv{
-				Mailid: uint(v.GetMailID()),
-				Mark:   0,
-				RecvAt: time.Now(),
-			})
-		}
+	// 	for _, v := range newMail {
+	// 		if v.GetMailID() <= uint32(RecvLatestMailID) {
+	// 			continue
+	// 		}
+	// 		newRecord = append(newRecord, &gamedbMod.MailRecv{
+	// 			Mailid: uint(v.GetMailID()),
+	// 			Mark:   0,
+	// 			RecvAt: time.Now(),
+	// 		})
+	// 	}
 
-		if len(newRecord) > 0 {
-			err := h.WGameDB.Model(gamedbMod.MailRecv{}).CreateInBatches(newRecord, 10).Error
-			if err != nil {
-				log.Error(err)
-			}
-		}
-	}
+	// 	if len(newRecord) > 0 {
+	// 		err := h.WGameDB.Model(gamedbMod.MailRecv{}).CreateInBatches(newRecord, 10).Error
+	// 		if err != nil {
+	// 			log.Error(err)
+	// 		}
+	// 	}
+	// }
 
-	lists := []*gamedbMod.MailRecv{}
-	err = h.WGameDB.Model(&gamedbMod.MailRecv{}).Order("mailid desc").Where("uid=? and mailid>? and status=0 and mark&4=0",
-		user.UID, in.LatestMailid).Limit(MailMaxKeepCount).Find(&lists).Error
-	if err != nil {
-		return err
-	}
+	// lists := []*gamedbMod.MailRecv{}
+	// err = h.WGameDB.Model(&gamedbMod.MailRecv{}).Order("mailid desc").Where("uid=? and mailid>? and status=0 and mark&4=0",
+	// 	user.UID, in.LatestMailid).Limit(MailMaxKeepCount).Find(&lists).Error
+	// if err != nil {
+	// 	return err
+	// }
 
-	for _, record := range lists {
-		mail := h.getMail(uint32(record.Mailid))
-		if mail == nil {
-			log.Warnf("mail not found, mailid:%d", record.Mailid)
-			continue
-		}
+	// for _, record := range lists {
+	// 	mail := h.getMail(uint32(record.Mailid))
+	// 	if mail == nil {
+	// 		log.Warnf("mail not found, mailid:%d", record.Mailid)
+	// 		continue
+	// 	}
 
-		PBMail := mail.ClonePBMail()
-		PBMail.Mark = uint32(record.Mark)
+	// 	PBMail := mail.ClonePBMail()
+	// 	PBMail.Mark = uint32(record.Mark)
 
-		mail.RWLock.RLock()
-		PBMail.RecvAt = mail.DBMail.CreateAt.Unix()
-		mail.RWLock.RUnlock()
+	// 	mail.RWLock.RLock()
+	// 	PBMail.RecvAt = mail.DBMail.CreateAt.Unix()
+	// 	mail.RWLock.RUnlock()
 
-		out.Mails = append(out.Mails, PBMail)
-	}
+	// 	out.Mails = append(out.Mails, PBMail)
+	// }
 
-	out.LatestCheckMailid = h.cache.LatestMailID()
+	// out.LatestCheckMailid = h.cache.LatestMailID()
 	return nil
 }
 
-func (h *Handler) getMail(mailid uint32) *MailDetail {
+func (h *Handler) getMail(mailid MailID) *MailDetail {
 	mail := h.cache.GetMailDetail(mailid)
 	if mail == nil {
 		//get from database
@@ -227,7 +225,7 @@ func (h *Handler) getMail(mailid uint32) *MailDetail {
 	return mail
 }
 
-func (h *Handler) SendMail(ctx context.Context, in *proto.SendMailRequest, out *proto.SendMailResponse) error {
+func (h *Handler) SendMail(ctx context.Context, in *msgMailbox.ReqSendMail, out *msgMailbox.RespSendMail) error {
 	uid, err := GetAdminUIDFromCtx(ctx)
 	if err != nil {
 		return err
@@ -241,13 +239,13 @@ func (h *Handler) SendMail(ctx context.Context, in *proto.SendMailRequest, out *
 		return fmt.Errorf("title or content is required")
 	}
 
-	in.EffectAt = time.Now().Format(TimeLayout)
+	in.MailEffectAt = time.Now().Format(TimeLayout)
 
-	if len(in.EffectAt) == 0 || len(in.ExpireAt) == 0 {
+	if len(in.MailEffectAt) == 0 || len(in.MailExpireAt) == 0 {
 		return fmt.Errorf("effect time is required")
 	}
 
-	expireAt, err := time.ParseInLocation(TimeLayout, in.ExpireAt, time.Local)
+	expireAt, err := time.ParseInLocation(TimeLayout, in.MailExpireAt, time.Local)
 	if err != nil {
 		return fmt.Errorf("expire time format error,%v", err)
 	}
@@ -279,7 +277,7 @@ func (h *Handler) SendMail(ctx context.Context, in *proto.SendMailRequest, out *
 		return err
 	}
 
-	out.Mailid = uint32(record.Mailid)
+	out.Mailid = uint64(record.Mailid)
 	if err := h.cache.Add(detail); err != nil {
 		log.Error(err)
 		return err
@@ -288,7 +286,7 @@ func (h *Handler) SendMail(ctx context.Context, in *proto.SendMailRequest, out *
 	return nil
 }
 
-func (h *Handler) UserMarkMail(ctx context.Context, in *proto.UserMarkMailRequest, out *proto.UserMarkMailResponse) error {
+func (h *Handler) UserMarkMail(ctx context.Context, in *msgMailbox.ReqMarkUserMail, out *msgMailbox.RespMarkUserMail) error {
 
 	// get user info
 	user, err := GetUserFromCtx(ctx)
@@ -297,7 +295,7 @@ func (h *Handler) UserMarkMail(ctx context.Context, in *proto.UserMarkMailReques
 	}
 
 	if out.Result == nil {
-		out.Result = make(map[uint32]uint32)
+		out.Result = make(map[uint64]uint32)
 	}
 
 	for k, v := range in.Marks {
@@ -337,7 +335,7 @@ func (h *Handler) UserMarkMail(ctx context.Context, in *proto.UserMarkMailReques
 	return nil
 }
 
-func (h *Handler) MailList(ctx context.Context, in *proto.MailListRequest, out *proto.MailListResponse) error {
+func (h *Handler) MailList(ctx context.Context, in *msgMailbox.ReqMailDetailList, out *msgMailbox.RespMailDetailList) error {
 	in.Page = CheckListPage(in.Page)
 	total := int64(0)
 
@@ -354,25 +352,24 @@ func (h *Handler) MailList(ctx context.Context, in *proto.MailListRequest, out *
 	mailids := []uint{}
 	for _, v := range data {
 		mailids = append(mailids, v.Mailid)
-		temp := &proto.SendMailRequest{}
+		temp := &msgMailbox.ReqSendMail{}
 		err := protojson.Unmarshal(v.MailDetail, temp)
 		if err != nil {
 			log.Error(err)
 			continue
 		}
 
-		out.Mails = append(out.Mails, &proto.MailListResponse_MailDetail{
-			Mailid:     uint32(v.Mailid),
+		out.Mails = append(out.Mails, &msgMailbox.RespMailDetailList_MailDetail{
+			Mailid:     uint64(v.Mailid),
 			Title:      temp.Title,
 			Content:    temp.Content,
 			Attachment: temp.Attachment,
 			RecvConds:  temp.RecvConds,
-			EffectAt:   temp.EffectAt,
-			ExpireAt:   temp.ExpireAt,
+			EffectAt:   temp.MailEffectAt,
+			ExpireAt:   temp.MailExpireAt,
 			CreateBy:   v.CreateBy,
 			CreateAt:   v.CreateAt.Format(TimeLayout),
 			Status:     int32(v.Status),
-			I18N:       temp.I18N,
 		})
 	}
 	type Count struct {
@@ -404,15 +401,15 @@ func (h *Handler) MailList(ctx context.Context, in *proto.MailListRequest, out *
 
 	for _, v := range out.Mails {
 		if v.Statist == nil {
-			v.Statist = &proto.MailListResponse_Statist{}
+			v.Statist = &msgMailbox.RespMailDetailList_Statist{}
 		}
-		v.Statist.AttachRecv = RecvCountMap[v.Mailid]
-		v.Statist.MailRead = ReadCountMap[v.Mailid]
+		v.Statist.AttachRecv = RecvCountMap[uint32(v.Mailid)]
+		v.Statist.MailRead = ReadCountMap[uint32(v.Mailid)]
 	}
 	return nil
 }
 
-func (h *Handler) UpdateMail(ctx context.Context, in *proto.UpdateMailRequest, out *proto.UpdateMailResponse) error {
+func (h *Handler) OnSetMailStatus(ctx context.Context, in *msgMailbox.ReqSetMailStatus, out *msgMailbox.RespSetMailStatus) error {
 	record := &gamedbMod.MailList{
 		Mailid: uint(in.Mailid),
 		Status: int(in.Status),

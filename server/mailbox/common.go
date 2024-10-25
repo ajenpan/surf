@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	pb "github.com/ajenpan/surf/msg/openproto/mailbox"
+	pb "github.com/ajenpan/surf/msg/mailbox"
 )
 
 type (

@@ -1,7 +1,6 @@
 package network
 
 import (
-	"fmt"
 	"net"
 	"sync/atomic"
 	"time"
@@ -9,17 +8,10 @@ import (
 	"github.com/ajenpan/surf/core/auth"
 )
 
-type FuncOnConnPacket func(Conn, *HVPacket)
-type FuncOnConnEnable func(Conn, bool)
-type FuncOnConnAuth func(data []byte) (auth.User, error)
-
-var sid uint64 = 0
-
-func GenConnID() string {
-	return fmt.Sprintf("%d_%d", atomic.AddUint64(&sid, 1), time.Now().Unix())
-}
-
 func newTcpConn(id string, uinfo auth.User, imp net.Conn, rwtimeout time.Duration) *TcpConn {
+	if rwtimeout.Seconds() < 1 {
+		rwtimeout = time.Second * 2
+	}
 	return &TcpConn{
 		User:       uinfo,
 		id:         id,

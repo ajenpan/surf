@@ -11,3 +11,23 @@ type Marshaler interface {
 	// affect the content type returned.
 	ContentType(interface{}) string
 }
+
+func NewMarshalerById(typ int16) Marshaler {
+	switch typ {
+	case 0:
+		return &ProtoMarshaler{}
+	case 1:
+		return &JSONPb{}
+	}
+	return nil
+}
+
+func NewMarshalerByName(typ string) Marshaler {
+	switch typ {
+	case "application/json":
+		return &JSONPb{}
+	case "application/protobuf":
+		return &ProtoMarshaler{}
+	}
+	return nil
+}

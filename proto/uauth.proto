@@ -1,19 +1,8 @@
 syntax = "proto3";
 
 package openproto.uauth;
-option go_package = "openproto/uauth";
-option csharp_namespace = "src.openproto.UAuth";
-
-// service UAuth {
-//   rpc Captcha(CaptchaRequest) returns (CaptchaResponse) {}
-//   rpc Login(LoginRequest) returns (LoginResponse) {}
-//   rpc AnonymousLogin(AnonymousLoginRequest) returns (LoginResponse) {}
-//   rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse) {}
-//   rpc UserInfo(UserInfoRequest) returns (UserInfoResponse) {}
-//   rpc Register(RegisterRequest) returns (RegisterResponse) {}
-//   rpc ModifyPasswd(ModifyPasswdRequest) returns (ModifyPasswdResponse) {}
-//   rpc PublicKeys(PublicKeysRequest) returns (PublicKeysResponse) {}
-// }
+option go_package = "msg/uauth";
+option csharp_namespace = "src.msg.uauth";
 
 enum ResponseFlag {
   Success = 0;

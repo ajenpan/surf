@@ -19,7 +19,7 @@ type WSClientOptions struct {
 	HeatbeatInterval time.Duration
 
 	OnConnPacket   FuncOnConnPacket
-	OnConnEnable   FuncOnConnEnable
+	OnConnStatus   FuncOnConnStatus
 	AuthToken      []byte
 	UInfo          auth.User
 	ReconnectDelay time.Duration
@@ -68,11 +68,10 @@ func (c *WSClient) Close() error {
 	return nil
 }
 
-func (c *WSClient) onConnEnable(enable bool) {
-	if c.opts.OnConnEnable != nil {
-		c.opts.OnConnEnable(c, enable)
+func (c *WSClient) onConnStatus(enable bool) {
+	if c.opts.OnConnStatus != nil {
+		c.opts.OnConnStatus(c, enable)
 	}
-
 	if !enable {
 		c.reconnect()
 	}
@@ -113,9 +112,16 @@ func (c *WSClient) work(conn *WSConn) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	tk := time.NewTicker(c.opts.HeatbeatInterval)
+	c.onConnStatus(true)
+	defer c.onConnStatus(false)
+
+	tki := time.Duration(c.opts.HeatbeatInterval.Seconds()/3) * time.Second
+	if tki < time.Second*2 {
+		tki = time.Second * 2
+	}
+
+	tk := time.NewTicker(tki)
 	defer tk.Stop()
-	defer c.onConnEnable(false)
 
 	conn.status = Connected
 	c.WSConn = conn
@@ -129,10 +135,10 @@ func (c *WSClient) work(conn *WSConn) error {
 	go func() {
 		defer conn.Close()
 		err := conn.readWork()
-		fmt.Println(err)
+		if err != nil {
+			log.Errorf("readWork err: %v", err)
+		}
 	}()
-
-	c.onConnEnable(true)
 
 	for {
 		select {
@@ -142,8 +148,17 @@ func (c *WSClient) work(conn *WSConn) error {
 			return nil
 		case now := <-tk.C:
 			lastSendAt := atomic.LoadInt64(&conn.lastSendAt)
+			lastRecvAt := atomic.LoadInt64(&conn.lastRecvAt)
 			unix := now.UnixMilli()
-			if unix-lastSendAt >= int64(c.opts.HeatbeatInterval.Milliseconds()) {
+
+			ds := int64(0)
+			if lastSendAt > lastRecvAt {
+				ds = unix - lastRecvAt
+			} else {
+				ds = unix - lastSendAt
+			}
+
+			if ds >= int64(c.opts.HeatbeatInterval.Milliseconds())/2 {
 				pk := NewHVPacket()
 				pk.Meta.SetType(PacketType_Inner)
 				pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
@@ -156,7 +171,7 @@ func (c *WSClient) work(conn *WSConn) error {
 
 				log.Infof("send Heartbeat")
 			} else {
-				log.Info("pass heartbeat ", unix-lastSendAt, now)
+				log.Infof("pass heartbeat ds:%d, sendat:%d, recvAt:%d, now:%s", ds, lastSendAt, lastRecvAt, now.Format(time.StampMicro))
 			}
 		case packet, ok := <-conn.chRead:
 			if !ok {

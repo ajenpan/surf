@@ -52,7 +52,7 @@ func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *
 			respType := methodt.Out(0).Elem()
 
 			m := &Method{
-				FuncName:     rpcMethodName,
+				HandleName:   rpcMethodName,
 				Func:         methodv.Func,
 				RequestType:  reqType,
 				ResponseType: respType,
@@ -93,7 +93,7 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 		}
 
 		m := &Method{
-			FuncName:    method.Name,
+			HandleName:  method.Name,
 			Func:        method.Func,
 			RequestType: reqMsgType.Elem(),
 		}
@@ -127,53 +127,55 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 	return uint32(IDDesc.Number())
 }
 
-func ExtractMethodByMsgID(ms protoreflect.MessageDescriptors, h interface{}) *CallTable[uint32] {
+func ExtractMethod(ms protoreflect.MessageDescriptors, h interface{}) (*CallTable[uint32], *CallTable[string]) {
 	const MethodPrefix string = "On"
 
-	const FNamePrefix string = ""
-	const FNameSuffix string = "Request"
+	const MsgPrefix string = "Req"
+	const MsgSuffix string = "Request"
+
+	ctByID := NewCallTable[uint32]()
+	ctByName := NewCallTable[string]()
 
 	hvalue := reflect.TypeOf(h)
-
-	ret := NewCallTable[uint32]()
 	pbMsgType := reflect.TypeOf((*proto.Message)(nil)).Elem()
 
 	for i := 0; i < ms.Len(); i++ {
 		msg := ms.Get(i)
 		msgid := GetMessageMsgID(msg)
-		if msgid == 0 {
-			continue
-		}
 		msgName := string(msg.Name())
+
 		method, has := hvalue.MethodByName(MethodPrefix + msgName)
 		if !has {
 			continue
 		}
-
 		if method.Type.NumIn() != 3 {
 			continue
 		}
-
 		reqMsgType := method.Type.In(2)
 		if reqMsgType.Kind() != reflect.Ptr {
 			continue
 		}
-
 		if !reqMsgType.Implements(pbMsgType) {
 			continue
 		}
 
-		fname := msgName
-		fname = strings.TrimPrefix(fname, FNamePrefix)
-		fname = strings.TrimSuffix(fname, FNameSuffix)
+		hname := msgName
+		hname = strings.TrimPrefix(hname, MsgPrefix)
+		hname = strings.TrimSuffix(hname, MsgSuffix)
 
 		m := &Method{
-			FuncName:    fname,
+			HandleName:  hname,
 			Func:        method.Func,
 			RequestType: reqMsgType.Elem(),
 		}
 		m.InitPool()
-		ret.Add(msgid, m)
+
+		if msgid > 0 {
+			ctByID.Add(msgid, m)
+		}
+		if len(hname) > 0 {
+			ctByName.Add(hname, m)
+		}
 	}
-	return ret
+	return ctByID, ctByName
 }

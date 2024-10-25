@@ -1,8 +1,8 @@
 syntax = "proto3";
 
 package openproto.core;
-option go_package = "openproto/core";
-option csharp_namespace = "src.msg.Core";
+option go_package = "msg/core";
+option csharp_namespace = "src.msg.core";
 
 message Error {
   int32 code = 1;

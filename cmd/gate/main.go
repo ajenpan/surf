@@ -2,17 +2,13 @@ package main
 
 import (
 	"bytes"
-	"crypto/rsa"
 	"fmt"
 	"os"
 	"runtime"
-	"time"
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
-	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 	gate "github.com/ajenpan/surf/server/gate"
@@ -58,7 +54,7 @@ const PublicKeyFile = "public.pem"
 func ReadRSAKey() ([]byte, []byte, error) {
 	privateRaw, err := os.ReadFile(PrivateKeyFile)
 	if err != nil {
-		privateKey, publicKey, err := rsagen.GenerateRsaPem(2048)
+		privateKey, publicKey, err := rsagen.GenerateRsaPem(512)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -73,91 +69,28 @@ func ReadRSAKey() ([]byte, []byte, error) {
 	return privateRaw, publicRaw, nil
 }
 
-func StartClientListener(ppk *rsa.PrivateKey, r *gate.Gate) (func(), error) {
-	ws, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   ":9999",
-		OnConnPacket: r.OnConnPacket,
-		OnConnEnable: r.OnConnEnable,
-		OnConnAuth: func(data []byte) (auth.User, error) {
-			return auth.VerifyToken(&ppk.PublicKey, data)
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	ws.Start()
-	return func() {
-		ws.Stop()
-	}, nil
-}
-
-func StartNodeListener(ppk *rsa.PrivateKey, r *gate.Gate) (func(), error) {
-	ws, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   ":9998",
-		OnConnPacket: r.OnNodePacket,
-		OnConnEnable: r.OnNodeEnable,
-		OnConnAuth: func(data []byte) (auth.User, error) {
-			return auth.VerifyToken(&ppk.PublicKey, data)
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	ws.Start()
-	return func() {
-		ws.Stop()
-	}, nil
-
-	// tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
-	// 	ListenAddr:   ":9998",
-	// 	OnConnPacket: r.OnNodePacket,
-	// 	OnConnEnable: r.OnNodeEnable,
-	// 	OnConnAuth: func(data []byte) (auth.User, error) {
-	// 		return auth.VerifyToken(&ppk.PublicKey, data)
-	// 	}},
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// tcpsvr.Start()
-	// return func() {
-	// 	tcpsvr.Stop()
-	// }, nil
-}
-
 func RealMain(c *cli.Context) error {
 	log.Default.SetOutput(os.Stdout)
 
-	privateRaw, _, err := ReadRSAKey()
+	_, _, err := ReadRSAKey()
 	if err != nil {
 		panic(err)
 	}
 
-	ppk, err := rsagen.ParseRsaPrivateKeyFromPem(privateRaw)
-	if err != nil {
-		return err
+	cfg := &gate.Config{
+		RsaPublicKeyFile: PublicKeyFile,
+		ClientListenAddr: ":11000",
+		NodeListenAddr:   ":13000",
 	}
 
-	jwt, _ := auth.GenerateToken(ppk, &auth.UserInfo{
-		UId:   10001,
-		UName: "gdclient",
-		URole: 0,
-	}, 240*time.Hour)
-
-	fmt.Println(jwt)
-
-	r := gate.NewGate()
-	closer, err := StartClientListener(ppk, r)
+	closer, err := gate.Start(cfg)
 	if err != nil {
 		return err
 	}
 	defer closer()
 
-	nodeCloser, err := StartNodeListener(ppk, r)
-	if err != nil {
-		return err
-	}
-	defer nodeCloser()
+	log.Info("config:", cfg.String())
+	log.Info("gate server started")
 
 	s := utilSignal.WaitShutdown()
 	log.Infof("recv signal: %v", s.String())

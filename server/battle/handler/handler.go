@@ -10,8 +10,7 @@ import (
 	"github.com/ajenpan/surf/core/event"
 	log "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
-	innermsg "github.com/ajenpan/surf/msg/innerproto/battle"
-	openmsg "github.com/ajenpan/surf/msg/openproto/battle"
+	battlemsg "github.com/ajenpan/surf/msg/battle"
 
 	"github.com/ajenpan/surf/server/battle"
 	"github.com/ajenpan/surf/server/battle/table"
@@ -39,9 +38,9 @@ func (h *Battle) ServerName() string {
 	return "battle"
 }
 
-func (h *Battle) OnStartBattleRequest(ctx core.Context, in *innermsg.StartBattleRequest) {
+func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle) {
 	var err error
-	var resp = &innermsg.StartBattleResponse{}
+	var resp = &battlemsg.RespStartBattle{}
 
 	defer func() {
 		ctx.Response(resp, err)
@@ -68,7 +67,7 @@ func (h *Battle) OnStartBattleRequest(ctx core.Context, in *innermsg.StartBattle
 		},
 	})
 
-	err = d.Init(logic, players, in.GameConf)
+	err = d.Init(logic, players, in.LogicConf)
 	if err != nil {
 		return
 	}
@@ -107,10 +106,10 @@ func (h *Battle) LoadBattleByUID(uid uint64) map[string]table.Table {
 	return nil
 }
 
-func (h *Battle) OnJoinBattleRequest(ctx core.Context, in *openmsg.JoinBattleRequest) {
+func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) {
 	var err error
 
-	out := &openmsg.JoinBattleResponse{
+	out := &battlemsg.RespJoinBattle{
 		BattleId:   in.BattleId,
 		SeatId:     in.SeatId,
 		ReadyState: in.ReadyState,
@@ -133,6 +132,13 @@ func (h *Battle) OnJoinBattleRequest(ctx core.Context, in *openmsg.JoinBattleReq
 	// 当uid掉线时, 需要遍历所有的battleid, 并且通知battleid.
 	// h.UIDBingBID(socket.Uid, in.BattleId)
 	// return out, nil
+}
+
+func (h *Battle) OnReqQuitBattle(ctx core.Context, in *battlemsg.ReqQuitBattle) {
+	resp := &battlemsg.RespQuitBattle{
+		BattleId: in.BattleId,
+	}
+	ctx.Response(resp, nil)
 }
 
 // func (h *Battle) OnBattleMessageWrap(s *tcp.Socket, msg *proto.LoigcMessageWrap) {

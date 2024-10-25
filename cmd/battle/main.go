@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rsa"
 	"fmt"
 	"os"
-	"runtime"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -15,32 +13,18 @@ import (
 	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
-	innerbattleMsg "github.com/ajenpan/surf/msg/innerproto/battle"
-	battleMsg "github.com/ajenpan/surf/msg/openproto/battle"
+	battleMsg "github.com/ajenpan/surf/msg/battle"
 
 	_ "github.com/ajenpan/surf/game/niuniu"
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
 )
 
 var (
-	Name       string = "unknown"
-	Version    string = "unknown"
-	GitCommit  string = "unknown"
-	BuildAt    string = "unknown"
-	BuildBy    string = runtime.Version()
-	RunnningOS string = runtime.GOOS + "/" + runtime.GOARCH
+	Name      string = "battle"
+	Version   string = "unknown"
+	GitCommit string = "unknown"
+	BuildAt   string = "unknown"
 )
-
-func longVersion() string {
-	buf := bytes.NewBuffer(nil)
-	fmt.Fprintln(buf, "project:", Name)
-	fmt.Fprintln(buf, "version:", Version)
-	fmt.Fprintln(buf, "git commit:", GitCommit)
-	fmt.Fprintln(buf, "build at:", BuildAt)
-	fmt.Fprintln(buf, "build by:", BuildBy)
-	fmt.Fprintln(buf, "running OS/Arch:", RunnningOS)
-	return buf.String()
-}
 
 func main() {
 	err := Run()
@@ -50,10 +34,14 @@ func main() {
 }
 
 func Run() error {
-	Name = "battle"
+	info := core.NewServerInfo()
+	info.Name = Name
+	info.Version = Version
+	info.GitCommit = GitCommit
+	info.BuildAt = BuildAt
 
 	cli.VersionPrinter = func(c *cli.Context) {
-		fmt.Println(longVersion())
+		fmt.Println(info.LongVersion())
 	}
 
 	app := cli.NewApp()
@@ -64,8 +52,6 @@ func Run() error {
 	err := app.Run(os.Args)
 	return err
 }
-
-var listenAt string = ":12345"
 
 func LoadAuthPublicKey() (*rsa.PrivateKey, error) {
 	publicRaw, err := os.ReadFile("private.pem")
@@ -85,8 +71,7 @@ func RealMain(c *cli.Context) error {
 	}
 
 	h := battleHandler.New()
-	ct := calltable.ExtractMethodByMsgID(battleMsg.File_battle_proto.Messages(), h)
-	ct.Merge(calltable.ExtractMethodByMsgID(innerbattleMsg.File_battle_inner_proto.Messages(), h), false)
+	CTByID, CTByName := calltable.ExtractMethod(battleMsg.File_battle_proto.Messages(), h)
 
 	uinfo := &auth.UserInfo{
 		UId:   20001,
@@ -98,14 +83,26 @@ func RealMain(c *cli.Context) error {
 		return err
 	}
 
+	testuser := &auth.UserInfo{
+		UId:   10001,
+		UName: "testuser",
+		URole: 1,
+	}
+	testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)
+	if err != nil {
+		return err
+	}
+	log.Info("testjwt:", testjwt)
+
 	err = core.Init(core.Options{
 		Server:         h,
-		TcpListenAddr:  listenAt,
-		HttpListenAddr: ":18080",
-		CTById:         ct,
+		HttpListenAddr: ":13100",
+		WsListenAddr:   ":13200",
+		CTById:         CTByID,
+		CTByName:       CTByName,
 		PublicKey:      &pk.PublicKey,
 		GateAddrList: []string{
-			"ws://localhost:9998",
+			"ws://localhost:13000",
 		},
 		GateToken: []byte(jwt),
 		UInfo:     uinfo,

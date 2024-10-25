@@ -12,6 +12,7 @@ import (
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
+	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
@@ -73,7 +74,9 @@ func ReadRSAKey() ([]byte, []byte, error) {
 	return privateRaw, publicRaw, nil
 }
 
-var gatesvr = gate.NewGate()
+var gatesvr = &gate.Gate{
+	Marshaler: &marshal.ProtoMarshaler{},
+}
 
 func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 	uinfo := &auth.UserInfo{
@@ -87,7 +90,7 @@ func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
 		ListenAddr:   ":19999",
 		OnConnPacket: gatesvr.OnNodePacket,
-		OnConnEnable: gatesvr.OnNodeEnable,
+		OnConnStatus: gatesvr.OnNodeStatus,
 		OnConnAuth: func(data []byte) (auth.User, error) {
 			return auth.VerifyToken(&ppk.PublicKey, data)
 		}},
@@ -105,7 +108,7 @@ func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
 			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
 		},
-		OnConnEnable: func(c network.Conn, b bool) {
+		OnConnStatus: func(c network.Conn, b bool) {
 			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
 		},
 	})
@@ -129,7 +132,7 @@ func StartWs(ppk *rsa.PrivateKey) (func(), error) {
 	tcpsvr, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   ":18888",
 		OnConnPacket: gatesvr.OnNodePacket,
-		OnConnEnable: gatesvr.OnNodeEnable,
+		OnConnStatus: gatesvr.OnNodeStatus,
 		OnConnAuth: func(data []byte) (auth.User, error) {
 			return auth.VerifyToken(&ppk.PublicKey, data)
 		}},
@@ -147,7 +150,7 @@ func StartWs(ppk *rsa.PrivateKey) (func(), error) {
 		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
 			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
 		},
-		OnConnEnable: func(c network.Conn, b bool) {
+		OnConnStatus: func(c network.Conn, b bool) {
 			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
 		},
 	})
@@ -168,11 +171,9 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	// tcpclose, err := StartTcp(ppk)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer tcpclose()
+
+	gatesvr.NodePublicKey = &ppk.PublicKey
+	gatesvr.ClientPublicKey = &ppk.PublicKey
 
 	wsclose, err := StartWs(ppk)
 	if err != nil {

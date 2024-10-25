@@ -11,14 +11,14 @@ import (
 	"github.com/ajenpan/surf/core/event"
 	log "github.com/ajenpan/surf/core/log"
 
-	innermsg "github.com/ajenpan/surf/msg/innerproto/battle"
+	msgBattle "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle"
 )
 
 type TableOption struct {
 	ID             string
 	EventPublisher event.Publisher
-	Conf           *innermsg.BattleConfigure
+	Conf           *msgBattle.TableConfigure
 	FinishReporter func()
 }
 
@@ -164,14 +164,6 @@ func (d *Table) ReportBattleStatus(s battle.GameStatus) {
 
 	d.beforeStat = d.currStat
 	d.currStat = s
-
-	event := &innermsg.BattleStatusChangeEvent{
-		StatusBefore: int32(d.beforeStat),
-		StatusNow:    int32(s),
-		BattleId:     d.ID,
-	}
-
-	d.PublishEvent(event)
 
 	switch s {
 	case battle.BattleStatus_Idle:

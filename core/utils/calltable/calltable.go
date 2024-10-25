@@ -37,23 +37,22 @@ func (m *CallTable[T]) Range(f func(key T, value *Method) bool) {
 	}
 }
 
-func (m *CallTable[T]) Merge(other *CallTable[T], overWrite bool) int {
-	ret := 0
+func (m *CallTable[T]) Merge(other *CallTable[T], overWrite bool) []T {
 	other.RWMutex.RLock()
 	defer other.RWMutex.RUnlock()
 
 	m.Lock()
 	defer m.Unlock()
-
+	repeatlist := []T{}
 	for k, v := range other.list {
 		_, has := m.list[k]
 		if has && !overWrite {
 			continue
 		}
 		m.list[k] = v
-		ret++
+		repeatlist = append(repeatlist, k)
 	}
-	return ret
+	return repeatlist
 }
 
 func (m *CallTable[T]) Add(name T, method *Method) bool {

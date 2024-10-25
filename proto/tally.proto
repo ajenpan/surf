@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package openproto.tally;
+option go_package = "msg/tally";
+option csharp_namespace = "src.msg.tally";
+
+message UserTally {
+  int64 uid = 1;
+  int32 seatid = 2;
+  int32 result = 3;                    // 计分结果
+  int64 chg_score = 4;                 // 分数变化
+  map<int32, int64> chg_sub_score = 5; // 子分数变化
+  map<string, string> extra_map = 7;   // 额外信息
+};

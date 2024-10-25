@@ -1,0 +1,132 @@
+syntax = "proto3";
+
+package openproto.battle;
+option go_package = "msg/battle";
+option csharp_namespace = "src.msg.battle";
+
+message ReqJoinBattle {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 2001;
+  }
+  string battle_id = 1;
+  uint32 seat_id = 2;
+  int32 ready_state = 3;
+}
+
+message RespJoinBattle {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 2002;
+  }
+  string battle_id = 1;
+  uint32 seat_id = 2;
+  int32 ready_state = 3;
+}
+
+message ReqQuitBattle {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 2003;
+  }
+  string battle_id = 1;
+}
+
+message RespQuitBattle {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 2004;
+  }
+  string battle_id = 1;
+}
+
+message LoigcMsgToClient {
+  enum MSGID {
+    INVALID_MSGID = 0;
+    ID = 2005;
+  }
+  string battle_id = 1;
+  uint32 msgid = 2;
+  bytes data = 3;
+}
+
+message LoigcMsgToServer {
+  enum MSGID {
+    INVALID_MSGID = 0;
+    ID = 2006;
+  }
+  string battle_id = 1;
+  uint32 msgid = 2;
+  bytes data = 3;
+}
+
+// 服务内部协议
+
+message PlayerInfo {
+  uint64 uid = 1;
+  int32 seat_id = 2;
+  int64 score = 3;
+  int32 role = 4;
+}
+
+message TableConfigure {
+  int32 max_game_time = 1; // second
+  bytes game_context = 2;  // 续卓上下文
+}
+
+message ReqStartBattle {
+  enum MSGID {
+    INVALID_MSGID = 0;
+    ID = 1001;
+  }
+  int32 game_id = 1;
+  TableConfigure table_conf = 3;
+  repeated PlayerInfo player_infos = 4;
+  bytes logic_conf = 5;
+  string playid = 6;
+}
+
+message RespStartBattle {
+  enum MSGID {
+    INVALID_MSGID = 0;
+    ID = 1002;
+  }
+  string battle_id = 1;
+  string playid = 2;
+}
+
+message ReqBattleOver {
+  enum MSGID {
+    INVALID_MSGID = 0;
+    ID = 1003;
+  }
+
+  enum State {
+    Finished = 0;  // 完成
+    Disbanded = 1; // 解散
+    Timeover = 2;  // 超时
+  }
+
+  message BattleScore {
+    int64 score = 1;
+    bytes extra = 2;
+  }
+
+  State state = 1;
+  map<int32, BattleScore> tally = 2;
+  bytes extra = 3;
+}
+
+message RespBattleOver {
+  enum MSGID {
+    INVALID_MSGID = 0;
+    ID = 1004;
+  }
+  string battle_id = 1;
+  int32 errcode = 2;
+  string errmsg = 3;
+}
+
+// publish events
+message EventBattleStart {}
+message EventBattleOver {}

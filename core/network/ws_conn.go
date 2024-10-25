@@ -9,6 +9,10 @@ import (
 )
 
 func newWSConn(id string, uinfo auth.User, conn *ws.Conn, rwtimeout time.Duration) *WSConn {
+	if rwtimeout.Seconds() < 1 {
+		rwtimeout = time.Second * 2
+	}
+
 	return &WSConn{
 		User:       uinfo,
 		id:         id,
@@ -145,7 +149,8 @@ func (c *WSConn) writeWork() error {
 
 func (c *WSConn) readWork() error {
 	for {
-		c.imp.SetReadDeadline(time.Now().Add(c.rwtimeout))
+		rdl := time.Now().Add(c.rwtimeout)
+		c.imp.SetReadDeadline(rdl)
 		pk, err := c.readPacket()
 		if err != nil {
 			return err

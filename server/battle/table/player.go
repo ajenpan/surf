@@ -6,18 +6,18 @@ import (
 
 	protobuf "google.golang.org/protobuf/proto"
 
-	innermsg "github.com/ajenpan/surf/msg/innerproto/battle"
+	msgBattle "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle"
 	bf "github.com/ajenpan/surf/server/battle"
 )
 
-func NewPlayer(p *innermsg.PlayerInfo) *Player {
+func NewPlayer(p *msgBattle.PlayerInfo) *Player {
 	return &Player{
-		PlayerInfo: protobuf.Clone(p).(*innermsg.PlayerInfo),
+		PlayerInfo: protobuf.Clone(p).(*msgBattle.PlayerInfo),
 	}
 }
 
-func NewPlayers(infos []*innermsg.PlayerInfo) ([]*Player, error) {
+func NewPlayers(infos []*msgBattle.PlayerInfo) ([]*Player, error) {
 	ret := make([]*Player, len(infos))
 	for i, info := range infos {
 		ret[i] = NewPlayer(info)
@@ -37,7 +37,7 @@ func NewPlayers(infos []*innermsg.PlayerInfo) ([]*Player, error) {
 }
 
 type Player struct {
-	*innermsg.PlayerInfo
+	*msgBattle.PlayerInfo
 	Ready  int32
 	sender func(msgname uint32, raw []byte) error
 	online bool

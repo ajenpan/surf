@@ -1,8 +1,8 @@
 syntax = "proto3";
 
 package openproto.lobby;
-option go_package = "openproto/lobby";
-option csharp_namespace = "src.msg.Lobby";
+option go_package = "msg/lobby";
+option csharp_namespace = "src.msg.lobby";
 
 message UserBaseInfo {
   string nickname = 1;

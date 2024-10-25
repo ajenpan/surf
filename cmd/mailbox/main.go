@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ajenpan/surf/core/log"
-	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
+	msgMailbox "github.com/ajenpan/surf/msg/mailbox"
 	"github.com/ajenpan/surf/server/mailbox"
 )
 
@@ -138,7 +138,7 @@ func parserAdminBearer(r *http.Request) (context.Context, error) {
 }
 
 func httpsvr() error {
-	ct := mailbox.ParseRpcMethod(proto.File_mailbox_proto.Services(), GHandler)
+	ct := mailbox.ParseRpcMethod(msgMailbox.File_mailbox_proto.Services(), GHandler)
 	ct.Range(func(key string, method *mailbox.MessageMethod) bool {
 		key = "/" + key
 		fmt.Println("handle path:", key)

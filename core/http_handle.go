@@ -7,15 +7,17 @@ import (
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/errors"
+	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"google.golang.org/protobuf/proto"
 )
 
 type HttpCallContext struct {
-	w     http.ResponseWriter
-	r     *http.Request
-	core  *Surf
-	uinfo *auth.UserInfo
+	w         http.ResponseWriter
+	r         *http.Request
+	core      *Surf
+	uinfo     *auth.UserInfo
+	marshaler marshal.Marshaler
 }
 
 func (ctx *HttpCallContext) Response(msg proto.Message, err error) {

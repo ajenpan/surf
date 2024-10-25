@@ -12,7 +12,7 @@ import (
 	pb "google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/log"
-	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
+	msgMailbox "github.com/ajenpan/surf/msg/mailbox"
 	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
 
@@ -86,28 +86,21 @@ func (c *UIDChecker) Check(user *User) bool {
 	return false
 }
 
-func PBMail2RecvMail(mailid uint32, info *proto.SendMailRequest) *proto.RecvMailResponse_RecvMailInfo {
-	ret := &proto.RecvMailResponse_RecvMailInfo{
+func PBMail2RecvMail(mailid MailID, info *msgMailbox.ReqSendMail) *msgMailbox.RespRecvMail_RecvMailInfo {
+	ret := &msgMailbox.RespRecvMail_RecvMailInfo{
 		Mailid:     mailid,
 		Title:      info.Title,
 		Content:    info.Content,
 		Attachment: info.Attachment,
-		I18N:       make(map[string]*proto.MailBody),
-	}
-	for k, v := range info.I18N {
-		ret.I18N[k] = &proto.MailBody{
-			Title:   v.Title,
-			Content: v.Content,
-		}
 	}
 	return ret
 }
 
-func MakeCheckerList(raw *proto.MailRecvCond) ([]ReciChecker, error) {
+func MakeCheckerList(raw *msgMailbox.MailRecvCond) ([]ReciChecker, error) {
 	ret := []ReciChecker{}
 	for _, item := range raw.Items {
 		switch item.Type {
-		case proto.MailRecvCond_MailRecvCondItem_NumIDList:
+		case msgMailbox.MailRecvCond_MailRecvCondItem_NumIDList:
 			{
 				checker, err := NewNumIDListChecker(item.Value)
 				if err != nil {
@@ -124,34 +117,25 @@ func NewMailDetail(info *gamedbMod.MailList) (*MailDetail, error) {
 	var err error
 
 	ret := &MailDetail{
-		DBMail: *info,
-		PBRecvMail: proto.RecvMailResponse_RecvMailInfo{
-			I18N: make(map[string]*proto.MailBody),
-		},
+		DBMail:     *info,
+		PBRecvMail: msgMailbox.RespRecvMail_RecvMailInfo{},
 	}
 
 	if err = protojson.Unmarshal(info.MailDetail, &ret.PBMail); err != nil {
 		return nil, err
 	}
 
-	ret.PBRecvMail.Mailid = uint32(info.Mailid)
+	ret.PBRecvMail.Mailid = uint64(info.Mailid)
 	ret.PBRecvMail.Title = ret.PBMail.Title
 	ret.PBRecvMail.Content = ret.PBMail.Content
 	ret.PBRecvMail.Attachment = ret.PBMail.Attachment
 
-	for k, v := range ret.PBMail.I18N {
-		ret.PBRecvMail.I18N[k] = &proto.MailBody{
-			Title:   v.Title,
-			Content: v.Content,
-		}
-	}
-
-	ret.ExpireAt, err = time.ParseInLocation(TimeLayout, ret.PBMail.ExpireAt, time.Local)
+	ret.ExpireAt, err = time.ParseInLocation(TimeLayout, ret.PBMail.MailExpireAt, time.Local)
 	if err != nil {
 		return nil, err
 	}
 
-	ret.EffectAt, err = time.ParseInLocation(TimeLayout, ret.PBMail.EffectAt, time.Local)
+	ret.EffectAt, err = time.ParseInLocation(TimeLayout, ret.PBMail.MailEffectAt, time.Local)
 	if err != nil {
 		return nil, err
 	}
@@ -171,18 +155,18 @@ func NewMailDetail(info *gamedbMod.MailList) (*MailDetail, error) {
 
 type MailDetail struct {
 	DBMail     gamedbMod.MailList
-	PBMail     proto.SendMailRequest
-	PBRecvMail proto.RecvMailResponse_RecvMailInfo
+	PBMail     msgMailbox.ReqSendMail
+	PBRecvMail msgMailbox.RespRecvMail_RecvMailInfo
 	Checkers   []ReciChecker
 	ExpireAt   time.Time
 	EffectAt   time.Time
 	RWLock     sync.RWMutex
 }
 
-func (m *MailDetail) ClonePBMail() *proto.RecvMailResponse_RecvMailInfo {
+func (m *MailDetail) ClonePBMail() *msgMailbox.RespRecvMail_RecvMailInfo {
 	m.RWLock.RLock()
 	defer m.RWLock.RUnlock()
-	return pb.Clone(&m.PBRecvMail).(*proto.RecvMailResponse_RecvMailInfo)
+	return pb.Clone(&m.PBRecvMail).(*msgMailbox.RespRecvMail_RecvMailInfo)
 }
 
 func (m *MailDetail) GetMailID() uint32 {
@@ -215,11 +199,11 @@ func (m *MailDetail) CheckRecv(user *User) bool {
 
 type MailCache struct {
 	rwlock    sync.RWMutex
-	infos     map[uint32]*MailDetail
-	infosKeys []uint32
+	infos     map[MailID]*MailDetail
+	infosKeys []MailID
 }
 
-func (c *MailCache) GetMailDetail(mid uint32) *MailDetail {
+func (c *MailCache) GetMailDetail(mid MailID) *MailDetail {
 	c.rwlock.Lock()
 	defer c.rwlock.Unlock()
 
@@ -238,7 +222,7 @@ func (c *MailCache) Add(details ...*MailDetail) error {
 	defer c.rwlock.Unlock()
 
 	for _, detail := range details {
-		mailid := uint32(detail.DBMail.Mailid)
+		mailid := MailID(detail.DBMail.Mailid)
 		if _, has := c.infos[mailid]; has {
 			err := fmt.Errorf("mail already exist")
 			log.Error(err)
@@ -261,7 +245,7 @@ func (c *MailCache) Add(details ...*MailDetail) error {
 	return nil
 }
 
-func (c *MailCache) RecvNewMail(latestMailid uint32, user *User, limit uint32) []*MailDetail {
+func (c *MailCache) RecvNewMail(latestMailid uint64, user *User, limit uint32) []*MailDetail {
 	if latestMailid >= c.LatestMailID() {
 		return nil
 	}
@@ -302,7 +286,7 @@ func (c *MailCache) RecvNewMail(latestMailid uint32, user *User, limit uint32) [
 	return ret
 }
 
-func (c *MailCache) LatestMailID() uint32 {
+func (c *MailCache) LatestMailID() MailID {
 	c.rwlock.RLock()
 	defer c.rwlock.RUnlock()
 	if len(c.infosKeys) == 0 {

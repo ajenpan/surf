@@ -1,4 +1,4 @@
-package route
+package gate
 
 import (
 	"sync"
@@ -49,6 +49,7 @@ func (g *Group) Size() int {
 	defer g.lock.RUnlock()
 	return g.imp.Size()
 }
+
 func (g *Group) GetAll() []*network.TcpConn {
 	g.lock.RLock()
 	defer g.lock.RUnlock()

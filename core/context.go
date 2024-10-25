@@ -4,10 +4,9 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/errors"
-	"github.com/ajenpan/surf/core/log"
+	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/calltable"
-	"github.com/ajenpan/surf/core/utils/marshal"
 )
 
 type Context interface {
@@ -33,7 +32,7 @@ func (ctx *context) Response(msg proto.Message, herr error) {
 
 	if herr != nil {
 		if err, ok := herr.(*errors.Error); ok {
-			inHead.SetErrCode(int16(err.Code))
+			inHead.SetErrCode(int32(err.Code))
 		} else {
 			inHead.SetErrCode(-1)
 		}

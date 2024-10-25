@@ -12,11 +12,10 @@ import (
 	"time"
 
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/log"
+	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/registry"
 	"github.com/ajenpan/surf/core/utils/calltable"
-	"github.com/ajenpan/surf/core/utils/marshal"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 )
 
@@ -30,10 +29,11 @@ type Options struct {
 	GateToken []byte
 	UInfo     auth.User
 
-	HttpListenAddr string
-	WsListenAddr   string
-	TcpListenAddr  string
-	GateAddrList   []string
+	ControlListenAddr string
+	HttpListenAddr    string
+	WsListenAddr      string
+	TcpListenAddr     string
+	GateAddrList      []string
 
 	CTByName *calltable.CallTable[string]
 	CTById   *calltable.CallTable[uint32]
@@ -49,7 +49,7 @@ func converCalltable(source *calltable.CallTable[uint32]) *calltable.CallTable[s
 	}
 
 	source.Range(func(key uint32, value *calltable.Method) bool {
-		result.Add(value.FuncName, value)
+		result.Add(value.HandleName, value)
 		return true
 	})
 	return result
@@ -123,6 +123,9 @@ func (s *Surf) Start() error {
 		s.startTcpSvr()
 	}
 
+	if len(s.ControlListenAddr) > 1 {
+		// todo:
+	}
 	// quit := make(chan struct{})
 	// s.httpsvr = &network.HttpSvr{
 	// 	Addr:    s.HttpListenAddr,
@@ -135,25 +138,29 @@ func (s *Surf) Start() error {
 }
 
 func (s *Surf) Run() error {
-	for _, addr := range s.GateAddrList {
-		client := network.NewWSClient(network.WSClientOptions{
-			RemoteAddress:  addr,
-			OnConnPacket:   s.onConnPacket,
-			OnConnEnable:   s.onConnStatus,
-			AuthToken:      []byte(s.Options.GateToken),
-			UInfo:          s.Options.UInfo,
-			ReconnectDelay: 3 * time.Second,
-		})
-		client.Start()
-	}
-
 	s.CTById.Range(func(key uint32, value *calltable.Method) bool {
-		log.Infof("handle func,msgid:%d, funcname:%s", key, value.FuncName)
+		log.Infof("handle func,msgid:%d, funcname:%s", key, value.HandleName)
 		return true
 	})
 
 	if err := s.Start(); err != nil {
 		return err
+	}
+	defer s.Close()
+
+	log.Infof("start gate clients:%v", s.GateAddrList)
+
+	for _, addr := range s.GateAddrList {
+		log.Infof("start gate client, addr: %s", addr)
+		client := network.NewWSClient(network.WSClientOptions{
+			RemoteAddress:  addr,
+			OnConnPacket:   s.onConnPacket,
+			OnConnStatus:   s.onConnStatus,
+			AuthToken:      []byte(s.Options.GateToken),
+			UInfo:          s.Options.UInfo,
+			ReconnectDelay: 3 * time.Second,
+		})
+		client.Start()
 	}
 
 	sig := utilSignal.WaitShutdown()
@@ -201,7 +208,7 @@ func (s *Surf) startWsSvr() {
 	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   s.WsListenAddr,
 		OnConnPacket: s.onConnPacket,
-		OnConnEnable: s.onConnStatus,
+		OnConnStatus: s.onConnStatus,
 		OnConnAuth:   s.onConnAuth,
 	})
 	if err != nil {
@@ -219,7 +226,7 @@ func (s *Surf) startTcpSvr() {
 		ListenAddr:       s.TcpListenAddr,
 		HeatbeatInterval: 30 * time.Second,
 		OnConnPacket:     s.onConnPacket,
-		OnConnEnable:     s.onConnStatus,
+		OnConnStatus:     s.onConnStatus,
 		OnConnAuth:       s.onConnAuth,
 	})
 	if err != nil {
@@ -387,9 +394,13 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 		}
 
 		req := method.NewRequest()
+		marshaler := marshal.NewMarshalerByName(r.Header.Get("Content-Type"))
+		if marshaler == nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-		// TODO: select other marshal
-		if err = (&marshal.JSONPb{}).Unmarshal(raw, req); err != nil {
+		if err = marshaler.Unmarshal(raw, req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
 			return
@@ -399,10 +410,11 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 		w.Header().Set("Content-Type", contenttype)
 
 		var ctx Context = &HttpCallContext{
-			w:     w,
-			r:     r,
-			core:  s,
-			uinfo: uinfo,
+			w:         w,
+			r:         r,
+			core:      s,
+			uinfo:     uinfo,
+			marshaler: marshaler,
 		}
 
 		method.Call(s.Server, ctx, req)
@@ -413,7 +425,7 @@ func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		h.onRoutePacket(s, pk)
-	case network.PacketType_NodeInner:
+	case network.PacketType_RouteNode:
 		h.onNodeInnerPacket(s, pk)
 	default:
 	}
@@ -422,14 +434,8 @@ func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
 	return auth.VerifyToken(h.PublicKey, data)
 }
-
 func (h *Surf) onConnStatus(c network.Conn, enable bool) {
-	log.Infof("route onstatus: %v, %v", c.ConnID(), enable)
-}
-
-func (s *Surf) getClientInfo(uid uint32) *auth.UserInfo {
-	// todo
-	return nil
+	log.Infof("connid:%v, uid:%v status:%v", c.ConnID(), c.UserID(), enable)
 }
 
 func (s *Surf) catch() {
@@ -445,12 +451,12 @@ func (s *Surf) onNodeInnerPacket(c network.Conn, pk *network.HVPacket) {
 func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 	defer s.catch()
 
-	head := network.RoutePacketHead(pk.Head)
-
-	clientinfo := s.getClientInfo(head.GetClientId())
-	if clientinfo == nil {
+	if len(pk.Head) != network.RoutePackHeadLen {
+		log.Error("invalid packet head length:", len(pk.Head))
 		return
 	}
+
+	head := network.RoutePacketHead(pk.Head)
 
 	switch pk.Meta.GetSubFlag() {
 	case network.RoutePackType_SubFlag_Async:
@@ -461,20 +467,20 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 			// todo:
 			return
 		}
-
-		// decode msg
+		marshaler := marshal.NewMarshalerById(head.GetMarshalType())
 		req := method.NewRequest()
-		err := s.Marshaler.Unmarshal(pk.GetBody(), req)
+		err := marshaler.Unmarshal(pk.GetBody(), req)
 		if err != nil {
 			// todo:
 			return
 		}
 
 		ctx := &context{
-			Conn:   c,
-			Core:   s,
-			Pk:     pk,
-			caller: head.GetClientId(),
+			Conn:    c,
+			Core:    s,
+			Pk:      pk,
+			caller:  head.GetClientId(),
+			Marshal: marshaler,
 		}
 
 		method.Call(s.Server, ctx, req)
@@ -483,7 +489,12 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 		if cbinfo == nil {
 			return
 		}
-
+		if cbinfo.timeout != nil {
+			cbinfo.timeout.Stop()
+		}
+		if cbinfo.cbfun != nil {
+			cbinfo.cbfun(false, pk)
+		}
 	case network.RoutePackType_SubFlag_RouteErr:
 	default:
 	}

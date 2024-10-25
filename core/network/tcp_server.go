@@ -15,7 +15,7 @@ type TcpServerOptions struct {
 	HeatbeatInterval time.Duration
 
 	OnConnPacket  FuncOnConnPacket
-	OnConnEnable  FuncOnConnEnable
+	OnConnStatus  FuncOnConnStatus
 	OnConnAuth    FuncOnConnAuth
 	OnConnAccpect func(net.Conn) bool
 }
@@ -108,6 +108,11 @@ func (s *TcpServer) onAccept(c net.Conn) {
 
 	conn.status = Connected
 
+	if s.opts.OnConnStatus != nil {
+		s.opts.OnConnStatus(conn, true)
+		defer s.opts.OnConnStatus(conn, false)
+	}
+
 	// the connection is established here
 	go func() {
 		defer conn.Close()
@@ -118,11 +123,6 @@ func (s *TcpServer) onAccept(c net.Conn) {
 		defer conn.Close()
 		conn.readWork()
 	}()
-
-	if s.opts.OnConnEnable != nil {
-		s.opts.OnConnEnable(conn, true)
-		defer s.opts.OnConnEnable(conn, false)
-	}
 
 	for {
 		select {

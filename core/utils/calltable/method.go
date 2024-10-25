@@ -6,8 +6,8 @@ import (
 )
 
 type Method struct {
-	Func     reflect.Value
-	FuncName string
+	HandleName string
+	Func       reflect.Value
 
 	RequestType  reflect.Type
 	ResponseType reflect.Type

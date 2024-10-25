@@ -2,9 +2,9 @@ package network
 
 import "encoding/binary"
 
-// | client | nodeid | msgid | syn | svrtype | errcode | body |
-// | 4      | 4      | 4     | 4   | 2       | 2       | n    |
-const RoutePackHeadLen = 4 + 2 + 4 + 4 + 4 + 2 // 20
+// | client | nodeid | msgid | syn | svrtype | marshal |errcode | body |
+// | 4      | 4      | 4     | 4   | 2       | 2      |4       | n    |
+const RoutePackHeadLen = 4 + 4 + 4 + 4 + 2 + 2 + 4 // 24
 
 type RoutePackType = uint8
 
@@ -69,9 +69,11 @@ func (r RoutePacketHead) GetSYN() uint32 {
 func (r RoutePacketHead) GetSvrType() uint16 {
 	return binary.LittleEndian.Uint16(r[16:18])
 }
-
-func (r RoutePacketHead) GetErrCode() int16 {
-	return (int16)(binary.LittleEndian.Uint16(r[18:20]))
+func (r RoutePacketHead) GetMarshalType() int16 {
+	return int16(binary.LittleEndian.Uint16(r[18:20]))
+}
+func (r RoutePacketHead) GetErrCode() int32 {
+	return int32(binary.LittleEndian.Uint32(r[20:24]))
 }
 
 func (r RoutePacketHead) GetHead() []byte {
@@ -102,8 +104,12 @@ func (r RoutePacketHead) SetSvrType(d uint16) {
 	binary.LittleEndian.PutUint16(r[16:18], d)
 }
 
-func (r RoutePacketHead) SetErrCode(d int16) {
+func (r RoutePacketHead) SetMarshalType(d int16) {
 	binary.LittleEndian.PutUint16(r[18:20], uint16(d))
+}
+
+func (r RoutePacketHead) SetErrCode(d int32) {
+	binary.LittleEndian.PutUint32(r[20:24], uint32(d))
 }
 
 func (r RoutePacketHead) GenHVPacket(subflag uint8) *HVPacket {

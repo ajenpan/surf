@@ -16,7 +16,7 @@ type TcpClientOptions struct {
 	HeatbeatInterval time.Duration
 
 	OnConnPacket   FuncOnConnPacket
-	OnConnEnable   FuncOnConnEnable
+	OnConnStatus   FuncOnConnStatus
 	AuthToken      []byte
 	UInfo          auth.User
 	ReconnectDelay time.Duration
@@ -40,14 +40,12 @@ type TcpClient struct {
 	closed chan struct{}
 }
 
-func (c *TcpClient) onConnEnable(enable bool) {
-	if c.opts.OnConnEnable != nil {
-		c.opts.OnConnEnable(c, enable)
+func (c *TcpClient) onConnStatus(enable bool) {
+	if c.opts.OnConnStatus != nil {
+		c.opts.OnConnStatus(c, enable)
 	}
-	if c.opts.ReconnectDelay > 0 {
-		time.AfterFunc(time.Second*c.opts.ReconnectDelay, func() {
-
-		})
+	if !enable && c.opts.ReconnectDelay > 0 {
+		c.reconnect()
 	}
 }
 
@@ -79,12 +77,11 @@ func (c *TcpClient) work(conn *TcpConn) error {
 	defer c.mutex.Unlock()
 	defer conn.imp.Close()
 
-	tk := time.NewTicker(c.opts.HeatbeatInterval / 2)
-	defer tk.Stop()
-	defer c.onConnEnable(false)
-
 	c.TcpConn = conn
 	defer conn.Close()
+
+	c.onConnStatus(true)
+	defer c.onConnStatus(false)
 
 	go func() {
 		defer conn.Close()
@@ -96,7 +93,13 @@ func (c *TcpClient) work(conn *TcpConn) error {
 		conn.readWork()
 	}()
 
-	c.onConnEnable(true)
+	tki := time.Duration(c.opts.HeatbeatInterval.Seconds()/3) * time.Second
+	if tki < time.Second*2 {
+		tki = time.Second * 2
+	}
+
+	tk := time.NewTicker(tki)
+	defer tk.Stop()
 
 	for {
 		select {
@@ -107,7 +110,7 @@ func (c *TcpClient) work(conn *TcpConn) error {
 		case now := <-tk.C:
 			lastSendAt := atomic.LoadInt64(&conn.lastSendAt)
 			unix := now.UnixMilli()
-			if unix-lastSendAt >= int64(c.opts.HeatbeatInterval.Milliseconds()) {
+			if unix-lastSendAt >= int64(c.opts.HeatbeatInterval.Milliseconds())/2 {
 				pk := NewHVPacket()
 				pk.Meta.SetType(PacketType_Inner)
 				pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
