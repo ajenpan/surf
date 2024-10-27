@@ -69,6 +69,10 @@ func (p *Player) Role() bf.RoleType {
 }
 
 func (p *Player) Send(msgid uint32, raw []byte) error {
+	if p.sender == nil {
+		// return fmt.Errorf("sender is nil")
+		return nil
+	}
 	return p.sender(msgid, raw)
 }
 

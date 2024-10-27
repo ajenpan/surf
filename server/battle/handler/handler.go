@@ -9,7 +9,6 @@ import (
 	"github.com/ajenpan/surf/core/errors"
 	"github.com/ajenpan/surf/core/event"
 	log "github.com/ajenpan/surf/core/log"
-	"github.com/ajenpan/surf/core/network"
 	battlemsg "github.com/ajenpan/surf/msg/battle"
 
 	"github.com/ajenpan/surf/server/battle"
@@ -26,7 +25,6 @@ func New() *Battle {
 	h := &Battle{
 		LogicCreator: battle.LogicCreator,
 	}
-
 	return h
 }
 
@@ -67,7 +65,7 @@ func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle
 		},
 	})
 
-	err = d.Init(logic, players, in.LogicConf)
+	err = d.Init(logic, players, in.GameConf)
 	if err != nil {
 		return
 	}
@@ -87,9 +85,9 @@ func (h *Battle) onBattleFinished(battleid string) {
 		h.UIDUnBindBattleID(uint64(p.Uid), battleid)
 		return true
 	})
-
-	d.Close()
 	h.tables.Delete(battleid)
+	d.Close()
+	log.Infof("battle %s finished", battleid)
 }
 
 func (h *Battle) UIDBindBattleID(uid uint64, bid string) error {
@@ -98,10 +96,10 @@ func (h *Battle) UIDBindBattleID(uid uint64, bid string) error {
 }
 
 func (h *Battle) UIDUnBindBattleID(uid uint64, bid string) {
-
+	// TODO:
 }
 
-func (h *Battle) LoadBattleByUID(uid uint64) map[string]table.Table {
+func (h *Battle) LoadBattleByUID(uid uint64) map[string]*table.Table {
 	// TODO:
 	return nil
 }
@@ -124,82 +122,44 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 
 	d.OnPlayerConn(uint64(ctx.Caller()), true)
 
-	ctx.Response(out, nil)
+	ctx.Response(out, err)
 
-	// TODO:
 	// 是否需要保持 uid - battleid 映射?
 	// 1 uid -> n * battleid.
 	// 当uid掉线时, 需要遍历所有的battleid, 并且通知battleid.
-	// h.UIDBingBID(socket.Uid, in.BattleId)
-	// return out, nil
+	h.UIDBindBattleID(uint64(ctx.Caller()), in.BattleId)
+}
+
+func (h *Battle) OnPlayerDisConn(uid uint64) {
+	log.Info("OnPlayerDisConn:", uid)
+
+	tables := h.LoadBattleByUID(uid)
+	for _, t := range tables {
+		t.OnPlayerConn(uid, false)
+	}
 }
 
 func (h *Battle) OnReqQuitBattle(ctx core.Context, in *battlemsg.ReqQuitBattle) {
 	resp := &battlemsg.RespQuitBattle{
 		BattleId: in.BattleId,
 	}
+	uid := ctx.Caller()
+	h.UIDUnBindBattleID(uint64(uid), in.BattleId)
 	ctx.Response(resp, nil)
 }
 
-// func (h *Battle) OnBattleMessageWrap(s *tcp.Socket, msg *proto.LoigcMessageWrap) {
-// 	b := h.getBattleById(msg.BattleId)
-// 	if b == nil {
-// 		return
-// 	}
-// 	b.OnPlayerMessage(s.Uid, (msg.Msgid), msg.Data)
-// }
+func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *battlemsg.BattleMsgToServer) {
+	d := h.getBattleById(in.BattleId)
+	if d == nil {
+		log.Warnf("battle %s not found", in.BattleId)
+		return
+	}
+	d.OnPlayerMessage(uint64(ctx.Caller()), in.Msgid, in.Data)
+}
 
 func (h *Battle) getBattleById(battleId string) *table.Table {
 	if raw, ok := h.tables.Load(battleId); ok {
 		return raw.(*table.Table)
 	}
 	return nil
-}
-
-func (h *Battle) OnConn(s network.Conn, online bool) {
-
-	log.Info("OnConn:", online)
-
-	// tables := h.LoadBattleByUID(s.Uid)
-	// for _, t := range tables {
-	// 	t.OnPlayerConn(s.Uid, online)
-	// }
-}
-
-func (h *Battle) OnMessage(s network.Conn, ss *network.HVPacket) {
-	// ctype := ss.GetType()
-
-	// if ctype == 6 {
-	// 	head := ss.GetHead()
-
-	// 	msgid := binary.LittleEndian.Uint32(head)
-	// 	method := h.ct.Get(msgid)
-	// 	if method == nil {
-	// 		return
-	// 	}
-
-	// 	req := method.GetRequest()
-	// 	defer method.PutRequest(req)
-
-	// 	body := ss.GetBody()
-	// 	err := h.marshal.Unmarshal(body, req)
-	// 	if err != nil {
-	// 		log.Errorf("marshal msgid:%d,error:%w", msgid, err)
-	// 		return
-	// 	}
-
-	// 	ctx := WithTcpSocket(context.Background(), s)
-	// 	res := method.Call(ctx, req)
-	// 	if len(res) == 0 {
-	// 		return
-	// 	}
-	// 	if res[0].IsNil() {
-	// 		return
-	// 	}
-	// 	err, ok := res[0].Interface().(error)
-	// 	if ok && err != nil {
-	// 		log.Errorf("call msgid:%d,error:%w", msgid, err)
-	// 		return
-	// 	}
-	// }
 }

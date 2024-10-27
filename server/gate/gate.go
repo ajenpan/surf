@@ -174,14 +174,14 @@ func (gate *Gate) onServerOffline(s network.Conn) {
 	gate.PublishEvent("NodeOffline", map[string]any{
 		"sid":    s.ConnID(),
 		"uid":    s.UserID(),
-		"enable": true,
+		"enable": false,
 	})
 }
 
 func (gate *Gate) onUserOnline(s network.Conn) {
 	ud := NewConnUserData()
 	s.SetUserData(ud)
-	gate.PublishEvent("ConnEnable", map[string]any{
+	gate.PublishEvent("UserOnline", map[string]any{
 		"sid":    s.ConnID(),
 		"uid":    s.UserID(),
 		"enable": true,
@@ -189,7 +189,7 @@ func (gate *Gate) onUserOnline(s network.Conn) {
 }
 
 func (gate *Gate) onUserOffline(s network.Conn) {
-	gate.PublishEvent("ConnEnable", map[string]any{
+	gate.PublishEvent("UserOffline", map[string]any{
 		"sid":    s.ConnID(),
 		"uid":    s.UserID(),
 		"enable": false,

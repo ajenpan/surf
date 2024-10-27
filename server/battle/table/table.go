@@ -33,6 +33,9 @@ func NewTable(opt TableOption) *Table {
 		quit:        make(chan bool),
 		currStat:    battle.BattleStatus_Idle,
 		beforeStat:  battle.BattleStatus_Idle,
+		Logger: log.Default.WithFields(map[string]interface{}{
+			"battle": opt.ID,
+		}),
 	}
 
 	ret.actQue = make(chan func(), 10)
@@ -52,6 +55,7 @@ const (
 
 type Table struct {
 	*TableOption
+	log.Logger
 
 	CreateAt time.Time
 	StartAt  time.Time
@@ -70,6 +74,9 @@ type Table struct {
 	Players PlayerStore
 }
 
+func (d *Table) BattleID() string {
+	return d.ID
+}
 func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{}) error {
 	d.rwlock.Lock()
 	defer d.rwlock.Unlock()
@@ -85,7 +92,12 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{
 		iplayers = append(iplayers, p)
 	}
 
-	if err := logic.OnInit(d, iplayers, logicConf); err != nil {
+	if err := logic.OnInit(battle.LogicOpts{
+		Table:   d,
+		Players: iplayers,
+		Conf:    logicConf,
+		Logger:  d.Logger,
+	}); err != nil {
 		return err
 	}
 
@@ -95,7 +107,7 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{
 		safecall := func(f func()) {
 			defer func() {
 				if err := recover(); err != nil {
-					log.Errorf("panic: %v", err)
+					d.Errorf("panic: %v", err)
 				}
 			}()
 			f()
@@ -110,7 +122,13 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{
 
 		for {
 			select {
-			case f := <-d.actQue:
+			case f, ok := <-d.actQue:
+				if !ok {
+					return
+				}
+				if f == nil {
+					continue
+				}
 				safecall(f)
 			case now := <-tk.C:
 				sub := now.Sub(latest)
@@ -130,7 +148,6 @@ func (d *Table) Do(f func()) {
 }
 
 func (d *Table) AfterFunc(td time.Duration, f func()) {
-	//TODO: upgrade this function perfermance
 	time.AfterFunc(td, func() {
 		d.Do(f)
 	})
@@ -175,6 +192,7 @@ func (d *Table) ReportBattleStatus(s battle.GameStatus) {
 		d.updateStatus(TableStatus_Finished)
 
 		d.AfterFunc(5*time.Second, func() {
+			d.Infof("report battle finished")
 			d.FinishReporter()
 		})
 	}
@@ -186,30 +204,29 @@ func (d *Table) ReportBattleEvent(topic string, event proto.Message) {
 
 func (d *Table) SendMessageToPlayer(p battle.Player, msgid uint32, msg proto.Message) {
 	rp := p.(*Player)
-
 	raw, err := proto.Marshal(msg)
 	if err != nil {
-		log.Error(err)
+		d.Error(err)
 		return
 	}
 
 	err = rp.Send(msgid, raw)
 	if err != nil {
-		log.Errorf("send message to player: %v, %s: %v", rp.Uid, string(proto.MessageName(msg)), msg)
+		d.Errorf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
 	} else {
-		log.Debugf("send message to player: %v, %s: %v", rp.Uid, string(proto.MessageName(msg)), msg)
+		d.Debugf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
 	}
 }
 
 func (d *Table) BroadcastMessage(msgid uint32, msg proto.Message) {
-	msgname := string(proto.MessageName(msg))
-	log.Debugf("BroadcastMessage: %s: %v", msgname, msg)
 
 	raw, err := proto.Marshal(msg)
 	if err != nil {
 		log.Error(err)
 		return
 	}
+
+	d.Debugf("Broadcast msgname:%s,msg:%v", string(proto.MessageName(msg)), msg)
 
 	d.Players.Range(func(p *Player) bool {
 		err := p.Send(msgid, raw)
@@ -237,11 +254,11 @@ func (d *Table) PublishEvent(eventmsg proto.Message) {
 		return
 	}
 
-	log.Infof("PublishEvent: %s: %v", string(proto.MessageName(eventmsg)), eventmsg)
+	d.Infof("PublishEvent msgname:%s,msg:%v", string(proto.MessageName(eventmsg)), eventmsg)
 
 	raw, err := proto.Marshal(eventmsg)
 	if err != nil {
-		log.Error(err)
+		d.Error(err)
 		return
 	}
 	warp := &event.Event{
@@ -321,14 +338,14 @@ func (d *Table) Start() {
 // 	})
 // }
 
-func (d *Table) OnPlayerConn(uid uint64, online bool) {
+func (d *Table) OnPlayerConn(uid uint64, enable bool) {
 	d.Do(func() {
 		p := d.Players.ByUID(uid)
 		if p == nil {
 			return
 		}
 
-		p.online = online
-		d.logic.OnPlayerConnStatus(p, online)
+		p.online = enable
+		d.logic.OnPlayerConnStatus(p, p.online)
 	})
 }

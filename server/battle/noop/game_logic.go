@@ -13,7 +13,7 @@ func NewGameLogic() battle.Logic {
 type NoopLogic struct {
 }
 
-func (gl *NoopLogic) OnInit(battle.Table, []battle.Player, interface{}) error {
+func (gl *NoopLogic) OnInit(opts battle.LogicOpts) error {
 	return nil
 }
 func (gl *NoopLogic) OnPlayerJoin(p []battle.Player) error {

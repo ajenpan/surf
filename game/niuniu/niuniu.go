@@ -7,10 +7,10 @@ import (
 	"time"
 
 	nncard "github.com/ajenpan/poker_algorithm/niuniu"
-	"github.com/sirupsen/logrus"
 	protobuf "google.golang.org/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 
+	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/server/battle"
 )
@@ -24,7 +24,7 @@ func CreateNiuniu() *Niuniu {
 		players: make(map[int32]*NNPlayer),
 		info:    &GameInfo{},
 		conf:    &Config{},
-		log:     logrus.New(),
+		Logger:  logger.Default.WithFields(map[string]interface{}{"game": "niuniu"}),
 	}
 	return ret
 }
@@ -72,9 +72,10 @@ func ParseConfig(raw []byte) (*Config, error) {
 }
 
 type Niuniu struct {
+	logger.Logger
+
 	table battle.Table
 	conf  *Config
-	log   *logrus.Logger
 
 	info    *GameInfo
 	players map[int32]*NNPlayer // seatid to player
@@ -86,11 +87,11 @@ type Niuniu struct {
 }
 
 func (nn *Niuniu) BroadcastMessage(msg protobuf.Message) {
-
+	nn.table.BroadcastMessage(GetMessageMsgID(msg.ProtoReflect().Descriptor()), msg)
 }
 
 func (nn *Niuniu) Send2Player(p battle.Player, msg protobuf.Message) {
-
+	nn.table.SendMessageToPlayer(p, GetMessageMsgID(msg.ProtoReflect().Descriptor()), msg)
 }
 
 func (nn *Niuniu) OnPlayerConnStatus(player battle.Player, enable bool) {
@@ -102,17 +103,22 @@ func (nn *Niuniu) OnPlayerConnStatus(player battle.Player, enable bool) {
 	}
 }
 
-func (nn *Niuniu) OnInit(d battle.Table, players []battle.Player, conf interface{}) error {
-	if len(players) < 2 {
+func (nn *Niuniu) OnInit(opts battle.LogicOpts) error {
+	if len(opts.Players) < 2 {
 		return fmt.Errorf("player is not enrough")
 	}
-	for _, v := range players {
+
+	if opts.Logger != nil {
+		nn.Logger = opts.Logger
+	}
+
+	for _, v := range opts.Players {
 		if _, err := nn.addPlayer(v); err != nil {
 			return err
 		}
 	}
 
-	switch v := conf.(type) {
+	switch v := opts.Conf.(type) {
 	case []byte:
 		var err error
 		nn.conf, err = ParseConfig(v)
@@ -124,7 +130,7 @@ func (nn *Niuniu) OnInit(d battle.Table, players []battle.Player, conf interface
 	default:
 		return fmt.Errorf("unknow config type ")
 	}
-	nn.table = d
+	nn.table = opts.Table
 	nn.info = &GameInfo{
 		Status: GameStep_COUNTDOWN,
 	}
@@ -148,7 +154,7 @@ func (nn *Niuniu) OnCommand(topic string, data []byte) {
 }
 
 func (nn *Niuniu) OnPlayerMessage(p battle.Player, msgid uint32, raw []byte) {
-	nn.log.Infof("recv msgid:%d", msgid)
+	nn.Infof("recv msgid:%d", msgid)
 }
 
 func (nn *Niuniu) OnEvent(topic string, event protobuf.Message) {
@@ -187,7 +193,7 @@ func (nn *Niuniu) OnPlayerBankerRequest(nnPlayer *NNPlayer, req *PlayerBanker) {
 func (nn *Niuniu) OnPlayerBetRateRequest(p battle.Player, pMsg *PlayerBetRate) {
 	nnPlayer := nn.playerConv(p)
 	if nnPlayer == nil {
-		nn.log.Infof("can't find player uid :%d", p.SeatID())
+		nn.Infof("can't find player uid :%d", p.SeatID())
 		return
 	}
 
@@ -209,7 +215,7 @@ func (nn *Niuniu) OnPlayerOutCardRequest(p battle.Player, pMsg *PlayerOutCard) {
 	nnPlayer := nn.playerConv(p)
 
 	if nnPlayer == nil {
-		nn.log.Errorf("OnPlayerOutCardRequest player is nil")
+		nn.Errorf("OnPlayerOutCardRequest player is nil")
 		return
 	}
 
@@ -335,15 +341,15 @@ func (nn *Niuniu) ChangeLogicStep(s GameStep) {
 
 	donwtime := nn.getStageDowntime(s).Seconds()
 
-	nn.log.Infof("game step changed, before:%v, now:%v ", lastStatus, s)
+	nn.Infof("game step changed, before:%v, now:%v", lastStatus, s)
 
 	if lastStatus == s {
-		nn.log.Errorf("set same step before:%v, now:%v", lastStatus, s)
+		nn.Errorf("set same step before:%v, now:%v", lastStatus, s)
 	}
 
 	if lastStatus != GameStep_OVER {
 		if lastStatus > s {
-			nn.log.Errorf("last step is bigger than now before:%v, now:%v", lastStatus, s)
+			nn.Errorf("last step is bigger than now before:%v, now:%v", lastStatus, s)
 		}
 	}
 
@@ -353,8 +359,6 @@ func (nn *Niuniu) ChangeLogicStep(s GameStep) {
 	}
 
 	nn.BroadcastMessage(notice)
-
-	nn.Debug()
 }
 
 func (nn *Niuniu) playerConv(p battle.Player) *NNPlayer {
@@ -411,7 +415,7 @@ func (nn *Niuniu) notifyRobBanker() {
 	}
 
 	if len(seats) == 0 {
-		nn.log.Errorf("选庄错误 maxrob:%d", maxRob)
+		nn.Errorf("选庄错误 maxrob:%d", maxRob)
 	}
 
 	index := rand.Intn(len(seats))
@@ -419,7 +423,7 @@ func (nn *Niuniu) notifyRobBanker() {
 	banker, ok := nn.players[int32(bankSeatId)]
 
 	if !ok {
-		nn.log.Errorf("banker seatid error. seatid:%d,index:%d", bankSeatId, index)
+		nn.Errorf("banker seatid error. seatid:%d,index:%d", bankSeatId, index)
 		return
 	}
 
@@ -464,7 +468,7 @@ func (nn *Niuniu) beginTally() {
 		}
 	}
 	if banker == nil {
-		nn.log.Errorf("bank is nil")
+		nn.Errorf("bank is nil")
 		return
 	}
 
@@ -512,7 +516,6 @@ func (nn *Niuniu) resetDesk() {
 	nn.ChangeLogicStep(GameStep_IDLE)
 }
 
-func (nn *Niuniu) Debug() {
-	// nn.log.Debug(nn.info.String())
-	fmt.Println(nn.info.String())
+func (nn *Niuniu) PrintDebufInfo() {
+	nn.Debug(nn.info.String())
 }

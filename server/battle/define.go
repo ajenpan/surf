@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
+
+	"github.com/ajenpan/surf/core/log"
 )
 
 type SeatID int32
@@ -30,6 +32,8 @@ type Player interface {
 }
 
 type Table interface {
+	BattleID() string
+
 	SendMessageToPlayer(p Player, msgid uint32, data proto.Message)
 
 	BroadcastMessage(msgid uint32, data proto.Message)
@@ -40,8 +44,15 @@ type Table interface {
 	AfterFunc(time.Duration, func())
 }
 
+type LogicOpts struct {
+	Table   Table
+	Players []Player
+	Conf    interface{}
+	Logger  log.Logger
+}
+
 type Logic interface {
-	OnInit(c Table, players []Player, conf interface{}) error
+	OnInit(opts LogicOpts) error
 	OnTick(df time.Duration)
 	OnReset()
 	OnPlayerConnStatus(p Player, enable bool)

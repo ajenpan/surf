@@ -2,23 +2,12 @@ package log
 
 import (
 	"github.com/sirupsen/logrus"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var Default *logrus.Logger
 
 func init() {
 	Default = logrus.New()
-	output := &lumberjack.Logger{
-		Filename:   "./logs/log.txt",
-		MaxSize:    50, // megabytes
-		MaxBackups: 3,
-		MaxAge:     1,     // days
-		Compress:   false, // disabled by default
-		LocalTime:  true,
-	}
-
-	Default.SetOutput(output)
 	Default.SetLevel(logrus.DebugLevel)
 }
 

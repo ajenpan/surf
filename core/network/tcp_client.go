@@ -34,7 +34,7 @@ func NewTcpClient(opts TcpClientOptions) *TcpClient {
 }
 
 type TcpClient struct {
-	*TcpConn
+	tconn  *TcpConn
 	opts   TcpClientOptions
 	mutex  sync.RWMutex
 	closed chan struct{}
@@ -42,7 +42,7 @@ type TcpClient struct {
 
 func (c *TcpClient) onConnStatus(enable bool) {
 	if c.opts.OnConnStatus != nil {
-		c.opts.OnConnStatus(c, enable)
+		c.opts.OnConnStatus(c.tconn, enable)
 	}
 	if !enable && c.opts.ReconnectDelay > 0 {
 		c.reconnect()
@@ -59,7 +59,7 @@ func (c *TcpClient) reconnect() {
 
 func (c *TcpClient) connect() error {
 	var err error
-	connraw, err := net.DialTimeout("tcp", c.opts.RemoteAddress, c.opts.HeatbeatInterval/2)
+	connraw, err := net.DialTimeout("tcp", c.opts.RemoteAddress, c.opts.HeatbeatInterval)
 	if err != nil {
 		c.reconnect()
 		return err
@@ -77,9 +77,8 @@ func (c *TcpClient) work(conn *TcpConn) error {
 	defer c.mutex.Unlock()
 	defer conn.imp.Close()
 
-	c.TcpConn = conn
-	defer conn.Close()
-
+	c.tconn = conn
+	conn.status = Connected
 	c.onConnStatus(true)
 	defer c.onConnStatus(false)
 
@@ -109,8 +108,17 @@ func (c *TcpClient) work(conn *TcpConn) error {
 			return nil
 		case now := <-tk.C:
 			lastSendAt := atomic.LoadInt64(&conn.lastSendAt)
+			lastRecvAt := atomic.LoadInt64(&conn.lastRecvAt)
 			unix := now.UnixMilli()
-			if unix-lastSendAt >= int64(c.opts.HeatbeatInterval.Milliseconds())/2 {
+
+			dc := int64(0)
+			if lastSendAt < lastRecvAt {
+				dc = unix - lastSendAt
+			} else {
+				dc = unix - lastRecvAt
+			}
+
+			if dc >= int64(c.opts.HeatbeatInterval.Milliseconds())/2 {
 				pk := NewHVPacket()
 				pk.Meta.SetType(PacketType_Inner)
 				pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
@@ -225,13 +233,11 @@ func (c *TcpClient) Close() error {
 	select {
 	case <-c.closed:
 	default:
-
 		close(c.closed)
-
-		if c.TcpConn != nil {
-			c.TcpConn.Close()
+		if c.tconn != nil {
+			c.tconn.Close()
+			c.tconn = nil
 		}
-
 		c.opts.ReconnectDelay = -1
 	}
 	return nil

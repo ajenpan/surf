@@ -17,6 +17,7 @@ import (
 type WSClientOptions struct {
 	RemoteAddress    string
 	HeatbeatInterval time.Duration
+	RWTimeout        time.Duration
 
 	OnConnPacket   FuncOnConnPacket
 	OnConnStatus   FuncOnConnStatus
@@ -39,7 +40,7 @@ func NewWSClient(opts WSClientOptions) *WSClient {
 }
 
 type WSClient struct {
-	*WSConn
+	wconn  *WSConn
 	opts   WSClientOptions
 	mutex  sync.RWMutex
 	closed chan struct{}
@@ -61,8 +62,8 @@ func (c *WSClient) Close() error {
 	default:
 		close(c.closed)
 		c.opts.ReconnectDelay = -1
-		if c.WSConn != nil {
-			return c.WSConn.Close()
+		if c.wconn != nil {
+			return c.wconn.Close()
 		}
 	}
 	return nil
@@ -70,7 +71,7 @@ func (c *WSClient) Close() error {
 
 func (c *WSClient) onConnStatus(enable bool) {
 	if c.opts.OnConnStatus != nil {
-		c.opts.OnConnStatus(c, enable)
+		c.opts.OnConnStatus(c.wconn, enable)
 	}
 	if !enable {
 		c.reconnect()
@@ -112,20 +113,11 @@ func (c *WSClient) work(conn *WSConn) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
+	conn.status = Connected
+	c.wconn = conn
+
 	c.onConnStatus(true)
 	defer c.onConnStatus(false)
-
-	tki := time.Duration(c.opts.HeatbeatInterval.Seconds()/3) * time.Second
-	if tki < time.Second*2 {
-		tki = time.Second * 2
-	}
-
-	tk := time.NewTicker(tki)
-	defer tk.Stop()
-
-	conn.status = Connected
-	c.WSConn = conn
-	defer conn.Close()
 
 	go func() {
 		defer conn.Close()
@@ -139,6 +131,14 @@ func (c *WSClient) work(conn *WSConn) error {
 			log.Errorf("readWork err: %v", err)
 		}
 	}()
+
+	tki := time.Duration(c.opts.HeatbeatInterval.Seconds()/3) * time.Second
+	if tki < time.Second*2 {
+		tki = time.Second * 2
+	}
+	ck := int64(c.opts.HeatbeatInterval.Milliseconds())
+	tk := time.NewTicker(tki)
+	defer tk.Stop()
 
 	for {
 		select {
@@ -158,20 +158,17 @@ func (c *WSClient) work(conn *WSConn) error {
 				ds = unix - lastSendAt
 			}
 
-			if ds >= int64(c.opts.HeatbeatInterval.Milliseconds())/2 {
+			if ds >= ck {
 				pk := NewHVPacket()
 				pk.Meta.SetType(PacketType_Inner)
 				pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
-
 				head := make([]byte, 8)
-				binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
 				pk.SetHead(head)
-
+				binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
 				conn.Send(pk)
-
-				log.Infof("send Heartbeat")
+				// log.Infof("send Heartbeat")
 			} else {
-				log.Infof("pass heartbeat ds:%d, sendat:%d, recvAt:%d, now:%s", ds, lastSendAt, lastRecvAt, now.Format(time.StampMicro))
+				// log.Infof("pass heartbeat ds:%d, sendat:%d, recvAt:%d, now:%s", ds, lastSendAt, lastRecvAt, now.Format(time.StampMicro))
 			}
 		case packet, ok := <-conn.chRead:
 			if !ok {
@@ -185,8 +182,7 @@ func (c *WSClient) work(conn *WSConn) error {
 					svrtime := (int64)(binary.LittleEndian.Uint64(packet.GetBody()))
 					fix := now - (svrtime - (now-sendat)/2)
 					atomic.StoreInt64(&c.timefix, fix)
-
-					log.Infof("recv Heartbeat")
+					// log.Infof("recv Heartbeat %v", fix)
 				default:
 					return nil
 				}

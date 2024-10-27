@@ -3,7 +3,7 @@ package network
 import "encoding/binary"
 
 // | client | nodeid | msgid | syn | svrtype | marshal |errcode | body |
-// | 4      | 4      | 4     | 4   | 2       | 2      |4       | n    |
+// | 4      | 4      | 4     | 4   | 2       | 2       |4       | n    |
 const RoutePackHeadLen = 4 + 4 + 4 + 4 + 2 + 2 + 4 // 24
 
 type RoutePackType = uint8

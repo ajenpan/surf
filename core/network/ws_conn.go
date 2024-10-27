@@ -22,8 +22,8 @@ func newWSConn(id string, uinfo auth.User, conn *ws.Conn, rwtimeout time.Duratio
 		chClosed:   make(chan struct{}),
 		chWrite:    make(chan *HVPacket, 10),
 		chRead:     make(chan *HVPacket, 10),
-		lastSendAt: time.Now().Unix(),
-		lastRecvAt: time.Now().Unix(),
+		lastSendAt: time.Now().UnixMilli(),
+		lastRecvAt: time.Now().UnixMilli(),
 	}
 }
 

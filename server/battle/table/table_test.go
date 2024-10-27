@@ -36,7 +36,11 @@ func TestTableTicker(t *testing.T) {
 		Conf: &msgBattle.TableConfigure{},
 	})
 
-	if err := logic.OnInit(d, []battle.Player{}, nil); err != nil {
+	if err := logic.OnInit(battle.LogicOpts{
+		Table:   d,
+		Players: []battle.Player{},
+		Conf:    nil,
+	}); err != nil {
 		t.Fatal(err)
 	}
 	d.Init(logic, nil, nil)

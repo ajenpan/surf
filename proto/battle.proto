@@ -40,7 +40,7 @@ message RespQuitBattle {
   string battle_id = 1;
 }
 
-message LoigcMsgToClient {
+message BattleMsgToClient {
   enum MSGID {
     INVALID_MSGID = 0;
     ID = 2005;
@@ -50,7 +50,7 @@ message LoigcMsgToClient {
   bytes data = 3;
 }
 
-message LoigcMsgToServer {
+message BattleMsgToServer {
   enum MSGID {
     INVALID_MSGID = 0;
     ID = 2006;
@@ -79,11 +79,12 @@ message ReqStartBattle {
     INVALID_MSGID = 0;
     ID = 1001;
   }
-  int32 game_id = 1;
-  TableConfigure table_conf = 3;
-  repeated PlayerInfo player_infos = 4;
-  bytes logic_conf = 5;
-  string playid = 6;
+  // int32 game_id = 1;
+  string game_name = 2;
+  bytes game_conf = 3;
+  TableConfigure table_conf = 5;
+  repeated PlayerInfo player_infos = 6;
+  string playid = 7;
 }
 
 message RespStartBattle {
