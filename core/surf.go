@@ -476,11 +476,11 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 		}
 
 		ctx := &context{
-			Conn:    c,
-			Core:    s,
-			Pk:      pk,
-			caller:  head.GetClientId(),
-			Marshal: marshaler,
+			Conn:      c,
+			Core:      s,
+			ReqPacket: pk,
+			caller:    head.GetClientId(),
+			Marshal:   marshaler,
 		}
 
 		method.Call(s.Server, ctx, req)

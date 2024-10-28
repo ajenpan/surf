@@ -166,7 +166,7 @@ func (c *WSClient) work(conn *WSConn) error {
 				pk.SetHead(head)
 				binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
 				conn.Send(pk)
-				// log.Infof("send Heartbeat")
+				log.Infof("send Heartbeat")
 			} else {
 				// log.Infof("pass heartbeat ds:%d, sendat:%d, recvAt:%d, now:%s", ds, lastSendAt, lastRecvAt, now.Format(time.StampMicro))
 			}

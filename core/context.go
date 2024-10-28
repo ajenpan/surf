@@ -15,15 +15,15 @@ type Context interface {
 }
 
 type context struct {
-	Conn    network.Conn
-	Core    *Surf
-	Pk      *network.HVPacket
-	caller  uint32
-	Marshal marshal.Marshaler
+	Conn      network.Conn
+	Core      *Surf
+	ReqPacket *network.HVPacket
+	caller    uint32
+	Marshal   marshal.Marshaler
 }
 
 func (ctx *context) Response(msg proto.Message, herr error) {
-	inHead := network.RoutePacketHead(ctx.Pk.GetHead())
+	inHead := network.RoutePacketHead(ctx.ReqPacket.GetHead())
 	var body []byte
 	var err error
 

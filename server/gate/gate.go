@@ -3,6 +3,8 @@ package gate
 import (
 	"crypto/rsa"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
@@ -31,7 +33,6 @@ func (gate *Gate) OnConnEnable(conn network.Conn, enable bool) {
 		log.Debugf("OnConnEnable: id:%v,addr:%v,uid:%v,urid:%v,enable:%v", conn.ConnID(), conn.RemoteAddr(), conn.UserID(), conn.UserRole(), enable)
 		currConn, got := gate.ClientConn.SwapByUID(conn)
 		if got {
-			currConn := currConn.(network.Conn)
 			currConn.Close()
 		}
 		gate.onUserOnline(conn)
@@ -204,100 +205,39 @@ func (gate *Gate) PublishEvent(ename string, event any) {
 func (gate *Gate) OnCall(c network.Conn, subflag uint8, pk *network.RoutePacket) {
 	var err error
 	switch subflag {
+	case network.RoutePackType_SubFlag_Async:
+		fallthrough
 	case network.RoutePackType_SubFlag_Request:
 		method := gate.Calltable.Get(pk.GetMsgId())
 		if method == nil {
 			return
 		}
+
 		req := method.NewRequest()
-		err = gate.Marshaler.Unmarshal(pk.GetBody(), req)
+		marshaler := marshal.NewMarshalerById(pk.GetMarshalType())
+		if marshaler == nil {
+			return
+		}
+		err = marshaler.Unmarshal(pk.GetBody(), req)
 		if err != nil {
 			return
 		}
 		// method.Call(r, ctx, req)
 	default:
 	}
+}
 
-	// if msgtype == network.RouteMsgType_Response {
+type gateContext struct {
+	Conn      network.Conn
+	ReqPacket *network.HVPacket
+	caller    uint32
+	Marshal   marshal.Marshaler
+}
 
-	// } else {
-	// 	method := r.ct.Get(msgid)
-	// 	req := method.NewRequest()
-	// 	err = r.marshaler.Unmarshal(pk.GetBody(), req)
-	// 	if err != nil {
+func (ctx gateContext) Response(msg proto.Message, err error) {
 
-	// 		pk.SetMsgType(network.RouteMsgType_RouteErr)
-	// 		pk.SetErrCode(network.RouteMsgErrCode_NodeNotFound)
+}
 
-	// 		// c.Send(pk)
-	// 		// c.Send()
-	// 	}
-	// }
-
-	// askid := head.GetAskID()
-	// method := r.ct.Get(msgid)
-	// if method == nil {
-	// 	log.Print("not found method,msgid:", msgid)
-	// 	dealSocketErrCnt(s)
-	// 	return
-	// }
-
-	// reqRaw := method.NewRequest()
-	// if reqRaw == nil {
-	// 	log.Print("not found request,msgid:", msgid)
-	// 	return
-	// }
-
-	// req := reqRaw.(proto.Message)
-	// err = proto.Unmarshal(body, req)
-
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-
-	// ctx := context.WithValue(context.Background(), tcpSocketKey, s)
-	// ctx = context.WithValue(ctx, tcpPacketKey, p)
-
-	// result := method.Call(r, ctx, req)
-
-	// if len(result) != 2 {
-	// 	return
-	// }
-	// // if err is not nil, only return err
-	// resperrI := result[1].Interface()
-	// if resperrI != nil {
-	// 	var senderr error
-	// 	switch resperr := resperrI.(type) {
-	// 	case *msg.Error:
-	// 		senderr = r.SendMessage(s, askid, RouteTypRespErr, resperr)
-	// 	case error:
-	// 		senderr = r.SendMessage(s, askid, RouteTypRespErr, &msg.Error{
-	// 			Code:   -1,
-	// 			Detail: resperr.Error(),
-	// 		})
-	// 	default:
-	// 		log.Print("not support error type:")
-	// 	}
-	// 	if senderr != nil {
-	// 		log.Print("send err failed:", senderr)
-	// 	}
-	// 	return
-	// }
-
-	// respI := result[0].Interface()
-	// if respI != nil {
-	// 	resp, ok := respI.(proto.Message)
-	// 	if !ok {
-	// 		return
-	// 	}
-	// 	respMsgTyp := head.GetMsgTyp()
-	// 	if respMsgTyp == RouteTypRequest {
-	// 		respMsgTyp = RouteTypResponse
-	// 	}
-
-	// 	r.SendMessage(s, askid, respMsgTyp, resp)
-	// 	log.Printf("oncall sid:%v,uid:%v,msgid:%v,askid:%v,req:%v,resp:%v\n", s.ID(), s.UID(), msgid, askid, req, resp)
-	// 	return
-	// }
+func (ctx gateContext) Caller() uint32 {
+	return ctx.caller
 }
