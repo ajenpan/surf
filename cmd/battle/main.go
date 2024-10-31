@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rsa"
 	"fmt"
+	"math/rand"
 	"os"
 	"time"
 
@@ -73,11 +74,15 @@ func RealMain(c *cli.Context) error {
 	h := battleHandler.New()
 	CTByID, CTByName := calltable.ExtractMethod(battleMsg.File_battle_proto.Messages(), h)
 
+	uid := rand.Int31n(1000000000)
+	uname := fmt.Sprintf("battle_%d", uid)
+
 	uinfo := &auth.UserInfo{
-		UId:   20001,
-		UName: "battle",
+		UId:   uint32(uid),
+		UName: uname,
 		URole: 1,
 	}
+
 	jwt, err := auth.GenerateToken(pk, uinfo, 2400*time.Hour)
 	if err != nil {
 		return err
@@ -96,8 +101,8 @@ func RealMain(c *cli.Context) error {
 
 	err = core.Init(core.Options{
 		Server:         h,
-		HttpListenAddr: ":13100",
-		WsListenAddr:   ":13200",
+		HttpListenAddr: ":13300",
+		WsListenAddr:   ":13301",
 		CTById:         CTByID,
 		CTByName:       CTByName,
 		PublicKey:      &pk.PublicKey,

@@ -32,8 +32,8 @@ func NewWSServer(opts WSServerOptions) (*WSServer, error) {
 		sockets:         make(map[string]*WSConn),
 		die:             make(chan bool),
 	}
-	if ret.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec/2)*time.Second {
-		ret.HeatbeatInterval = time.Duration(DefaultTimeoutSec/2) * time.Second
+	if ret.HeatbeatInterval < time.Duration(DefaultHeartbeatSec)*time.Second {
+		ret.HeatbeatInterval = time.Duration(DefaultHeartbeatSec) * time.Second
 	}
 	h := &http.ServeMux{}
 	h.HandleFunc("/", ret.ServeHTTP)
@@ -90,15 +90,8 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close()
 
-	conn := &WSConn{
-		rwtimeout: s.HeatbeatInterval * 2,
-		imp:       c,
-		status:    Connectting,
-		id:        GenConnID(),
-		chClosed:  make(chan struct{}),
-		chWrite:   make(chan *HVPacket, 10),
-		chRead:    make(chan *HVPacket, 10),
-	}
+	conn := newWSConn(GenConnID(), nil, c, s.HeatbeatInterval*2)
+	conn.status = Connectting
 
 	deadline := time.Now().Add(s.HeatbeatInterval * 2)
 	c.SetReadDeadline(deadline)

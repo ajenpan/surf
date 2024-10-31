@@ -13,7 +13,7 @@ var ErrDisconn = errors.New("conn disconnected")
 var ErrInvalidPacket = errors.New("invalid packet")
 
 var DefaultTimeoutSec = 30
-var DefaultMinTimeoutSec = 10
+var DefaultHeartbeatSec = 10
 
 type ConnStatus = int32
 

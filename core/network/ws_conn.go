@@ -9,8 +9,8 @@ import (
 )
 
 func newWSConn(id string, uinfo auth.User, conn *ws.Conn, rwtimeout time.Duration) *WSConn {
-	if rwtimeout.Seconds() < 1 {
-		rwtimeout = time.Second * 2
+	if rwtimeout.Seconds() < float64(DefaultHeartbeatSec) {
+		rwtimeout = time.Duration(DefaultHeartbeatSec*2) * time.Second
 	}
 
 	return &WSConn{

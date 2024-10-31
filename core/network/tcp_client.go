@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ajenpan/surf/core/auth"
@@ -27,8 +26,8 @@ func NewTcpClient(opts TcpClientOptions) *TcpClient {
 		opts:   opts,
 		closed: make(chan struct{}),
 	}
-	if ret.opts.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec)*time.Second {
-		ret.opts.HeatbeatInterval = time.Duration(DefaultTimeoutSec) * time.Second
+	if ret.opts.HeatbeatInterval < time.Duration(DefaultHeartbeatSec)*time.Second {
+		ret.opts.HeatbeatInterval = time.Duration(DefaultHeartbeatSec) * time.Second
 	}
 	return ret
 }
@@ -92,12 +91,7 @@ func (c *TcpClient) work(conn *TcpConn) error {
 		conn.readWork()
 	}()
 
-	tki := time.Duration(c.opts.HeatbeatInterval.Seconds()/3) * time.Second
-	if tki < time.Second*2 {
-		tki = time.Second * 2
-	}
-
-	tk := time.NewTicker(tki)
+	tk := time.NewTicker(c.opts.HeatbeatInterval)
 	defer tk.Stop()
 
 	for {
@@ -106,29 +100,19 @@ func (c *TcpClient) work(conn *TcpConn) error {
 			return nil
 		case <-conn.chClosed:
 			return nil
-		case now := <-tk.C:
-			lastSendAt := atomic.LoadInt64(&conn.lastSendAt)
-			lastRecvAt := atomic.LoadInt64(&conn.lastRecvAt)
-			unix := now.UnixMilli()
-
-			dc := int64(0)
-			if lastSendAt < lastRecvAt {
-				dc = unix - lastSendAt
-			} else {
-				dc = unix - lastRecvAt
+		case _, ok := <-tk.C:
+			if !ok {
+				continue
 			}
 
-			if dc >= int64(c.opts.HeatbeatInterval.Milliseconds())/2 {
-				pk := NewHVPacket()
-				pk.Meta.SetType(PacketType_Inner)
-				pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
+			pk := NewHVPacket()
+			pk.Meta.SetType(PacketType_Inner)
+			pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
+			head := make([]byte, 8)
+			binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
+			pk.SetHead(head)
+			conn.Send(pk)
 
-				head := make([]byte, 8)
-				binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
-				pk.SetHead(head)
-
-				conn.Send(pk)
-			}
 		case packet, ok := <-conn.chRead:
 			if !ok {
 				return nil
@@ -218,7 +202,7 @@ func (c *TcpClient) handshake(conn net.Conn) (*TcpConn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newTcpConn(socketid, c.opts.UInfo, conn, c.opts.HeatbeatInterval), nil
+	return newTcpConn(socketid, c.opts.UInfo, conn, c.opts.HeatbeatInterval*2), nil
 }
 
 func (c *TcpClient) Start() error {

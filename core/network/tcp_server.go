@@ -28,7 +28,7 @@ func NewTcpServer(opts TcpServerOptions) (*TcpServer, error) {
 		sockets: make(map[string]*TcpConn),
 		die:     make(chan bool),
 	}
-	if ret.opts.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec)*time.Second {
+	if ret.opts.HeatbeatInterval < time.Duration(DefaultHeartbeatSec)*time.Second {
 		ret.opts.HeatbeatInterval = time.Duration(DefaultTimeoutSec) * time.Second
 	}
 

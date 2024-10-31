@@ -33,8 +33,8 @@ func NewWSClient(opts WSClientOptions) *WSClient {
 		opts:   opts,
 		closed: make(chan struct{}),
 	}
-	if ret.opts.HeatbeatInterval < time.Duration(DefaultMinTimeoutSec/2)*time.Second {
-		ret.opts.HeatbeatInterval = time.Duration(DefaultTimeoutSec/2) * time.Second
+	if ret.opts.HeatbeatInterval < time.Duration(DefaultHeartbeatSec)*time.Second {
+		ret.opts.HeatbeatInterval = time.Duration(DefaultHeartbeatSec) * time.Second
 	}
 	return ret
 }
@@ -110,6 +110,7 @@ func (c *WSClient) connect() error {
 }
 
 func (c *WSClient) work(conn *WSConn) error {
+	log.Infof("WSClient work")
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -132,12 +133,7 @@ func (c *WSClient) work(conn *WSConn) error {
 		}
 	}()
 
-	tki := time.Duration(c.opts.HeatbeatInterval.Seconds()/3) * time.Second
-	if tki < time.Second*2 {
-		tki = time.Second * 2
-	}
-	ck := int64(c.opts.HeatbeatInterval.Milliseconds())
-	tk := time.NewTicker(tki)
+	tk := time.NewTicker(c.opts.HeatbeatInterval)
 	defer tk.Stop()
 
 	for {
@@ -146,30 +142,18 @@ func (c *WSClient) work(conn *WSConn) error {
 			return nil
 		case <-conn.chClosed:
 			return nil
-		case now := <-tk.C:
-			lastSendAt := atomic.LoadInt64(&conn.lastSendAt)
-			lastRecvAt := atomic.LoadInt64(&conn.lastRecvAt)
-			unix := now.UnixMilli()
-
-			ds := int64(0)
-			if lastSendAt > lastRecvAt {
-				ds = unix - lastRecvAt
-			} else {
-				ds = unix - lastSendAt
+		case _, ok := <-tk.C:
+			if !ok {
+				continue
 			}
-
-			if ds >= ck {
-				pk := NewHVPacket()
-				pk.Meta.SetType(PacketType_Inner)
-				pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
-				head := make([]byte, 8)
-				pk.SetHead(head)
-				binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
-				conn.Send(pk)
-				log.Infof("send Heartbeat")
-			} else {
-				// log.Infof("pass heartbeat ds:%d, sendat:%d, recvAt:%d, now:%s", ds, lastSendAt, lastRecvAt, now.Format(time.StampMicro))
-			}
+			pk := NewHVPacket()
+			pk.Meta.SetType(PacketType_Inner)
+			pk.Meta.SetSubFlag(PacketInnerSubType_Heartbeat)
+			head := make([]byte, 8)
+			pk.SetHead(head)
+			binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
+			conn.Send(pk)
+			log.Infof("send Heartbeat")
 		case packet, ok := <-conn.chRead:
 			if !ok {
 				return nil
@@ -182,7 +166,7 @@ func (c *WSClient) work(conn *WSConn) error {
 					svrtime := (int64)(binary.LittleEndian.Uint64(packet.GetBody()))
 					fix := now - (svrtime - (now-sendat)/2)
 					atomic.StoreInt64(&c.timefix, fix)
-					// log.Infof("recv Heartbeat %v", fix)
+					log.Infof("recv Heartbeat %v", fix)
 				default:
 					return nil
 				}

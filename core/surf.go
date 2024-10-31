@@ -409,7 +409,7 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 		contenttype := r.Header.Get("Content-Type")
 		w.Header().Set("Content-Type", contenttype)
 
-		var ctx Context = &HttpCallContext{
+		var ctx Context = &httpCallContext{
 			w:         w,
 			r:         r,
 			core:      s,

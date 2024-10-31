@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type HttpCallContext struct {
+type httpCallContext struct {
 	w         http.ResponseWriter
 	r         *http.Request
 	core      *Surf
@@ -20,7 +20,7 @@ type HttpCallContext struct {
 	marshaler marshal.Marshaler
 }
 
-func (ctx *HttpCallContext) Response(msg proto.Message, err error) {
+func (ctx *httpCallContext) Response(msg proto.Message, err error) {
 	type httpWrap struct {
 		ErrCode int         `json:"errcode"`
 		ErrMsg  string      `json:"errmsg"`
@@ -48,14 +48,14 @@ func (ctx *HttpCallContext) Response(msg proto.Message, err error) {
 	}
 }
 
-func (ctx *HttpCallContext) Request(msg proto.Message, cb func(pk *network.HVPacket, err error)) {
+func (ctx *httpCallContext) Request(msg proto.Message, cb func(pk *network.HVPacket, err error)) {
 	// do nothing
 }
 
-func (ctx *HttpCallContext) Async(msg interface{}) error {
+func (ctx *httpCallContext) Async(msg interface{}) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 
-func (ctx *HttpCallContext) Caller() uint32 {
+func (ctx *httpCallContext) Caller() uint32 {
 	return ctx.uinfo.UId
 }

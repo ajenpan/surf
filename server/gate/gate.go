@@ -222,14 +222,20 @@ func (gate *Gate) OnCall(c network.Conn, subflag uint8, pk *network.RoutePacket)
 		if err != nil {
 			return
 		}
-		// method.Call(r, ctx, req)
+		ctx := &gateContext{
+			Conn:      c,
+			ReqPacket: pk,
+			caller:    c.UserID(),
+			Marshal:   marshaler,
+		}
+		method.Call(gate, ctx, req)
 	default:
 	}
 }
 
 type gateContext struct {
 	Conn      network.Conn
-	ReqPacket *network.HVPacket
+	ReqPacket *network.RoutePacket
 	caller    uint32
 	Marshal   marshal.Marshaler
 }
