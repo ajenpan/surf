@@ -1,39 +1,28 @@
 package handler
 
 import (
-	"sync"
-
 	"github.com/google/uuid"
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/errors"
-	"github.com/ajenpan/surf/core/event"
 	log "github.com/ajenpan/surf/core/log"
 	battlemsg "github.com/ajenpan/surf/msg/battle"
-
-	"github.com/ajenpan/surf/server/battle"
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
-type Battle struct {
-	tables       sync.Map
-	LogicCreator *battle.GameLogicCreator
-	Publisher    event.Publisher
-}
-
-func New() *Battle {
-	h := &Battle{
-		LogicCreator: battle.LogicCreator,
+func (h *Battle) reportBattleFinished(battleid string) {
+	d := h.getBattleById(battleid)
+	if d == nil {
+		return
 	}
-	return h
-}
 
-func (h *Battle) ServerType() uint16 {
-	return 1
-}
-
-func (h *Battle) ServerName() string {
-	return "battle"
+	d.Players.Range(func(p *table.Player) bool {
+		h.UIDUnBindBattleID(uint64(p.Uid), battleid)
+		return true
+	})
+	h.tables.Delete(battleid)
+	d.Close()
+	log.Infof("battle %s finished", battleid)
 }
 
 func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle) {
@@ -56,12 +45,12 @@ func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle
 
 	battleid := uuid.NewString()
 
-	d := table.NewTable(table.TableOption{
+	d := table.NewTable(table.TableOptions{
 		ID:             battleid,
 		Conf:           in.TableConf,
 		EventPublisher: h.Publisher,
 		FinishReporter: func() {
-			h.onBattleFinished(battleid)
+			h.reportBattleFinished(battleid)
 		},
 	})
 
@@ -71,37 +60,7 @@ func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle
 	}
 
 	h.tables.Store(battleid, d)
-
-	resp.BattleId = d.ID
-}
-
-func (h *Battle) onBattleFinished(battleid string) {
-	d := h.getBattleById(battleid)
-	if d == nil {
-		return
-	}
-
-	d.Players.Range(func(p *table.Player) bool {
-		h.UIDUnBindBattleID(uint64(p.Uid), battleid)
-		return true
-	})
-	h.tables.Delete(battleid)
-	d.Close()
-	log.Infof("battle %s finished", battleid)
-}
-
-func (h *Battle) UIDBindBattleID(uid uint64, bid string) error {
-	// TODO:
-	return nil
-}
-
-func (h *Battle) UIDUnBindBattleID(uid uint64, bid string) {
-	// TODO:
-}
-
-func (h *Battle) LoadBattleByUID(uid uint64) map[string]*table.Table {
-	// TODO:
-	return nil
+	resp.BattleId = battleid
 }
 
 func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) {
@@ -124,18 +83,19 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 
 	ctx.Response(out, err)
 
-	// 是否需要保持 uid - battleid 映射?
-	// 1 uid -> n * battleid.
-	// 当uid掉线时, 需要遍历所有的battleid, 并且通知battleid.
 	h.UIDBindBattleID(uint64(ctx.Caller()), in.BattleId)
 }
 
 func (h *Battle) OnPlayerDisConn(uid uint64) {
 	log.Info("OnPlayerDisConn:", uid)
+	tableids := h.LoadBattleByUID(uid)
 
-	tables := h.LoadBattleByUID(uid)
-	for _, t := range tables {
-		t.OnPlayerConn(uid, false)
+	for _, tableid := range tableids {
+		d := h.getBattleById(tableid)
+		if d == nil {
+			continue
+		}
+		d.OnPlayerConn(uid, false)
 	}
 }
 
@@ -155,11 +115,4 @@ func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *battlemsg.BattleMsgTo
 		return
 	}
 	d.OnPlayerMessage(uint64(ctx.Caller()), in.Msgid, in.Data)
-}
-
-func (h *Battle) getBattleById(battleId string) *table.Table {
-	if raw, ok := h.tables.Load(battleId); ok {
-		return raw.(*table.Table)
-	}
-	return nil
 }

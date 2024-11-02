@@ -72,8 +72,8 @@ type RequestCallbackCache struct {
 }
 
 type Surf struct {
-	Options
-	Reg *registry.Registry
+	opts Options
+	Reg  *registry.Registry
 
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
@@ -85,15 +85,16 @@ type Surf struct {
 }
 
 func (s *Surf) init(opt Options) error {
-	s.Options = opt
-	if s.CTById == nil {
-		s.CTById = calltable.NewCallTable[uint32]()
+	if opt.CTById == nil {
+		opt.CTById = calltable.NewCallTable[uint32]()
 	}
-	if s.CTByName == nil {
-		s.CTByName = converCalltable(s.CTById)
+	if opt.CTByName == nil {
+		opt.CTByName = converCalltable(opt.CTById)
 	} else {
-		s.CTByName.Merge(converCalltable(s.CTById), false)
+		opt.CTByName.Merge(converCalltable(opt.CTById), false)
 	}
+
+	s.opts = opt
 	return nil
 }
 
@@ -111,34 +112,27 @@ func (s *Surf) Close() error {
 }
 
 func (s *Surf) Start() error {
-	if len(s.HttpListenAddr) > 1 {
+	if len(s.opts.HttpListenAddr) > 1 {
 		s.startHttpSvr()
 	}
 
-	if (len(s.WsListenAddr)) > 1 {
+	if len(s.opts.WsListenAddr) > 1 {
 		s.startWsSvr()
 	}
 
-	if len(s.TcpListenAddr) > 1 {
+	if len(s.opts.TcpListenAddr) > 1 {
 		s.startTcpSvr()
 	}
 
-	if len(s.ControlListenAddr) > 1 {
+	if len(s.opts.ControlListenAddr) > 1 {
 		// todo:
 	}
-	// quit := make(chan struct{})
-	// s.httpsvr = &network.HttpSvr{
-	// 	Addr:    s.HttpListenAddr,
-	// 	Marshal: &marshal.JSONPb{},
-	// 	Mux:     http.NewServeMux(),
-	// }
-	// s.httpsvr.ServerCallTable(&s.CTByName)
 
 	return nil
 }
 
 func (s *Surf) Run() error {
-	s.CTById.Range(func(key uint32, value *calltable.Method) bool {
+	s.opts.CTById.Range(func(key uint32, value *calltable.Method) bool {
 		log.Infof("handle func,msgid:%d, funcname:%s", key, value.HandleName)
 		return true
 	})
@@ -148,16 +142,16 @@ func (s *Surf) Run() error {
 	}
 	defer s.Close()
 
-	log.Infof("start gate clients:%v", s.GateAddrList)
+	log.Infof("start gate clients:%v", s.opts.GateAddrList)
 
-	for _, addr := range s.GateAddrList {
+	for _, addr := range s.opts.GateAddrList {
 		log.Infof("start gate client, addr: %s", addr)
 		client := network.NewWSClient(network.WSClientOptions{
 			RemoteAddress:  addr,
 			OnConnPacket:   s.onConnPacket,
 			OnConnStatus:   s.onConnStatus,
-			AuthToken:      []byte(s.Options.GateToken),
-			UInfo:          s.Options.UInfo,
+			AuthToken:      []byte(s.opts.GateToken),
+			UInfo:          s.opts.UInfo,
 			ReconnectDelay: 3 * time.Second,
 		})
 		client.Start()
@@ -169,13 +163,13 @@ func (s *Surf) Run() error {
 }
 
 func (s *Surf) startHttpSvr() {
-	log.Info("start http server, listenaddr ", s.HttpListenAddr)
+	log.Info("start http server, listenaddr ", s.opts.HttpListenAddr)
 
 	mux := http.NewServeMux()
 
-	s.CTByName.Range(func(key string, method *calltable.Method) bool {
+	s.opts.CTByName.Range(func(key string, method *calltable.Method) bool {
 
-		svrname := s.Server.ServerName()
+		svrname := s.opts.Server.ServerName()
 
 		if len(svrname) > 0 {
 			key = "/" + svrname + "/" + key
@@ -190,7 +184,7 @@ func (s *Surf) startHttpSvr() {
 	})
 
 	svr := &http.Server{
-		Addr:    s.HttpListenAddr,
+		Addr:    s.opts.HttpListenAddr,
 		Handler: mux,
 	}
 	ln, err := net.Listen("tcp", svr.Addr)
@@ -203,10 +197,10 @@ func (s *Surf) startHttpSvr() {
 }
 
 func (s *Surf) startWsSvr() {
-	log.Info("start ws server, listenaddr ", s.WsListenAddr)
+	log.Info("start ws server, listenaddr ", s.opts.WsListenAddr)
 
 	ws, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   s.WsListenAddr,
+		ListenAddr:   s.opts.WsListenAddr,
 		OnConnPacket: s.onConnPacket,
 		OnConnStatus: s.onConnStatus,
 		OnConnAuth:   s.onConnAuth,
@@ -220,10 +214,10 @@ func (s *Surf) startWsSvr() {
 }
 
 func (s *Surf) startTcpSvr() {
-	log.Info("start tcp server, listenaddr ", s.TcpListenAddr)
+	log.Info("start tcp server, listenaddr ", s.opts.TcpListenAddr)
 
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
-		ListenAddr:       s.TcpListenAddr,
+		ListenAddr:       s.opts.TcpListenAddr,
 		HeatbeatInterval: 30 * time.Second,
 		OnConnPacket:     s.onConnPacket,
 		OnConnStatus:     s.onConnStatus,
@@ -242,7 +236,7 @@ func (s *Surf) GetNodeId() uint32 {
 }
 
 func (s *Surf) GetServerType() uint16 {
-	return uint16(s.Server.ServerType())
+	return uint16(s.opts.Server.ServerType())
 }
 
 func (s *Surf) GetSYN() uint32 {
@@ -310,7 +304,7 @@ func (s *Surf) SendRequestToClientByUId(uid uint32, msgid uint32, msg any, cb Re
 }
 
 func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any, cb RequestCallbackFunc) error {
-	body, err := s.Marshaler.Marshal(msg)
+	body, err := s.opts.Marshaler.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -333,7 +327,7 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 }
 
 func (s *Surf) SendAsyncToClient(conn network.Conn, uid uint32, msgid uint32, msg any) error {
-	body, err := s.Marshaler.Marshal(msg)
+	body, err := s.opts.Marshaler.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -380,7 +374,7 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 		}
 		authdata = strings.TrimPrefix(authdata, "Bearer ")
 
-		uinfo, err := auth.VerifyToken(s.PublicKey, []byte(authdata))
+		uinfo, err := auth.VerifyToken(s.opts.PublicKey, []byte(authdata))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -417,7 +411,7 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 			marshaler: marshaler,
 		}
 
-		method.Call(s.Server, ctx, req)
+		method.Call(s.opts.Server, ctx, req)
 	}
 }
 
@@ -431,8 +425,8 @@ func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 }
 
-func (h *Surf) onConnAuth(data []byte) (auth.User, error) {
-	return auth.VerifyToken(h.PublicKey, data)
+func (h *Surf) onConnAuth(data []byte) (network.User, error) {
+	return auth.VerifyToken(h.opts.PublicKey, data)
 }
 func (h *Surf) onConnStatus(c network.Conn, enable bool) {
 	log.Infof("connid:%v, uid:%v status:%v", c.ConnID(), c.UserID(), enable)
@@ -462,7 +456,7 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 	case network.RoutePackType_SubFlag_Async:
 		fallthrough
 	case network.RoutePackType_SubFlag_Request:
-		method := s.CTById.Get(head.GetMsgId())
+		method := s.opts.CTById.Get(head.GetMsgId())
 		if method == nil {
 			// todo:
 			return
@@ -483,7 +477,7 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 			Marshal:   marshaler,
 		}
 
-		method.Call(s.Server, ctx, req)
+		method.Call(s.opts.Server, ctx, req)
 	case network.RoutePackType_SubFlag_Response:
 		cbinfo := s.popRespCallback(head.GetSYN())
 		if cbinfo == nil {

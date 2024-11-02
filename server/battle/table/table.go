@@ -15,27 +15,27 @@ import (
 	"github.com/ajenpan/surf/server/battle"
 )
 
-type TableOption struct {
+type TableOptions struct {
 	ID             string
 	EventPublisher event.Publisher
 	Conf           *msgBattle.TableConfigure
 	FinishReporter func()
 }
 
-func NewTable(opt TableOption) *Table {
-	if opt.ID == "" {
-		opt.ID = uuid.NewString()
+func NewTable(opts TableOptions) *Table {
+	if opts.ID == "" {
+		opts.ID = uuid.NewString()
 	}
 
 	ret := &Table{
-		TableOption: &opt,
-		CreateAt:    time.Now(),
-		quit:        make(chan bool),
-		currStat:    battle.BattleStatus_Idle,
-		beforeStat:  battle.BattleStatus_Idle,
-		Logger: log.Default.WithFields(map[string]interface{}{
-			"battle": opt.ID,
+		log: log.Default.WithFields(map[string]interface{}{
+			"battle": opts.ID,
 		}),
+		opts:       opts,
+		createAt:   time.Now(),
+		quit:       make(chan bool),
+		currStat:   battle.BattleStatus_Idle,
+		beforeStat: battle.BattleStatus_Idle,
 	}
 
 	ret.actQue = make(chan func(), 10)
@@ -54,12 +54,12 @@ const (
 )
 
 type Table struct {
-	*TableOption
-	log.Logger
+	opts TableOptions
+	log  log.Logger
 
-	CreateAt time.Time
-	StartAt  time.Time
-	OverAt   time.Time
+	createAt time.Time
+	startAt  time.Time
+	finishAt time.Time
 
 	rwlock sync.RWMutex
 
@@ -75,8 +75,9 @@ type Table struct {
 }
 
 func (d *Table) BattleID() string {
-	return d.ID
+	return d.opts.ID
 }
+
 func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{}) error {
 	d.rwlock.Lock()
 	defer d.rwlock.Unlock()
@@ -96,7 +97,6 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{
 		Table:   d,
 		Players: iplayers,
 		Conf:    logicConf,
-		Logger:  d.Logger,
 	}); err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{
 		safecall := func(f func()) {
 			defer func() {
 				if err := recover(); err != nil {
-					d.Errorf("panic: %v", err)
+					d.log.Error("panic: %v", err)
 				}
 			}()
 			f()
@@ -192,8 +192,10 @@ func (d *Table) ReportBattleStatus(s battle.GameStatus) {
 		d.updateStatus(TableStatus_Finished)
 
 		d.AfterFunc(5*time.Second, func() {
-			d.Infof("report battle finished")
-			d.FinishReporter()
+			d.log.Infof("report battle finished")
+			if d.opts.FinishReporter != nil {
+				d.opts.FinishReporter()
+			}
 		})
 	}
 }
@@ -206,15 +208,15 @@ func (d *Table) SendMessageToPlayer(p battle.Player, msgid uint32, msg proto.Mes
 	rp := p.(*Player)
 	raw, err := proto.Marshal(msg)
 	if err != nil {
-		d.Error(err)
+		d.log.Error(err)
 		return
 	}
 
 	err = rp.Send(msgid, raw)
 	if err != nil {
-		d.Errorf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
+		d.log.Errorf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
 	} else {
-		d.Debugf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
+		d.log.Debugf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
 	}
 }
 
@@ -226,7 +228,7 @@ func (d *Table) BroadcastMessage(msgid uint32, msg proto.Message) {
 		return
 	}
 
-	d.Debugf("Broadcast msgname:%s,msg:%v", string(proto.MessageName(msg)), msg)
+	d.log.Debugf("Broadcast msgname:%s,msg:%v", string(proto.MessageName(msg)), msg)
 
 	d.Players.Range(func(p *Player) bool {
 		err := p.Send(msgid, raw)
@@ -242,23 +244,23 @@ func (d *Table) IsPlaying() bool {
 }
 
 func (d *Table) reportGameStart() {
-	d.StartAt = time.Now()
+	d.startAt = time.Now()
 }
 
 func (d *Table) reportGameOver() {
-	d.OverAt = time.Now()
+	d.finishAt = time.Now()
 }
 
 func (d *Table) PublishEvent(eventmsg proto.Message) {
-	if d.EventPublisher == nil {
+	if d.opts.EventPublisher == nil {
 		return
 	}
 
-	d.Infof("PublishEvent msgname:%s,msg:%v", string(proto.MessageName(eventmsg)), eventmsg)
+	d.log.Debugf("PublishEvent msgname:%s,msg:%v", string(proto.MessageName(eventmsg)), eventmsg)
 
 	raw, err := proto.Marshal(eventmsg)
 	if err != nil {
-		d.Error(err)
+		d.log.Error(err)
 		return
 	}
 	warp := &event.Event{
@@ -266,7 +268,7 @@ func (d *Table) PublishEvent(eventmsg proto.Message) {
 		Timestamp: time.Now().Unix(),
 		Data:      raw,
 	}
-	d.EventPublisher.Publish(warp)
+	d.opts.EventPublisher.Publish(warp)
 }
 
 func (d *Table) OnPlayerMessage(uid uint64, msgid uint32, iraw []byte) {

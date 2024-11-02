@@ -91,7 +91,7 @@ func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 		ListenAddr:   ":19999",
 		OnConnPacket: gatesvr.OnNodePacket,
 		OnConnStatus: gatesvr.OnNodeStatus,
-		OnConnAuth: func(data []byte) (auth.User, error) {
+		OnConnAuth: func(data []byte) (network.User, error) {
 			return auth.VerifyToken(&ppk.PublicKey, data)
 		}},
 	)
@@ -133,7 +133,7 @@ func StartWs(ppk *rsa.PrivateKey) (func(), error) {
 		ListenAddr:   ":18888",
 		OnConnPacket: gatesvr.OnNodePacket,
 		OnConnStatus: gatesvr.OnNodeStatus,
-		OnConnAuth: func(data []byte) (auth.User, error) {
+		OnConnAuth: func(data []byte) (network.User, error) {
 			return auth.VerifyToken(&ppk.PublicKey, data)
 		}},
 	)

@@ -38,16 +38,16 @@ enum GameStep {
 
 message OutCardInfo {
   CardType type = 1;
-  bytes cards = 2; //有牛: 前三张为组成牛牛的三张牌, 其它从大到小排序
+  bytes cards = 2; // 有牛: 前三张为组成牛牛的三张牌, 其它从大到小排序
 }
 
 message GamePlayerInfo {
   int32 seat_id = 1;
   GameStep status = 2;
   int32 ready = 3;
-  int32 banker_rob = 4; //抢庄
+  int32 banker_rob = 4; // 抢庄
   bool banker = 5;
-  int32 bet_rate = 6;   //下注倍率
+  int32 bet_rate = 6;   // 下注倍率
   bytes hand_cards = 7; //
   OutCardInfo out_card = 8;
 }
@@ -57,65 +57,66 @@ message GameInfo {
   map<int32, GamePlayerInfo> player_info = 5;
 }
 
-//游戏全量信息
-message GameDeskInfoRequest {}
+// 游戏全量信息
+message ReqGameInfo {}
 
-message GameDeskInfoResponse {
+message RespGameInfo {
   GameInfo info = 1;
   string game_conf = 2;
+  GameInfo game_info = 3;
 }
 
-message GameStatusNotify {
+message NotifyGameStatus {
   GameStep game_status = 1; // 游戏状态
   int32 time_down = 3;      // 倒计时
 }
 
 // 用户请求抢庄
-message PlayerBanker {
+message ReqPlayerBanker {
   int32 rob = 2; // 1:不抢, 2: 抢
 }
 
 // 广播抢庄用户
-message PlayerBankerNotify {
+message NotifyPlayerBanker {
   int32 seat_id = 1;
   int32 rob = 2;
 }
 
 // 广播庄家位置
-message BankerSeatNotify {
+message NotifyBankerSeat {
   int32 seat_id = 1;
 }
 
 // 闲家下注
-message PlayerBetRate {
+message ReqPlayerBetRate {
   int32 rate = 1;
 }
 
 // 广播闲家下注倍率信息
-message PlayerBetRateNotify {
+message NotifyPlayerBetRate {
   int32 seat_id = 1;
   int32 rate = 2;
 }
 
 // 通知用户手牌信息
-message PlayerHandCardsNotify {
+message NotifyPlayerHandCards {
   int32 seat_id = 1;
   bytes hand_cards = 2;
 }
 
 // 请求上传出牌信息
-message PlayerOutCard {
+message ReqPlayerOutCard {
   OutCardInfo out_card = 1;
 }
 
 // 广播用户出牌结果
-message PlayerOutCardNotify {
+message NotifyPlayerOutCard {
   int32 seat_id = 1;
   OutCardInfo out_card = 2;
 }
 
 // 游戏结算
-message PlayerTallyNotify {
+message NotifyGameTally {
   message TallyInfo {
     int32 seat_id = 1;
     int32 coins = 2;

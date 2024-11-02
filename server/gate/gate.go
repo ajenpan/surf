@@ -24,7 +24,7 @@ type Gate struct {
 	NodePublicKey   *rsa.PublicKey
 }
 
-func (gate *Gate) OnConnAuth(data []byte) (auth.User, error) {
+func (gate *Gate) OnConnAuth(data []byte) (network.User, error) {
 	return auth.VerifyToken(gate.NodePublicKey, data)
 }
 
@@ -111,7 +111,7 @@ func (gate *Gate) FindIdleNode(servertype uint16) uint32 {
 //		delete(r.userSession, uid)
 //	}
 
-func (gate *Gate) OnNodeAuth(data []byte) (auth.User, error) {
+func (gate *Gate) OnNodeAuth(data []byte) (network.User, error) {
 	return auth.VerifyToken(gate.NodePublicKey, data)
 }
 

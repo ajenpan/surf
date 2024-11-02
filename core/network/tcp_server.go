@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 )
 
@@ -166,7 +165,7 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 		return nil, ErrInvalidPacket
 	}
 
-	var us auth.User
+	var us User
 	if s.opts.OnConnAuth != nil {
 		pk.Meta.SetSubFlag(PacketInnerSubType_Cmd)
 		pk.SetHead([]byte("auth"))

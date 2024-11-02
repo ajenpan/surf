@@ -35,7 +35,7 @@ func SendRequestToClient[T proto.Message](uid uint32, msgid uint32, msg any, cb 
 			cb(false, errors.New(int32(errcode), "resp err"), nil)
 			return
 		}
-		err := GSurf.Marshaler.Unmarshal(pk.GetBody(), resp)
+		err := GSurf.opts.Marshaler.Unmarshal(pk.GetBody(), resp)
 		if err != nil {
 			cb(false, err, nil)
 			return

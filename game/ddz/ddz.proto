@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package games.ddz;
+
+option go_package = "./game/ddz;ddz";
+
+enum StageType {
+  // stage 无需有序
+  StageEmpty = 0;             // 无效
+  StageMatch = 11;            // 匹配
+  StageGameStart = 12;        // 大局开局
+  StageRoundStart = 13;       // 小局开局
+  StageTally = 14;            // 小结算
+  StageFinalResult = 15;      // 大结算
+  StageShuffleCards = 16;     // 洗牌
+  StageConfirmGradeCard = 17; // 确定级牌
+  StageConfirmGroupTag = 18;  // 确定分组
+  StageConfirmBanker = 19;    // 确定庄家
+  StageDealingCards = 20;     // 发牌
+  StageDealingLordCards = 21; // 发地主牌
+  StageDouble = 22;           // 加倍
+  StageOutCard = 23;          // 打牌跟牌，对局阶段
+  StageTribute = 24;          // 进贡
+  StageCallScoreLord = 25;    // 叫分 1,2,3分并确定地主
+  StageCallLord = 26;         // 叫地主, 抢地主
+  StageShowCardLord = 27;     // 敞牌叫地主，明牌叫地主
+  StageShowCardDouble = 28;   // 明牌加倍
+  StageDebugMakeCards = 1001; // 调试
+}
+
+enum LordType {
+  LordTypeNone = 0;   // 无效
+  LordTypeLord = 1;   // 地主
+  LordTypeFarmer = 2; // 农民
+}
+
+enum DeckType {
+  dt_unknow = 0;
+  dt_single = 1;         // 单张
+  dt_pair = 2;           // 对子
+  dt_three = 3;          // 3张
+  dt_three_with_one = 4; // 3带1
+  dt_three_with_two = 5; // 3带2
+  dt_straight = 6;       // 顺子
+  dt_bomb = 7;           // 炸弹
+}
+
+message OutCardInfo {
+  int32 seat_id = 1;
+  DeckType deck_type = 2;
+  bytes cards = 3;
+}
+
+message PlayerGameInfo {
+  int32 seat_id = 1;
+  int32 ready = 3;
+  int32 banker_rob = 4; // 抢庄
+  LordType lord_type = 5;
+  int32 bet_rate = 6;   // 下注倍率
+  bytes hand_cards = 7; //
+  repeated OutCardInfo curr_out_card = 8;
+}
+
+enum ActionType {
+  at_unknow = 0;
+  at_ready = 1;
+  at_rob_lord = 10;    // 抢地主
+  at_giveup_lord = 11; // 放弃地主
+  at_show_card = 20;   // 明牌
+  at_double_bet = 21;  // 加倍
+  at_out_card = 30;    // 出牌
+}
+
+message ActionInfo {
+  int32 seat_id = 1;
+  StageType stage = 2;  
+}
+
+message GameInfo {
+  StageType stage = 1;
+
+  int32 curr_action_seat_id = 2; // 当前操作玩家
+  map<int32, PlayerGameInfo> player_info = 5;
+}

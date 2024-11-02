@@ -2,7 +2,7 @@ package network
 
 import (
 	"encoding/binary"
-	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"sync"
@@ -10,7 +10,6 @@ import (
 
 	ws "github.com/gorilla/websocket"
 
-	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 )
 
@@ -105,7 +104,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var us auth.User
+	var us User
 	if s.OnConnAuth != nil {
 		pk := NewHVPacket()
 		pk.Meta.SetType(PacketType_Inner)
@@ -119,11 +118,13 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			if us, err = s.OnConnAuth(pk.GetBody()); err != nil {
 				pk.Meta.SetType(PacketType_Inner)
+				pk.SetHead([]byte("auth"))
 				pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFailed)
 				pk.SetBody([]byte(err.Error()))
 				return
 			}
-			conn.User = us
+
+			conn.userInfo.fromUser(us)
 		}
 	}
 
@@ -144,7 +145,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer conn.Close()
 		err := conn.writeWork()
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 		}
 	}()
 
@@ -152,7 +153,9 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer conn.Close()
 		err := conn.readWork()
 		if err != nil {
-			fmt.Println(err)
+			if err != io.EOF {
+				log.Error(err)
+			}
 		}
 	}()
 

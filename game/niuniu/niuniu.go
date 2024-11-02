@@ -108,8 +108,8 @@ func (nn *Niuniu) OnInit(opts battle.LogicOpts) error {
 		return fmt.Errorf("player is not enrough")
 	}
 
-	if opts.Logger != nil {
-		nn.Logger = opts.Logger
+	if opts.Log != nil {
+		nn.Logger = opts.Log
 	}
 
 	for _, v := range opts.Players {
@@ -161,8 +161,8 @@ func (nn *Niuniu) OnEvent(topic string, event protobuf.Message) {
 
 }
 
-func (nn *Niuniu) GameDeskInfoRequest(p battle.Player, req *GameDeskInfoRequest) {
-	resp := &GameDeskInfoResponse{
+func (nn *Niuniu) OnReqGameInfo(p battle.Player, req *ReqGameInfo) {
+	resp := &RespGameInfo{
 		Info: nn.info,
 	}
 	nn.Send2Player(p, resp)
@@ -178,11 +178,11 @@ func (nn *Niuniu) checkStat(p *NNPlayer, expect GameStep) error {
 	return nil
 }
 
-func (nn *Niuniu) OnPlayerBankerRequest(nnPlayer *NNPlayer, req *PlayerBanker) {
+func (nn *Niuniu) OnReqPlayerBanker(nnPlayer *NNPlayer, req *ReqPlayerBanker) {
 	if err := nn.checkStat(nnPlayer, GameStep_BANKER); err != nil {
 		return
 	}
-	notice := &PlayerBankerNotify{
+	notice := &NotifyPlayerBanker{
 		SeatId: int32(nnPlayer.raw.SeatID()),
 		Rob:    req.Rob,
 	}
@@ -190,7 +190,7 @@ func (nn *Niuniu) OnPlayerBankerRequest(nnPlayer *NNPlayer, req *PlayerBanker) {
 	nn.BroadcastMessage(notice)
 }
 
-func (nn *Niuniu) OnPlayerBetRateRequest(p battle.Player, pMsg *PlayerBetRate) {
+func (nn *Niuniu) OnReqPlayerBetRate(p battle.Player, pMsg *ReqPlayerBetRate) {
 	nnPlayer := nn.playerConv(p)
 	if nnPlayer == nil {
 		nn.Infof("can't find player uid :%d", p.SeatID())
@@ -204,14 +204,14 @@ func (nn *Niuniu) OnPlayerBetRateRequest(p battle.Player, pMsg *PlayerBetRate) {
 	nnPlayer.BetRate = pMsg.Rate
 	nnPlayer.Status = GameStep_BET
 
-	notice := &PlayerBetRateNotify{
+	notice := &NotifyPlayerBetRate{
 		SeatId: int32(p.SeatID()),
 		Rate:   pMsg.Rate,
 	}
 	nn.BroadcastMessage(notice)
 }
 
-func (nn *Niuniu) OnPlayerOutCardRequest(p battle.Player, pMsg *PlayerOutCard) {
+func (nn *Niuniu) OnReqPlayerOutCard(p battle.Player, pMsg *ReqPlayerOutCard) {
 	nnPlayer := nn.playerConv(p)
 
 	if nnPlayer == nil {
@@ -229,7 +229,7 @@ func (nn *Niuniu) OnPlayerOutCardRequest(p battle.Player, pMsg *PlayerOutCard) {
 	}
 	nnPlayer.Status = GameStep_SHOW_CARDS
 
-	notice := &PlayerOutCardNotify{
+	notice := &NotifyPlayerOutCard{
 		SeatId:  int32(p.SeatID()),
 		OutCard: nnPlayer.OutCard,
 	}
@@ -353,7 +353,7 @@ func (nn *Niuniu) ChangeLogicStep(s GameStep) {
 		}
 	}
 
-	notice := &GameStatusNotify{
+	notice := &NotifyGameStatus{
 		GameStatus: s,
 		TimeDown:   int32(donwtime),
 	}
@@ -431,7 +431,7 @@ func (nn *Niuniu) notifyRobBanker() {
 	//庄家不参与下注.提前设置好状态
 	banker.Status = GameStep_BET
 
-	notice := &BankerSeatNotify{
+	notice := &NotifyBankerSeat{
 		SeatId: bankSeatId,
 	}
 
@@ -446,7 +446,7 @@ func (nn *Niuniu) sendCardToPlayer() {
 		p.rawHandCards = deck.DealHandCards()
 		p.HandCards = p.rawHandCards.Bytes()
 		p.Status = GameStep_DEAL_CARDS
-		notice := &PlayerHandCardsNotify{
+		notice := &NotifyPlayerHandCards{
 			SeatId:    p.SeatId,
 			HandCards: p.HandCards,
 		}
@@ -472,14 +472,14 @@ func (nn *Niuniu) beginTally() {
 		return
 	}
 
-	notify := &PlayerTallyNotify{}
+	notify := &NotifyGameTally{}
 	// notify.TallInfo = make([]*PlayerTallyNotify_TallyInfo, 0)
 	// type tally struct {
 	// 	UserId int64
 	// 	Coins  int32
 	// }
 
-	bankerTally := &PlayerTallyNotify_TallyInfo{
+	bankerTally := &NotifyGameTally_TallyInfo{
 		SeatId: banker.SeatId,
 		//Coins:  chips*cardRate*p.BetRate - 100,
 	}
@@ -498,7 +498,7 @@ func (nn *Niuniu) beginTally() {
 		} else {
 			cardRate += int32(p.rawHandCards.Type())
 		}
-		temp := &PlayerTallyNotify_TallyInfo{
+		temp := &NotifyGameTally_TallyInfo{
 			SeatId: p.SeatId,
 			Coins:  chips * cardRate * p.BetRate,
 		}

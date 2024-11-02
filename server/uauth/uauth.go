@@ -1,4 +1,4 @@
-package auth
+package uauth
 
 import (
 	"context"
@@ -47,8 +47,8 @@ type Auth struct {
 	AuthOptions
 }
 
-func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.AnonymousLoginRequest) {
-	out := &msgUAuth.AnonymousLoginResponse{}
+func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) {
+	out := &msgUAuth.RespAnonymousLogin{}
 	var err error
 
 	defer func() {
@@ -143,13 +143,13 @@ func (h *Auth) CTByName() *calltable.CallTable[string] {
 	}
 
 	ct := calltable.NewCallTable[string]()
-	ct.Add("Login", NewMethod(h.Login))
+	ct.Add("Login", NewMethod(h.OnReqLogin))
 	ct.Add("AnonymousLogin", NewMethod(h.AnonymousLogin))
 	return ct
 }
 
-func (h *Auth) Login(ctx core.Context, in *msgUAuth.LoginRequest) {
-	out := &msgUAuth.LoginResponse{}
+func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
+	out := &msgUAuth.RespLogin{}
 	// var err = &err.Error{}
 	var err error
 
@@ -215,7 +215,7 @@ func (h *Auth) Login(ctx core.Context, in *msgUAuth.LoginRequest) {
 	}
 }
 
-func (h *Auth) UserInfo(ctx core.Context, in *msgUAuth.UserInfoRequest) {
+func (h *Auth) OnReqUserInfo(ctx core.Context, in *msgUAuth.ReqUserInfo) {
 	user := &models.Users{
 		UID: in.Uid,
 	}
@@ -233,7 +233,7 @@ func (h *Auth) UserInfo(ctx core.Context, in *msgUAuth.UserInfoRequest) {
 		h.Cache.StoreUser(context.Background(), &cache.AuthCacheInfo{User: user}, time.Hour)
 	}
 
-	out := &msgUAuth.UserInfoResponse{
+	out := &msgUAuth.RespUserInfo{
 		Info: &msgUAuth.UserInfo{
 			Uid:     user.UID,
 			Uname:   user.Uname,
@@ -245,7 +245,7 @@ func (h *Auth) UserInfo(ctx core.Context, in *msgUAuth.UserInfoRequest) {
 	ctx.Response(out, nil)
 }
 
-func (h *Auth) Register(ctx core.Context, in *msgUAuth.RegisterRequest) (*msgUAuth.RegisterResponse, error) {
+func (h *Auth) OnReqRegister(ctx core.Context, in *msgUAuth.ReqRegister) (*msgUAuth.RespRegister, error) {
 	if !RegUname.MatchString(in.Uname) {
 		return nil, nil
 	}
@@ -272,7 +272,7 @@ func (h *Auth) Register(ctx core.Context, in *msgUAuth.RegisterRequest) (*msgUAu
 		return nil, fmt.Errorf("create user error")
 	}
 
-	return &msgUAuth.RegisterResponse{Msg: "ok"}, nil
+	return &msgUAuth.RespRegister{Msg: "ok"}, nil
 }
 
 func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {

@@ -17,11 +17,11 @@ enum ResponseFlag {
   // login + 100
 }
 
-message CaptchaRequest {
+message ReqCaptcha  {
   string captcha_type = 1;
 }
 
-message CaptchaResponse {
+message RespCaptcha {
   string captcha_id = 1;
   string base64_captcha = 2;
 }
@@ -40,65 +40,65 @@ message UserInfo {
   string avatar = 6;
 }
 
-message LoginRequest {
+message ReqLogin {
   string uname = 1;
   string passwd = 2;
 
   CaptchaVerify captcha_verify = 3;
 }
 
-message LoginResponse {
+message RespLogin {
   string assess_token = 1;
   UserInfo user_info = 3;
 }
 
-message RefreshTokenRequest {
+message ReqRefreshToken {
   string access_token = 1;
   string refresh_token = 2;
 }
 
-message RefreshTokenResponse {
+message RespRefreshToken {
   string access_token = 1;
 }
 
-message RegisterRequest {
+message ReqRegister {
   string uname = 1;
   string passwd = 2;
   string nickname = 3;
   string email = 4;
 }
 
-message RegisterResponse {
+message RespRegister {
   string msg = 1;
 }
 
 // verify
-message UserInfoRequest {
+message ReqUserInfo {
   int64 uid = 1;
 }
-message UserInfoResponse {
+message RespUserInfo {
   UserInfo info = 1;
 }
 
 // change user's passwd
-message ModifyPasswdRequest {}
-message ModifyPasswdResponse {}
+message ReqModifyPasswd {}
+message RespModifyPasswd {}
 
 // reset user's passwd if forgot
-message ResetPasswdRequest {}
-message ResetPasswdResponse {}
+message ReqResetPasswd {}
+message RespResetPasswd {}
 
-message AnonymousLoginRequest {
+message ReqAnonymousLogin {
   string uname = 1;
   string passwd = 2;
 }
 
-message AnonymousLoginResponse {
+message RespAnonymousLogin {
   string assess_token = 1;
   UserInfo user_info = 3;
 }
 
-message PublicKeysRequest {}
-message PublicKeysResponse {
+message ReqPublicKeys {}
+message RespPublicKeys {
   bytes keys = 1;
 }

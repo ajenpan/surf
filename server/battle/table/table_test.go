@@ -32,7 +32,7 @@ func TestTableTicker(t *testing.T) {
 		},
 	}
 
-	d := NewTable(TableOption{
+	d := NewTable(TableOptions{
 		Conf: &msgBattle.TableConfigure{},
 	})
 

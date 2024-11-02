@@ -6,3 +6,4 @@ log.txt
 *.exe
 *.pem
 .vscode
+/msg-cs

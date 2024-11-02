@@ -4,16 +4,13 @@ import (
 	"net"
 	"sync/atomic"
 	"time"
-
-	"github.com/ajenpan/surf/core/auth"
 )
 
-func newTcpConn(id string, uinfo auth.User, imp net.Conn, rwtimeout time.Duration) *TcpConn {
+func newTcpConn(id string, uinfo User, imp net.Conn, rwtimeout time.Duration) *TcpConn {
 	if rwtimeout.Seconds() < float64(DefaultHeartbeatSec) {
 		rwtimeout = time.Duration(DefaultHeartbeatSec*2) * time.Second
 	}
-	return &TcpConn{
-		User:       uinfo,
+	ret := &TcpConn{
 		id:         id,
 		imp:        imp,
 		timeOut:    rwtimeout,
@@ -24,10 +21,12 @@ func newTcpConn(id string, uinfo auth.User, imp net.Conn, rwtimeout time.Duratio
 		lastSendAt: time.Now().UnixMilli(),
 		lastRecvAt: time.Now().UnixMilli(),
 	}
+	ret.userInfo.fromUser(uinfo)
+	return ret
 }
 
 type TcpConn struct {
-	auth.User
+	userInfo
 
 	imp net.Conn
 	id  string

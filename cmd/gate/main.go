@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
-	"github.com/ajenpan/surf/core/utils/rsagen"
+	utilsRsa "github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 	gate "github.com/ajenpan/surf/server/gate"
 )
@@ -54,7 +56,7 @@ const PublicKeyFile = "public.pem"
 func ReadRSAKey() ([]byte, []byte, error) {
 	privateRaw, err := os.ReadFile(PrivateKeyFile)
 	if err != nil {
-		privateKey, publicKey, err := rsagen.GenerateRsaPem(512)
+		privateKey, publicKey, err := utilsRsa.GenerateRsaPem(512)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -76,6 +78,21 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		panic(err)
 	}
+
+	ppk, err := utilsRsa.LoadRsaPrivateKeyFromFile(PrivateKeyFile)
+	if err != nil {
+		return err
+	}
+	testuser := &auth.UserInfo{
+		UId:   10001,
+		UName: "testuser",
+		URole: 1,
+	}
+	testjwt, err := auth.GenerateToken(ppk, testuser, 24*time.Hour*999)
+	if err != nil {
+		return err
+	}
+	log.Info("testjwt:", testjwt)
 
 	cfg := &gate.Config{
 		RsaPublicKeyFile: PublicKeyFile,

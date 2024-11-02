@@ -4,17 +4,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ajenpan/surf/core/auth"
 	ws "github.com/gorilla/websocket"
 )
 
-func newWSConn(id string, uinfo auth.User, conn *ws.Conn, rwtimeout time.Duration) *WSConn {
+func newWSConn(id string, uinfo User, conn *ws.Conn, rwtimeout time.Duration) *WSConn {
 	if rwtimeout.Seconds() < float64(DefaultHeartbeatSec) {
 		rwtimeout = time.Duration(DefaultHeartbeatSec*2) * time.Second
 	}
-
-	return &WSConn{
-		User:       uinfo,
+	ret := &WSConn{
 		id:         id,
 		imp:        conn,
 		rwtimeout:  rwtimeout,
@@ -25,6 +22,10 @@ func newWSConn(id string, uinfo auth.User, conn *ws.Conn, rwtimeout time.Duratio
 		lastSendAt: time.Now().UnixMilli(),
 		lastRecvAt: time.Now().UnixMilli(),
 	}
+	if uinfo != nil {
+		ret.userInfo.fromUser(uinfo)
+	}
+	return ret
 }
 
 func wsconnWritePacket(conn *ws.Conn, p *HVPacket) error {
@@ -48,7 +49,7 @@ func wsconnReadPacket(conn *ws.Conn) (*HVPacket, error) {
 }
 
 type WSConn struct {
-	auth.User
+	userInfo
 
 	imp       *ws.Conn
 	status    ConnStatus

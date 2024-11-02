@@ -3,9 +3,9 @@ package battle
 import (
 	"time"
 
-	"google.golang.org/protobuf/proto"
+	log "github.com/ajenpan/surf/core/log"
 
-	"github.com/ajenpan/surf/core/log"
+	"google.golang.org/protobuf/proto"
 )
 
 type SeatID int32
@@ -48,7 +48,7 @@ type LogicOpts struct {
 	Table   Table
 	Players []Player
 	Conf    interface{}
-	Logger  log.Logger
+	Log     log.Logger
 }
 
 type Logic interface {

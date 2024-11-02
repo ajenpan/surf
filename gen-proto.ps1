@@ -1,19 +1,19 @@
 
-$protocbin="protoc.exe"
+$protocbin = "protoc.exe"
 
 Write-Output $protocbin
 & $protocbin --version
 
 # for golang 
-Get-ChildItem -Path . -Recurse -Filter *.proto | ForEach-Object {    
+Get-ChildItem -Path ./proto -Recurse -Filter *.proto | ForEach-Object {    
     $outputPath = $_.DirectoryName    
     Write-Output  $_.FullName
-    & $protocbin --proto_path=$outputPath --go_out=../ $_.FullName
+    & $protocbin --proto_path=$outputPath --go_out=. $_.FullName
 }
 
-# for csharp
+#for csharp
 mkdir -p msg-cs
-Get-ChildItem -Path . -Recurse -Filter *.proto | ForEach-Object {    
+Get-ChildItem -Path ./proto -Recurse -Filter *.proto | ForEach-Object {    
     $outputPath = $_.DirectoryName    
     Write-Output  $_.FullName
     & $protocbin --proto_path=$outputPath --csharp_out=./msg-cs/ $_.FullName

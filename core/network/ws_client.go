@@ -10,7 +10,6 @@ import (
 
 	ws "github.com/gorilla/websocket"
 
-	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 )
 
@@ -22,7 +21,7 @@ type WSClientOptions struct {
 	OnConnPacket   FuncOnConnPacket
 	OnConnStatus   FuncOnConnStatus
 	AuthToken      []byte
-	UInfo          auth.User
+	UInfo          User
 	ReconnectDelay time.Duration
 }
 
