@@ -19,20 +19,28 @@ func NewPlayer(p *msgBattle.PlayerInfo) *Player {
 
 func NewPlayers(infos []*msgBattle.PlayerInfo) ([]*Player, error) {
 	ret := make([]*Player, len(infos))
-	for i, info := range infos {
-		ret[i] = NewPlayer(info)
-	}
 
-	// check seatid
-	for _, v := range ret {
-		if v.SeatId == 0 {
-			return nil, fmt.Errorf("seat id is 0")
-		}
-		if v.Uid == 0 {
+	uidMap := make(map[uint64]struct{})
+	seatidMap := make(map[int32]struct{})
+
+	for i, info := range infos {
+		if info.Uid == 0 {
 			return nil, fmt.Errorf("uid is 0")
 		}
-	}
 
+		ret[i] = NewPlayer(info)
+
+		uidMap[info.Uid] = struct{}{}
+		if info.SeatId >= 0 {
+			seatidMap[info.SeatId] = struct{}{}
+		}
+	}
+	if len(uidMap) != len(ret) {
+		return nil, fmt.Errorf("uid is not unique")
+	}
+	if len(seatidMap) != len(ret) {
+		return nil, fmt.Errorf("seatid is not unique")
+	}
 	return ret, nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
+	"golang.org/x/exp/rand"
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
@@ -79,16 +80,18 @@ func RealMain(c *cli.Context) error {
 		panic(err)
 	}
 
-	ppk, err := utilsRsa.LoadRsaPrivateKeyFromFile(PrivateKeyFile)
+	pk, err := utilsRsa.LoadRsaPrivateKeyFromFile(PrivateKeyFile)
 	if err != nil {
 		return err
 	}
+
+	testuid := uint32(rand.Int31n(300000) + 30000)
 	testuser := &auth.UserInfo{
-		UId:   10001,
-		UName: "testuser",
+		UId:   testuid,
+		UName: fmt.Sprintf("yk%d", testuid),
 		URole: 1,
 	}
-	testjwt, err := auth.GenerateToken(ppk, testuser, 24*time.Hour*999)
+	testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)
 	if err != nil {
 		return err
 	}

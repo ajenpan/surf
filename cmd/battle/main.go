@@ -74,23 +74,22 @@ func RealMain(c *cli.Context) error {
 	h := battleHandler.New()
 	CTByID, CTByName := calltable.ExtractMethod(battleMsg.File_battle_proto.Messages(), h)
 
-	uid := rand.Int31n(1000000000)
+	uid := 10001
 	uname := fmt.Sprintf("battle_%d", uid)
-
 	uinfo := &auth.UserInfo{
 		UId:   uint32(uid),
 		UName: uname,
-		URole: 1,
+		URole: 6000,
 	}
 
 	jwt, err := auth.GenerateToken(pk, uinfo, 2400*time.Hour)
 	if err != nil {
 		return err
 	}
-
+	testuid := uint32(rand.Int31n(300000) + 30000)
 	testuser := &auth.UserInfo{
-		UId:   10001,
-		UName: "testuser",
+		UId:   testuid,
+		UName: fmt.Sprintf("yk%d", testuid),
 		URole: 1,
 	}
 	testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)

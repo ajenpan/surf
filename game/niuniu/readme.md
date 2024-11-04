@@ -1,5 +1,5 @@
 ## gen proto
 
 ```sh
-protoc --go_out=. ./game/niuniu/*.proto
+protoc --go_out=. --csharp_out=. --csharp_opt=file_extension=.pb.cs ./game/niuniu/*.proto
 ```

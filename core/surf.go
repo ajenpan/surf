@@ -443,7 +443,7 @@ func (s *Surf) onNodeInnerPacket(c network.Conn, pk *network.HVPacket) {
 }
 
 func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
-	defer s.catch()
+	// defer s.catch()
 
 	if len(pk.Head) != network.RoutePackHeadLen {
 		log.Error("invalid packet head length:", len(pk.Head))
@@ -458,14 +458,21 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 	case network.RoutePackType_SubFlag_Request:
 		method := s.opts.CTById.Get(head.GetMsgId())
 		if method == nil {
-			// todo:
+			log.Error("invalid msgid:", head.GetMsgId())
+			//todo send error packet
 			return
 		}
 		marshaler := marshal.NewMarshalerById(head.GetMarshalType())
+		if marshaler == nil {
+			log.Error("invalid marshaler type:", head.GetMarshalType())
+			//todo send error packet
+			return
+		}
 		req := method.NewRequest()
 		err := marshaler.Unmarshal(pk.GetBody(), req)
 		if err != nil {
-			// todo:
+			log.Error("unmarshal request body failed:", err)
+			//todo send error packet
 			return
 		}
 

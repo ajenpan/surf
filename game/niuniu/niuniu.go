@@ -132,7 +132,7 @@ func (nn *Niuniu) OnInit(opts battle.LogicOpts) error {
 	}
 	nn.table = opts.Table
 	nn.info = &GameInfo{
-		Status: GameStep_COUNTDOWN,
+		GameStep: GameStep_COUNTDOWN,
 	}
 	nn.gameTime = 0
 
@@ -172,7 +172,7 @@ func (nn *Niuniu) checkStat(p *NNPlayer, expect GameStep) error {
 	if nn.getLogicStep() == expect {
 		return fmt.Errorf("game status error")
 	}
-	if p.Status != previousStep(expect) {
+	if p.GameStep != previousStep(expect) {
 		return fmt.Errorf("player status error")
 	}
 	return nil
@@ -202,7 +202,7 @@ func (nn *Niuniu) OnReqPlayerBetRate(p battle.Player, pMsg *ReqPlayerBetRate) {
 	}
 
 	nnPlayer.BetRate = pMsg.Rate
-	nnPlayer.Status = GameStep_BET
+	nnPlayer.GameStep = GameStep_BET
 
 	notice := &NotifyPlayerBetRate{
 		SeatId: int32(p.SeatID()),
@@ -227,7 +227,7 @@ func (nn *Niuniu) OnReqPlayerOutCard(p battle.Player, pMsg *ReqPlayerOutCard) {
 		Cards: nnPlayer.rawHandCards.Bytes(),
 		Type:  CardType(nnPlayer.rawHandCards.Type()),
 	}
-	nnPlayer.Status = GameStep_SHOW_CARDS
+	nnPlayer.GameStep = GameStep_SHOW_CARDS
 
 	notice := &NotifyPlayerOutCard{
 		SeatId:  int32(p.SeatID()),
@@ -303,7 +303,7 @@ func (nn *Niuniu) OnReset() {
 }
 
 func (nn *Niuniu) getLogicStep() GameStep {
-	return nn.info.Status
+	return nn.info.GameStep
 }
 
 func (nn *Niuniu) getStageDowntime(s GameStep) time.Duration {
@@ -332,7 +332,7 @@ func (nn *Niuniu) NextStep() {
 
 func (nn *Niuniu) ChangeLogicStep(s GameStep) {
 	lastStatus := nn.getLogicStep()
-	nn.info.Status = s
+	nn.info.GameStep = s
 
 	if lastStatus != s {
 		//reset stage time
@@ -353,9 +353,9 @@ func (nn *Niuniu) ChangeLogicStep(s GameStep) {
 		}
 	}
 
-	notice := &NotifyGameStatus{
-		GameStatus: s,
-		TimeDown:   int32(donwtime),
+	notice := &NotifyGameStep{
+		GameStep: s,
+		TimeDown: int32(donwtime),
 	}
 
 	nn.BroadcastMessage(notice)
@@ -374,12 +374,12 @@ func (nn *Niuniu) getPlayerBySeatId(seatid int32) *NNPlayer {
 }
 
 func (nn *Niuniu) StepTimeover() bool {
-	return nn.stageTime >= nn.getStageDowntime(nn.info.Status)
+	return nn.stageTime >= nn.getStageDowntime(nn.info.GameStep)
 }
 
 func (nn *Niuniu) checkPlayerStep(expect GameStep) bool {
 	for _, p := range nn.players {
-		if p.Status != expect {
+		if p.GameStep != expect {
 			return false
 		}
 	}
@@ -397,8 +397,8 @@ func (nn *Niuniu) checkEndBanker() bool {
 
 func (nn *Niuniu) notifyRobBanker() {
 	for _, p := range nn.players {
-		if p.Status != GameStep_BANKER {
-			p.Status = GameStep_BANKER
+		if p.GameStep != GameStep_BANKER {
+			p.GameStep = GameStep_BANKER
 		}
 	}
 
@@ -429,7 +429,7 @@ func (nn *Niuniu) notifyRobBanker() {
 
 	banker.Banker = true
 	//庄家不参与下注.提前设置好状态
-	banker.Status = GameStep_BET
+	banker.GameStep = GameStep_BET
 
 	notice := &NotifyBankerSeat{
 		SeatId: bankSeatId,
@@ -445,7 +445,7 @@ func (nn *Niuniu) sendCardToPlayer() {
 	for _, p := range nn.players {
 		p.rawHandCards = deck.DealHandCards()
 		p.HandCards = p.rawHandCards.Bytes()
-		p.Status = GameStep_DEAL_CARDS
+		p.GameStep = GameStep_DEAL_CARDS
 		notice := &NotifyPlayerHandCards{
 			SeatId:    p.SeatId,
 			HandCards: p.HandCards,

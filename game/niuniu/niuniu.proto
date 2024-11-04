@@ -1,8 +1,9 @@
 syntax = "proto3";
 
-package games.niuniu;
+package game.niuniu;
 
-option go_package = "./game/niuniu;niuniu";
+option go_package = "game/niuniu;niuniu";
+option csharp_namespace = "game.niuniu";
 
 // 牌型类型
 enum CardType {
@@ -43,7 +44,7 @@ message OutCardInfo {
 
 message GamePlayerInfo {
   int32 seat_id = 1;
-  GameStep status = 2;
+  GameStep game_step = 2;
   int32 ready = 3;
   int32 banker_rob = 4; // 抢庄
   bool banker = 5;
@@ -53,7 +54,7 @@ message GamePlayerInfo {
 }
 
 message GameInfo {
-  GameStep status = 4; // 游戏状态
+  GameStep game_step = 4; // 游戏状态
   map<int32, GamePlayerInfo> player_info = 5;
 }
 
@@ -66,9 +67,9 @@ message RespGameInfo {
   GameInfo game_info = 3;
 }
 
-message NotifyGameStatus {
-  GameStep game_status = 1; // 游戏状态
-  int32 time_down = 3;      // 倒计时
+message NotifyGameStep {
+  GameStep game_step = 1; // 游戏状态
+  int32 time_down = 3;    // 倒计时
 }
 
 // 用户请求抢庄

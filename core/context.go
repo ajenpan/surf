@@ -32,7 +32,7 @@ func (ctx *context) Response(msg proto.Message, herr error) {
 
 	if herr != nil {
 		if err, ok := herr.(*errors.Error); ok {
-			inHead.SetErrCode(int32(err.Code))
+			inHead.SetErrCode(int16(err.Code))
 		} else {
 			inHead.SetErrCode(-1)
 		}

@@ -52,6 +52,11 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 
 	rpk := network.ParseRoutePacket(pk)
+	if rpk == nil {
+		log.Warnf("OnConnPacket parse route packet failed: %v", pk)
+		return
+	}
+
 	rpk.SetClientId(s.UserID())
 	svrtype := rpk.GetSvrType()
 
