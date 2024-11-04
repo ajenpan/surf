@@ -7,32 +7,30 @@ import (
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/errors"
-	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"google.golang.org/protobuf/proto"
 )
 
 type httpCallContext struct {
-	w         http.ResponseWriter
-	r         *http.Request
-	core      *Surf
-	uinfo     *auth.UserInfo
-	marshaler marshal.Marshaler
+	w     http.ResponseWriter
+	r     *http.Request
+	core  *Surf
+	uinfo *auth.UserInfo
+	// marshaler marshal.Marshaler
+}
+
+type httpResponeWrap struct {
+	ErrCode int         `json:"errcode"`
+	ErrMsg  string      `json:"errmsg"`
+	Data    interface{} `json:"data"`
 }
 
 func (ctx *httpCallContext) Response(msg proto.Message, err error) {
-	type httpWrap struct {
-		ErrCode int         `json:"errcode"`
-		ErrMsg  string      `json:"errmsg"`
-		Data    interface{} `json:"data"`
-	}
-
 	enc := json.NewEncoder(ctx.w)
-	wrap := &httpWrap{Data: msg}
+	wrap := &httpResponeWrap{Data: msg}
 
 	if err != nil {
 		wrap.ErrMsg = err.Error()
-
 		if errs, ok := err.(*errors.Error); ok {
 			wrap.ErrCode = int(errs.Code)
 		} else {
@@ -52,7 +50,7 @@ func (ctx *httpCallContext) Request(msg proto.Message, cb func(pk *network.HVPac
 	// do nothing
 }
 
-func (ctx *httpCallContext) Async(msg interface{}) error {
+func (ctx *httpCallContext) Async(msg proto.Message) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 

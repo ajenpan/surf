@@ -5,7 +5,6 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"net/http"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -45,6 +44,41 @@ func NewAuth(opts AuthOptions) *Auth {
 
 type Auth struct {
 	AuthOptions
+}
+
+func (h *Auth) ServerName() string {
+	return "uauth"
+}
+
+func (h *Auth) ServerType() uint16 {
+	return 10
+}
+
+func (h *Auth) CTByName() *calltable.CallTable[string] {
+	ct := calltable.NewCallTable[string]()
+	ct.Add("Login", calltable.ExtractFunction(h.OnReqLogin))
+	ct.Add("AnonymousLogin", calltable.ExtractFunction(h.AnonymousLogin))
+	ct.Add("Register", calltable.ExtractFunction(h.OnReqRegister))
+	ct.Add("UserInfo", calltable.ExtractFunction(h.OnReqUserInfo))
+
+	return ct
+}
+
+func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		authorstr := r.Header.Get("Authorization")
+		authorstr = strings.TrimPrefix(authorstr, "Bearer ")
+		if authorstr == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_, err := coreauth.VerifyToken(&h.PK.PublicKey, []byte(authorstr))
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		f(w, r)
+	}
 }
 
 func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) {
@@ -129,25 +163,6 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 	}
 }
 
-func (h *Auth) CTByName() *calltable.CallTable[string] {
-	NewMethod := func(f interface{}) *calltable.Method {
-		refv := reflect.ValueOf(f)
-		if refv.Kind() != reflect.Func {
-			return nil
-		}
-		ret := &calltable.Method{
-			Func:        refv,
-			RequestType: refv.Type().In(1).Elem(),
-		}
-		return ret
-	}
-
-	ct := calltable.NewCallTable[string]()
-	ct.Add("Login", NewMethod(h.OnReqLogin))
-	ct.Add("AnonymousLogin", NewMethod(h.AnonymousLogin))
-	return ct
-}
-
 func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
 	out := &msgUAuth.RespLogin{}
 	// var err = &err.Error{}
@@ -225,9 +240,11 @@ func (h *Auth) OnReqUserInfo(ctx core.Context, in *msgUAuth.ReqUserInfo) {
 	} else {
 		res := h.DB.Limit(1).Find(user, user)
 		if res.Error != nil {
+			ctx.Response(nil, res.Error)
 			return
 		}
 		if res.RowsAffected == 0 {
+			ctx.Response(nil, fmt.Errorf("user not found"))
 			return
 		}
 		h.Cache.StoreUser(context.Background(), &cache.AuthCacheInfo{User: user}, time.Hour)
@@ -245,13 +262,22 @@ func (h *Auth) OnReqUserInfo(ctx core.Context, in *msgUAuth.ReqUserInfo) {
 	ctx.Response(out, nil)
 }
 
-func (h *Auth) OnReqRegister(ctx core.Context, in *msgUAuth.ReqRegister) (*msgUAuth.RespRegister, error) {
+func (h *Auth) OnReqRegister(ctx core.Context, in *msgUAuth.ReqRegister) {
+	resp := &msgUAuth.RespRegister{}
+	var err error
+
+	defer func() {
+		ctx.Response(resp, err)
+	}()
+
 	if !RegUname.MatchString(in.Uname) {
-		return nil, nil
+		err = fmt.Errorf("invalid username")
+		return
 	}
 
 	if len(in.Passwd) < 6 {
-		return nil, fmt.Errorf("passwd is required")
+		err = fmt.Errorf("invalid password")
+		return
 	}
 
 	user := &models.Users{
@@ -264,30 +290,19 @@ func (h *Auth) OnReqRegister(ctx core.Context, in *msgUAuth.ReqRegister) (*msgUA
 	res := h.DB.Create(user)
 
 	if res.Error != nil {
+		if res.Error == gorm.ErrDuplicatedKey {
+			err = fmt.Errorf("username already exists")
+			return
+		}
 		log.Error(res.Error)
-		return nil, fmt.Errorf("server internal error")
+		err = fmt.Errorf("server internal error")
+		return
 	}
 
 	if res.RowsAffected == 0 {
-		return nil, fmt.Errorf("create user error")
+		err = fmt.Errorf("create user error")
+		return
 	}
 
-	return &msgUAuth.RespRegister{Msg: "ok"}, nil
-}
-
-func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		authorstr := r.Header.Get("Authorization")
-		authorstr = strings.TrimPrefix(authorstr, "Bearer ")
-		if authorstr == "" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		_, err := coreauth.VerifyToken(&h.PK.PublicKey, []byte(authorstr))
-		if err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		f(w, r)
-	}
+	resp.Msg = "ok"
 }

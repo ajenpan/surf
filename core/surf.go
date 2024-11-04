@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -177,7 +178,7 @@ func (s *Surf) startHttpSvr() {
 			key = "/" + key
 		}
 
-		cb := s.WrapMethod(method)
+		cb := s.WrapMethod(key, method)
 		mux.HandleFunc(key, cb)
 		log.Info("http handle func: ", key)
 		return true
@@ -365,7 +366,8 @@ func (s *Surf) GetNodeConn(id uint32) network.Conn {
 	return nil
 }
 
-func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
+func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc {
+	// method.Func
 	return func(w http.ResponseWriter, r *http.Request) {
 		authdata := r.Header.Get("Authorization")
 		if len(authdata) < 5 {
@@ -373,7 +375,6 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 			return
 		}
 		authdata = strings.TrimPrefix(authdata, "Bearer ")
-
 		uinfo, err := auth.VerifyToken(s.opts.PublicKey, []byte(authdata))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
@@ -388,13 +389,8 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 		}
 
 		req := method.NewRequest()
-		marshaler := marshal.NewMarshalerByName(r.Header.Get("Content-Type"))
-		if marshaler == nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
 
-		if err = marshaler.Unmarshal(raw, req); err != nil {
+		if err = json.Unmarshal(raw, req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
 			return
@@ -404,11 +400,10 @@ func (s *Surf) WrapMethod(method *calltable.Method) http.HandlerFunc {
 		w.Header().Set("Content-Type", contenttype)
 
 		var ctx Context = &httpCallContext{
-			w:         w,
-			r:         r,
-			core:      s,
-			uinfo:     uinfo,
-			marshaler: marshaler,
+			w:     w,
+			r:     r,
+			core:  s,
+			uinfo: uinfo,
 		}
 
 		method.Call(s.opts.Server, ctx, req)
@@ -476,7 +471,7 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 			return
 		}
 
-		ctx := &context{
+		ctx := &connContext{
 			Conn:      c,
 			Core:      s,
 			ReqPacket: pk,

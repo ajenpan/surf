@@ -14,7 +14,7 @@ type Context interface {
 	Caller() uint32
 }
 
-type context struct {
+type connContext struct {
 	Conn      network.Conn
 	Core      *Surf
 	ReqPacket *network.HVPacket
@@ -22,7 +22,7 @@ type context struct {
 	Marshal   marshal.Marshaler
 }
 
-func (ctx *context) Response(msg proto.Message, herr error) {
+func (ctx *connContext) Response(msg proto.Message, herr error) {
 	inHead := network.RoutePacketHead(ctx.ReqPacket.GetHead())
 	var body []byte
 	var err error
@@ -54,11 +54,11 @@ func (ctx *context) Response(msg proto.Message, herr error) {
 	}
 }
 
-func (ctx *context) SendAsync(msg proto.Message) error {
+func (ctx *connContext) SendAsync(msg proto.Message) error {
 	msgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	return ctx.Core.SendAsyncToClient(ctx.Conn, ctx.caller, msgid, msg)
 }
 
-func (ctx *context) Caller() uint32 {
+func (ctx *connContext) Caller() uint32 {
 	return ctx.caller
 }

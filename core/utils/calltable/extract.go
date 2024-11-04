@@ -8,6 +8,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
+const MethodPrefix string = "On"
+const MsgPrefix string = "Req"
+const MsgSuffix string = "Request"
+
 func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *CallTable[string] {
 	refh := reflect.TypeOf(h)
 
@@ -127,12 +131,20 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 	return uint32(IDDesc.Number())
 }
 
-func ExtractMethod(ms protoreflect.MessageDescriptors, h interface{}) (*CallTable[uint32], *CallTable[string]) {
-	const MethodPrefix string = "On"
+func ExtractFunction(f interface{}) *Method {
+	refv := reflect.ValueOf(f)
+	if refv.Kind() != reflect.Func {
+		return nil
+	}
+	reqtype := refv.Type().In(1).Elem()
+	ret := &Method{
+		Func:        refv,
+		RequestType: reqtype,
+	}
+	return ret
+}
 
-	const MsgPrefix string = "Req"
-	const MsgSuffix string = "Request"
-
+func ExtractMethodFromDesc(ms protoreflect.MessageDescriptors, h interface{}) (*CallTable[uint32], *CallTable[string]) {
 	ctByID := NewCallTable[uint32]()
 	ctByName := NewCallTable[string]()
 
@@ -165,6 +177,7 @@ func ExtractMethod(ms protoreflect.MessageDescriptors, h interface{}) (*CallTabl
 
 		m := &Method{
 			HandleName:  hname,
+			HandleMsgid: msgid,
 			Func:        method.Func,
 			RequestType: reqMsgType.Elem(),
 		}

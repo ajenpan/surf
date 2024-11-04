@@ -72,7 +72,7 @@ func RealMain(c *cli.Context) error {
 	}
 
 	h := battleHandler.New()
-	CTByID, CTByName := calltable.ExtractMethod(battleMsg.File_battle_proto.Messages(), h)
+	CTByID, CTByName := calltable.ExtractMethodFromDesc(battleMsg.File_battle_proto.Messages(), h)
 
 	uid := 10001
 	uname := fmt.Sprintf("battle_%d", uid)
