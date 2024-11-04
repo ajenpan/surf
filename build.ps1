@@ -1,7 +1,7 @@
 
-$release_dir="bin"
+$release_dir = "bin"
 
-If (!(test-path $release_dir)){
+If (!(test-path $release_dir)) {
     mkdir $release_dir
 }
 
@@ -9,7 +9,7 @@ go version
 
 $current_os = $(go env GOOS)
 
-$svrlist = @("gate", "battle")
+$svrlist = @("gate", "battle", "uauth")
 
 go env -w GOOS="linux"
 foreach ($svr in $svrlist) {

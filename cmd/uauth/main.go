@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -15,10 +16,29 @@ var Version string = "unknown"
 var GitCommit string = "unknown"
 var BuildAt string = "unknown"
 var BuildBy string = "unknown"
-var Name string = "auth"
+var Name string = "uauth"
 
 var ConfigPath string = ""
-var PrintConf bool = false
+
+func InitConfig() {
+	raw, err := os.ReadFile(ConfigPath)
+	if err != nil {
+		return
+	}
+	err = json.Unmarshal(raw, &uauth.DefaultConf)
+	if err != nil {
+		log.Error(err)
+	}
+}
+
+func CmdPrintConfig() {
+	raw, err := json.Marshal(&uauth.DefaultConf)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	fmt.Println(string(raw))
+}
 
 func main() {
 	cli.VersionPrinter = func(c *cli.Context) {
@@ -32,16 +52,22 @@ func main() {
 	app := cli.NewApp()
 	app.Name = Name
 	app.Version = Version
+	app.Commands = []*cli.Command{
+		{
+			Name:   "printconf",
+			Hidden: true,
+			Action: func(c *cli.Context) error {
+				CmdPrintConfig()
+				return nil
+			},
+		},
+	}
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:        "config",
 			Aliases:     []string{"c"},
-			Value:       "config.yaml",
+			Value:       "config.json",
 			Destination: &ConfigPath,
-		}, &cli.BoolFlag{
-			Name:        "printconf",
-			Destination: &PrintConf,
-			Hidden:      true,
 		},
 	}
 
@@ -54,6 +80,8 @@ func main() {
 }
 
 func RealMain(c *cli.Context) error {
+	InitConfig()
+
 	closer, err := uauth.Start(uauth.DefaultConf)
 	if err != nil {
 		return err

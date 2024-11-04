@@ -1,0 +1,1 @@
+{"DBAddr":"root:123456@tcp(localhost:3306)/game_users?charset=utf8mb4\u0026parseTime=True\u0026loc=Local","HttpListenAddr":":9999"}
