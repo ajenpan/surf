@@ -99,12 +99,12 @@ func RealMain(c *cli.Context) error {
 	log.Info("testjwt:", testjwt)
 
 	err = core.Init(core.Options{
-		Server:         h,
-		HttpListenAddr: ":13300",
-		WsListenAddr:   ":13301",
-		CTById:         CTByID,
-		CTByName:       CTByName,
-		PublicKey:      &pk.PublicKey,
+		Server:            h,
+		HttpListenAddr:    ":13300",
+		WsListenAddr:      ":13301",
+		CTById:            CTByID,
+		CTByName:          CTByName,
+		PublicKeyFilePath: "http://myali01:9999/publickey",
 		GateAddrList: []string{
 			"ws://localhost:13000",
 		},

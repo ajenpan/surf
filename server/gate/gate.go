@@ -140,7 +140,6 @@ func (gate *Gate) OnNodeStatus(conn network.Conn, enable bool) {
 
 func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 	log.Infof("OnNodePacket sid:%v,uid:%v,type:%v,datalen:%v", s.ConnID(), s.UserID(), pk.Meta.GetType(), len(pk.Body))
-
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		rpk := network.RoutePacketHead(pk.GetBody())
@@ -158,6 +157,7 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 			return
 		}
 		gate.SendTo(v, pk)
+	case network.PacketType_Node:
 	}
 }
 

@@ -14,7 +14,7 @@ var GSurf = &Surf{}
 var log = logger.Default
 
 func Init(opt Options) error {
-	return GSurf.init(opt)
+	return GSurf.Init(opt)
 }
 
 func Run() error {

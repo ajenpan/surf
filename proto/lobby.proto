@@ -35,11 +35,30 @@ message PlayerInfo {
 
 message GameInfo {}
 
+enum PlayerStatus {
+  PlayerNone = 0;
+  PlayerInQueue = 10;
+  PlayerInTable = 20;
+  PlayerInTableReady = 21;
+  PlayerInGaming = 31;
+}
+
+enum TableStatus {
+  TableNone = 0;
+  TableInCreating = 10;
+  TableInInGaming = 31;
+}
+
 message PlayingInfo {
-  int32 player_status = 1;
-  int32 battle_node_id = 2;
-  string battle_id = 3;
+  PlayerStatus player_status = 1;
   int32 seat_id = 4;
+}
+
+message TableInfo {
+  string table_id = 1;
+  int32 seat_count = 2;
+  TableStatus table_status = 3;
+  repeated PlayerInfo players = 4;
 }
 
 message ReqLoginLobby {
@@ -47,7 +66,9 @@ message ReqLoginLobby {
     __inval_msgid = 0;
     ID = 12001;
   }
-  int64 uid = 1;
+  int64 uid = 1; // 可空
+  int32 game_id = 2;
+  int32 game_subid = 3;
 }
 
 message RespLoginLobby {
@@ -70,7 +91,6 @@ message ReqDispatchQue {
     ID = 12003;
   }
   int32 join_type = 1;
-  int32 game_id = 2;
 }
 
 message RespDispatchQue {
@@ -116,24 +136,6 @@ message NotifyTableStatus {
     ID = 12020;
   }
 
-  enum TableStatus {
-    None = 0;
-    ContinuePlay = 100;
-  }
-
   TableStatus status = 1;
   int64 status_deadline = 3; // 状态截至时间戳, 0表示没有
 }
-
-// message NotifyPlayerBeKickouted {
-//   enum MSGID {
-//     __invalid = 0;
-//     ID = 12021;
-//   }
-//   enum Reason {
-//     kUnknow = 0;
-//     kMinSrLimit = 1; // 金币低于房间限制
-//     kMaxSrLimit = 2; // 金币超过房间限制
-//   }
-//   Reason reason = 1;
-// }

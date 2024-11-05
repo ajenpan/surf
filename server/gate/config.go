@@ -9,7 +9,7 @@ type Config struct {
 }
 
 var DefaultConfig = &Config{
-	RsaPublicKeyFile: "public.pem",
+	RsaPublicKeyFile: "http://myali01:9999/publickey",
 	ClientListenAddr: ":11000",
 	NodeListenAddr:   ":13000",
 }

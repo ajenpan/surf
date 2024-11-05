@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package games.ddz;
+package game.ddz;
 
 option go_package = "./game/ddz;ddz";
 
@@ -73,7 +73,7 @@ enum ActionType {
 
 message ActionInfo {
   int32 seat_id = 1;
-  StageType stage = 2;  
+  StageType stage = 2;
 }
 
 message GameInfo {

@@ -60,7 +60,6 @@ func (h *Auth) CTByName() *calltable.CallTable[string] {
 	ct.Add("AnonymousLogin", calltable.ExtractFunction(h.AnonymousLogin))
 	ct.Add("Register", calltable.ExtractFunction(h.OnReqRegister))
 	ct.Add("UserInfo", calltable.ExtractFunction(h.OnReqUserInfo))
-
 	return ct
 }
 

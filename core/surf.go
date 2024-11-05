@@ -17,6 +17,7 @@ import (
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/registry"
 	"github.com/ajenpan/surf/core/utils/calltable"
+	utilRsa "github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 )
 
@@ -39,8 +40,8 @@ type Options struct {
 	CTByName *calltable.CallTable[string]
 	CTById   *calltable.CallTable[uint32]
 
-	Marshaler marshal.Marshaler
-	PublicKey *rsa.PublicKey
+	Marshaler         marshal.Marshaler
+	PublicKeyFilePath string
 }
 
 func converCalltable(source *calltable.CallTable[uint32]) *calltable.CallTable[string] {
@@ -58,7 +59,7 @@ func converCalltable(source *calltable.CallTable[uint32]) *calltable.CallTable[s
 
 func NewSurf(opt Options) *Surf {
 	s := &Surf{}
-	err := s.init(opt)
+	err := s.Init(opt)
 	if err != nil {
 		panic(err)
 	}
@@ -73,8 +74,10 @@ type RequestCallbackCache struct {
 }
 
 type Surf struct {
-	opts Options
-	Reg  *registry.Registry
+	opts      Options
+	PublicKey *rsa.PublicKey
+
+	Reg *registry.Registry
 
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
@@ -85,7 +88,7 @@ type Surf struct {
 	synIdx     uint32
 }
 
-func (s *Surf) init(opt Options) error {
+func (s *Surf) Init(opt Options) error {
 	if opt.CTById == nil {
 		opt.CTById = calltable.NewCallTable[uint32]()
 	}
@@ -94,6 +97,12 @@ func (s *Surf) init(opt Options) error {
 	} else {
 		opt.CTByName.Merge(converCalltable(opt.CTById), false)
 	}
+
+	pubkey, err := utilRsa.LoadRsaPublicKeyFromUrl(opt.PublicKeyFilePath)
+	if err != nil {
+		return err
+	}
+	s.PublicKey = pubkey
 
 	s.opts = opt
 	return nil
@@ -375,7 +384,7 @@ func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc
 			return
 		}
 		authdata = strings.TrimPrefix(authdata, "Bearer ")
-		uinfo, err := auth.VerifyToken(s.opts.PublicKey, []byte(authdata))
+		uinfo, err := auth.VerifyToken(s.PublicKey, []byte(authdata))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -414,14 +423,14 @@ func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		h.onRoutePacket(s, pk)
-	case network.PacketType_RouteNode:
+	case network.PacketType_Node:
 		h.onNodeInnerPacket(s, pk)
 	default:
 	}
 }
 
 func (h *Surf) onConnAuth(data []byte) (network.User, error) {
-	return auth.VerifyToken(h.opts.PublicKey, data)
+	return auth.VerifyToken(h.PublicKey, data)
 }
 func (h *Surf) onConnStatus(c network.Conn, enable bool) {
 	log.Infof("connid:%v, uid:%v status:%v", c.ConnID(), c.UserID(), enable)

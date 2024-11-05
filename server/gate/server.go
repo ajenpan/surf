@@ -42,7 +42,7 @@ func StartNodeListener(r *Gate, addr string) (func(), error) {
 }
 
 func Start(cfg *Config) (func() error, error) {
-	ppk, err := utilsRsa.LoadRsaPublicKeyFromFile(cfg.RsaPublicKeyFile)
+	ppk, err := utilsRsa.LoadRsaPublicKeyFromUrl(cfg.RsaPublicKeyFile)
 	if err != nil {
 		return nil, err
 	}

@@ -15,9 +15,9 @@ const PacketMaxHeadSize uint8 = (0xFF - 1)
 type Packet_MsgType uint8
 
 const (
-	PacketType_Route     Packet_MsgType = 1
-	PacketType_RouteNode Packet_MsgType = 254
-	PacketType_Inner     Packet_MsgType = 255
+	PacketType_Route Packet_MsgType = 1
+	PacketType_Node  Packet_MsgType = 254
+	PacketType_Inner Packet_MsgType = 255
 )
 
 type PacketInnerSubType = uint8

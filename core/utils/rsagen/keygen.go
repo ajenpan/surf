@@ -6,6 +6,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 )
 
@@ -86,6 +89,26 @@ func LoadRsaPublicKeyFromFile(fname string) (*rsa.PublicKey, error) {
 		return nil, err
 	}
 	return ParseRsaPublicKeyFromPem(publicRaw)
+}
+
+func LoadRsaPublicKeyFromUrl(f string) (*rsa.PublicKey, error) {
+	u, err := url.Parse(f)
+	if err != nil {
+		return nil, err
+	}
+	if u.Scheme == "http" || u.Scheme == "https" {
+		resp, err := http.Get(u.String())
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return ParseRsaPublicKeyFromPem(raw)
+	}
+	return LoadRsaPublicKeyFromFile(u.Path)
 }
 
 func LoadRsaPrivateKeyFromFile(fname string) (*rsa.PrivateKey, error) {
