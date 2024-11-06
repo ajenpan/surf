@@ -15,11 +15,11 @@ import (
 	"github.com/ajenpan/surf/server/battle"
 )
 
-func CreateLogic() battle.Logic {
-	return CreateNiuniu()
+func NewLogic() battle.Logic {
+	return NewNiuniu()
 }
 
-func CreateNiuniu() *Niuniu {
+func NewNiuniu() *Niuniu {
 	ret := &Niuniu{
 		players: make(map[int32]*NNPlayer),
 		info:    &GameInfo{},
@@ -42,7 +42,7 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 }
 
 func init() {
-	battle.RegisterGame("niuniu", CreateLogic)
+	battle.RegisterGame("niuniu", NewLogic)
 }
 
 type NNPlayer struct {
@@ -118,18 +118,12 @@ func (nn *Niuniu) OnInit(opts battle.LogicOpts) error {
 		}
 	}
 
-	switch v := opts.Conf.(type) {
-	case []byte:
-		var err error
-		nn.conf, err = ParseConfig(v)
-		if err != nil {
-			return err
-		}
-	case *Config:
-		nn.conf = v
-	default:
-		return fmt.Errorf("unknow config type ")
+	var err error
+	nn.conf, err = ParseConfig(opts.Conf)
+	if err != nil {
+		return err
 	}
+
 	nn.table = opts.Table
 	nn.info = &GameInfo{
 		GameStep: GameStep_COUNTDOWN,

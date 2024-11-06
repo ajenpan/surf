@@ -8,9 +8,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type SeatID int32
-type GameStatus int32
-type RoleType int32
+type SeatID = int32
+type GameStatus = int32
+type RoleType = int32
 
 const (
 	BattleStatus_Idle GameStatus = iota
@@ -25,11 +25,13 @@ const (
 
 type Player interface {
 	SeatID() SeatID
-	Score() int64 //game jetton
+	Score() int64
 	Role() RoleType
 	SetUserData(any)
 	GetUserData() any
 }
+
+type AfterCancelFunc func()
 
 type Table interface {
 	BattleID() string
@@ -41,13 +43,13 @@ type Table interface {
 	ReportBattleStatus(GameStatus)
 	ReportBattleEvent(topic string, event proto.Message)
 
-	AfterFunc(time.Duration, func())
+	AfterFunc(time.Duration, func()) AfterCancelFunc
 }
 
 type LogicOpts struct {
 	Table   Table
 	Players []Player
-	Conf    interface{}
+	Conf    []byte
 	Log     log.Logger
 }
 

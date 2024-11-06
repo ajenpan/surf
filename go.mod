@@ -62,3 +62,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/sqlite v1.5.6 // indirect
 )
+
+replace github.com/ajenpan/poker_algorithm => ../github/poker_algorithm

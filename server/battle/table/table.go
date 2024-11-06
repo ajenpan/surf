@@ -78,7 +78,7 @@ func (d *Table) BattleID() string {
 	return d.opts.ID
 }
 
-func (d *Table) Init(logic battle.Logic, players []*Player, logicConf interface{}) error {
+func (d *Table) Init(logic battle.Logic, players []*Player, logicConf []byte) error {
 	d.rwlock.Lock()
 	defer d.rwlock.Unlock()
 
@@ -147,10 +147,15 @@ func (d *Table) Do(f func()) {
 	d.actQue <- f
 }
 
-func (d *Table) AfterFunc(td time.Duration, f func()) {
-	time.AfterFunc(td, func() {
+func (d *Table) AfterFunc(td time.Duration, f func()) battle.AfterCancelFunc {
+	tk := time.AfterFunc(td, func() {
 		d.Do(f)
 	})
+
+	return func() {
+		tk.Stop()
+		tk = nil
+	}
 }
 
 func (d *Table) OnTick(sub time.Duration) {
