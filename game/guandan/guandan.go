@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"time"
 
-	gdpoker "github.com/ajenpan/poker_algorithm/guandan"
-
 	"google.golang.org/protobuf/proto"
 
+	gdpoker "github.com/ajenpan/poker_algorithm/guandan"
 	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	gutils "github.com/ajenpan/surf/game/utils"
 	"github.com/ajenpan/surf/server/battle"
 )
+
+func init() {
+	battle.RegisterGame("guandan", NewLogic)
+}
 
 func NewLogic() battle.Logic {
 	return NewGuandan()
@@ -39,10 +42,13 @@ type Player struct {
 
 	*PlayerGameInfo
 	outcards []*OutCardInfo
+	seatId   int32
 
-	getPowerAt    time.Time
+	getPowerAt time.Time
+
 	powerDeadLine time.Time
-	seatId        int32
+	actionPower   *NotifyPlayerActionPower
+	actionReq     *ReqPlayerAction
 }
 
 type Config struct {
@@ -61,13 +67,20 @@ type Guandan struct {
 	gameTime  time.Duration
 	stageTime time.Duration
 
-	CT *calltable.CallTable[int]
+	CT *calltable.CallTable[uint32]
 
 	lastStage StageType
 
+	lastActionPlayer *Player
 	currActionPlayer *Player
 	rawDeck          []byte
 }
+
+// func (gd *Guandan) NewStageInfo() []*StageInfo {
+// 	ret := []*StageInfo{}
+// 	ret = append(ret, &StageInfo{})
+// 	return ret
+// }
 
 func (gd *Guandan) OnInit(opts battle.LogicOpts) error {
 	gd.table = opts.Table
@@ -91,20 +104,39 @@ func (gd *Guandan) OnInit(opts battle.LogicOpts) error {
 			},
 		})
 	}
-
 	return nil
 }
 
 // handle message
 
-func (g *Guandan) OnReqGameInfo(p battle.Player, msg *ReqGameInfo) {
-	player := g.playerConv(p)
+func (g *Guandan) OnReqGameInfo(player *Player, msg *ReqGameInfo) {
 	g.sendMsg(player, g.info)
 }
 
-func (g *Guandan) OnReqPlayerAction(p battle.Player, msg *ReqPlayerAction) {
+func (g *Guandan) OnReqPlayerAction(player *Player, msg *ReqPlayerAction) {
+	flag := int32(0)
+	resp := &RespPlayerAction{
+		Flag: flag,
+	}
+	g.sendMsg(player, resp)
 
+	if flag != 0 {
+		return
+	}
+
+	if msg.ActionDetail.ActionType == ActionType_action_out_card {
+		player.outcards = append(player.outcards, msg.ActionDetail.GetOutCards())
+	}
+
+	notify := &NotifyPlayerAction{
+		ActionDetail: msg.ActionDetail,
+		SeatId:       player.seatId,
+	}
+	g.broadcastMsg(notify)
+
+	g.setNextOutCardPlayer(player)
 }
+
 func (g *Guandan) OnReset() {
 
 }
@@ -114,52 +146,66 @@ func (g *Guandan) OnPlayerConnStatus(p battle.Player, enable bool) {
 }
 
 func (g *Guandan) OnPlayerMessage(p battle.Player, msgid uint32, data []byte) {
-	// player := g.playerConv(p)
+	method := g.CT.Get(msgid)
+	if method == nil {
+		return
+	}
 
+	req, ok := method.GetRequest().(proto.Message)
+	if !ok {
+		return
+	}
+	err := proto.Unmarshal(data, req)
+	if err != nil {
+		return
+	}
+	player := g.playerConv(p)
+	method.Call(g, player, req)
 }
 
-func (gd *Guandan) OnTick(duration time.Duration) {
-	gd.gameTime += duration
-	gd.stageTime += duration
+func (g *Guandan) OnTick(duration time.Duration) {
+	g.gameTime += duration
+	g.stageTime += duration
 
-	currStage := gd.getStage()
+	currStage := g.getStage()
 	timeout := false
 
-	stageDownTime := gd.getStageDowntime(gd.info.Stage)
+	stageDownTime := g.getStageDowntime(g.info.Stage)
 	if stageDownTime > 0 {
-		timeout = gd.stageTime >= stageDownTime
+		timeout = g.stageTime >= stageDownTime
 	}
 
 	switch currStage {
 	case StageType_StageNone:
-		if timeout || gd.allPlayerOnline() {
-			gd.changeLogicStep(gd.nextStage())
+		if timeout || g.allPlayerOnline() {
+			g.changeLogicStep(g.nextStage())
 		}
 	case StageType_StageGameStart:
 		if timeout {
-			gd.changeLogicStep(gd.nextStage())
+			g.changeLogicStep(g.nextStage())
 		}
 	case StageType_StageDoubleRate:
-		if timeout || gd.allDoubleRateSet() {
-			gd.changeLogicStep(gd.nextStage())
+		if timeout || g.allDoubleRateSet() {
+			g.changeLogicStep(g.nextStage())
 
 			// 发牌
-			gd.doDealingCards()
+			g.doDealingCards()
 		}
 	case StageType_StageDealingCards:
 		if timeout {
-			gd.changeLogicStep(gd.nextStage())
+			g.changeLogicStep(g.nextStage())
 			// 开始游戏
-			gd.setOutCardPlayer(gd.getPlayerBySeatId(0))
+			g.setOutCardPlayer(g.getPlayerBySeatId(0))
 		}
 	case StageType_StageGaming:
-		gd.onGaming()
+		g.onGaming()
 	case StageType_StageTally:
+
 	case StageType_StageFinalResult:
 	}
 }
 
-func (gd *Guandan) getStageDowntime(s StageType) time.Duration {
+func (g *Guandan) getStageDowntime(s StageType) time.Duration {
 	switch s {
 	case StageType_StageNone:
 		return 10 * time.Second
@@ -173,8 +219,8 @@ func (gd *Guandan) getStageDowntime(s StageType) time.Duration {
 	return 0
 }
 
-func (gd *Guandan) allPlayerOnline() bool {
-	for _, p := range gd.players {
+func (g *Guandan) allPlayerOnline() bool {
+	for _, p := range g.players {
 		if !p.online {
 			return false
 		}
@@ -182,8 +228,8 @@ func (gd *Guandan) allPlayerOnline() bool {
 	return true
 }
 
-func (gd *Guandan) allDoubleRateSet() bool {
-	for _, p := range gd.players {
+func (g *Guandan) allDoubleRateSet() bool {
+	for _, p := range g.players {
 		if p.DoubleRate == 0 {
 			return false
 		}
@@ -191,47 +237,85 @@ func (gd *Guandan) allDoubleRateSet() bool {
 	return true
 }
 
-func (gd *Guandan) doDealingCards() {
+func (g *Guandan) doDealingCards() {
 	deck := gdpoker.NewDeck()
 	deck.Shuffle()
-	gd.rawDeck = deck.Bytes()
+	g.rawDeck = deck.Bytes()
 
-	for _, p := range gd.players {
-		p.rawHandCards = deck.DealHandCards()
+	for _, p := range g.players {
+		p.rawHandCards = deck.DealCards(27)
 		p.HandCards = p.rawHandCards.Bytes()
 		notice := &NotifyPlayerHandCards{
 			SeatId: p.SeatId,
 			Cards:  p.HandCards,
 		}
-		gd.sendMsg(p, notice)
+		g.sendMsg(p, notice)
 	}
 }
 
-func (gd *Guandan) setOutCardPlayer(p *Player) {
-	gd.currActionPlayer = p
+func (g *Guandan) setOutCardPlayer(p *Player) {
+	g.currActionPlayer = p
 	p.getPowerAt = time.Now()
-	p.powerDeadLine = p.getPowerAt.Add(time.Second * time.Duration(gd.conf.OutCardTimeSec))
+	p.powerDeadLine = p.getPowerAt.Add(time.Second * time.Duration(g.conf.OutCardTimeSec))
 
 	notice := &NotifyPlayerActionPower{
 		SeatId:   p.SeatId,
 		Action:   ActionType_action_out_card,
 		Deadline: p.powerDeadLine.Unix(),
-		TimeDown: int32(gd.conf.OutCardTimeSec),
+		TimeDown: int32(g.conf.OutCardTimeSec),
 	}
 
-	gd.broadcastMsg(notice)
+	p.actionReq = nil
+	p.actionPower = notice
+
+	g.broadcastMsg(notice)
 }
 
-func (gd *Guandan) onGaming() {
-	currplayer := gd.currActionPlayer
+func (g *Guandan) setNextOutCardPlayer(currPlayer *Player) {
+	currPlayer.actionPower = nil
+	currPlayer.actionReq = nil
+
+	currSeatId := currPlayer.seatId
+	var nextplayer *Player = nil
+
+	for i := int32(0); i < 4; i++ {
+		nextseatid := currSeatId + i + 1
+		if nextseatid >= int32(len(g.players)) {
+			nextseatid = 0
+		}
+		temp := g.getPlayerBySeatId(nextseatid)
+		if temp.rawHandCards.Size() != 0 {
+			nextplayer = temp
+			break
+		}
+	}
+
+	if nextplayer == nil {
+		return
+	}
+
+	g.setOutCardPlayer(nextplayer)
+}
+
+func (g *Guandan) onGaming() {
+	currplayer := g.currActionPlayer
 	isTimeout := time.Now().After(currplayer.powerDeadLine)
-	if isTimeout {
+	if !isTimeout {
+		return
+	}
+	g.playerActionTimeoutHelp(currplayer)
+}
 
+func (g *Guandan) playerActionTimeoutHelp(curr *Player) {
+	if curr.actionPower.Action == ActionType_action_out_card {
+		action := &ReqPlayerAction{}
+		g.OnReqPlayerAction(curr, action)
+		return
 	}
 }
 
-func (gd *Guandan) nextStage() StageType {
-	curr := gd.getStage()
+func (g *Guandan) nextStage() StageType {
+	curr := g.getStage()
 
 	switch curr {
 	case StageType_StageNone:
@@ -249,7 +333,7 @@ func (gd *Guandan) nextStage() StageType {
 	case StageType_StageFinalResult:
 		return StageType_StageNone
 	default:
-		gd.Errorf("unknown stage:%v", curr)
+		g.Errorf("unknown stage:%v", curr)
 	}
 	return StageType_StageNone
 }
@@ -263,13 +347,13 @@ func (g *Guandan) broadcastMsg(msg proto.Message) {
 	g.table.BroadcastMessage(msgid, msg)
 }
 
-func (gd *Guandan) sendMsg(p *Player, msg proto.Message) {
+func (g *Guandan) sendMsg(p *Player, msg proto.Message) {
 	msgid, err := gutils.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	if err != nil {
-		gd.Errorf("get message msgid error:%v", err)
+		g.Errorf("get message msgid error:%v", err)
 		return
 	}
-	gd.table.SendMessageToPlayer(p.raw, msgid, msg)
+	g.table.SendMessageToPlayer(p.raw, msgid, msg)
 }
 
 func (g *Guandan) playerConv(p battle.Player) *Player {

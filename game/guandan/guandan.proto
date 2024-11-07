@@ -35,8 +35,10 @@ enum DeckType {
   deck_windflow = 17;      // 接风
 }
 
+// 出牌信息
 message OutCardInfo {
-  DeckType deck_type = 2;
+  DeckType deck_type = 1;
+  int32 deck_value = 2; // 牌值, 用于比较相同类型牌的大小. 如:同样是4炸, deck_value 为 4 表示4张4, 为 5 表示4张5, 显然5大于4
   bytes cards = 3;
 }
 
@@ -64,8 +66,9 @@ message ActionDetail {
 
 message GameInfo {
   StageType stage = 1;
-  int32 curr_action_seat_id = 2; // 当前操作玩家
+  int32 sub_stage = 2;
   map<int32, PlayerGameInfo> player_info = 5;
+  int32 curr_action_seat_id = 6; // 当前操作玩家
 }
 
 message ReqGameInfo {
@@ -94,7 +97,6 @@ message RespPlayerAction {
 
 message NotifyPlayerAction {
   int32 seat_id = 1;
-  int32 stage = 2;
   ActionDetail action_detail = 3;
 }
 
@@ -103,10 +105,13 @@ message NotifyGameStage {
     unknow = 0;
     ID = 3101;
   }
+
   StageType last_stage = 1; // 上一个状态
   StageType curr_stage = 2; // 当前状态
-  int64 deadline = 3;       // 截止时间, unix时间戳, 秒
-  int32 time_down = 4;      // 参考倒计时,秒, 以截至时间为准
+  int32 curr_sub_stage = 3;
+
+  int64 deadline = 13;  // 截止时间, unix时间戳, 秒
+  int32 time_down = 14; // 参考倒计时,秒, 以截至时间为准
 }
 
 message NotifyPlayerActionPower {
