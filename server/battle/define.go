@@ -24,6 +24,7 @@ const (
 )
 
 type Player interface {
+	UID() int64
 	SeatID() SeatID
 	Score() int64
 	Role() RoleType

@@ -15,9 +15,12 @@ import (
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	battleMsg "github.com/ajenpan/surf/msg/battle"
-
-	_ "github.com/ajenpan/surf/game/niuniu"
+	"github.com/ajenpan/surf/server/battle"
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
+
+	// games
+	"github.com/ajenpan/surf/game/guandan"
+	"github.com/ajenpan/surf/game/niuniu"
 )
 
 var (
@@ -63,6 +66,11 @@ func LoadAuthPublicKey() (*rsa.PrivateKey, error) {
 	return pk, err
 }
 
+func RegGames() {
+	battle.RegisterGame("guandan", guandan.NewLogic)
+	battle.RegisterGame("niuniu", niuniu.NewLogic)
+}
+
 func RealMain(c *cli.Context) error {
 	log.Default.SetOutput(os.Stdout)
 
@@ -98,13 +106,16 @@ func RealMain(c *cli.Context) error {
 	}
 	log.Info("testjwt:", testjwt)
 
+	RegGames()
+
 	err = core.Init(core.Options{
-		Server:            h,
-		HttpListenAddr:    ":13300",
-		WsListenAddr:      ":13301",
-		CTById:            CTByID,
-		CTByName:          CTByName,
-		PublicKeyFilePath: "http://myali01:9999/publickey",
+		Server:         h,
+		HttpListenAddr: ":13300",
+		WsListenAddr:   ":13301",
+		CTById:         CTByID,
+		CTByName:       CTByName,
+		// PublicKeyFilePath: "http://myali01:9999/publickey",
+		PublicKeyFilePath: "file://./public.pem",
 		GateAddrList: []string{
 			"ws://localhost:13000",
 		},

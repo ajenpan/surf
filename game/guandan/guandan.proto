@@ -5,34 +5,42 @@ package game.guandan;
 option go_package = "./game/guandan;guandan";
 
 enum StageType {
-  StageNone = 0;          // 无效
-  StageGameStart = 12;    // 开局
-  StageDoubleRate = 16;   // 加倍
-  StageDealingCards = 20; // 发牌
-  StageGaming = 30;       // 对局
-  StageTally = 40;        // 小结算
-  StageFinalResult = 41;  // 大结算
+  Stage_None = 0;          // 无效
+  Stage_GameStart = 12;    // 开局
+  Stage_DoubleBet = 16;    // 加倍
+  Stage_DealingCards = 20; // 发牌
+  Stage_Gaming = 30;       // 对局
+  Stage_Tally = 40;        // 小结算
+  Stage_FinalResult = 41;  // 大结算
 }
 
 enum DeckType {
-  deck_pass = 0;           // 过
-  deck_single = 1;         // 单张
-  deck_pair = 2;           // 对子
-  deck_three = 3;          // 3张
-  deck_three_with_two = 4; // 3带2
-  deck_straight = 5;       // 顺子
-  deck_flush_straight = 6; // 同花顺
-  deck_straight_pair = 7;  // 连对
-  deck_straight_three = 8; // 钢板 （2 个连续的三张牌）
-  deck_bomb4 = 9;          // 4炸
-  deck_bomb5 = 10;         // 5炸
-  deck_bomb6 = 11;         // 6炸
-  deck_bomb7 = 12;         // 7炸
-  deck_bomb8 = 13;         // 8炸
-  deck_bomb9 = 14;         // 9炸
-  deck_bomb10 = 15;        // 10炸
-  deck_bomb_joker = 16;    // 王炸
-  deck_windflow = 17;      // 接风
+  Deck_Pass = 0;          // 过
+  Deck_Single = 1;        // 单张
+  Deck_Pair = 2;          // 对子
+  Deck_Three = 3;         // 3张
+  Deck_ThreeWithTwo = 4;  // 3带2
+  Deck_Straight = 5;      // 顺子
+  Deck_StraightFlush = 6; // 同花顺
+  Deck_StraightPair = 7;  // 连对
+  Deck_StraightThree = 8; // 钢板 （2 个连续的三张牌）
+  Deck_Bomb4 = 9;         // 4炸
+  Deck_Bomb5 = 10;        // 5炸
+  Deck_Bomb6 = 11;        // 6炸
+  Deck_Bomb7 = 12;        // 7炸
+  Deck_Bomb8 = 13;        // 8炸
+  Deck_Bomb9 = 14;        // 9炸
+  Deck_Bomb10 = 15;       // 10炸
+  Deck_BombJoker = 16;    // 王炸
+  Deck_Windflow = 17;     // 接风
+}
+
+enum ActionType {
+  Action_Unknow = 0;
+  Action_DoubleBet = 10; // 加倍
+  Action_ShowCard = 20;  // 明牌
+  Action_Wildflow = 21;  // 接风
+  Action_OutCard = 30;   // 出牌
 }
 
 // 出牌信息
@@ -44,31 +52,41 @@ message OutCardInfo {
 
 message PlayerGameInfo {
   int32 seat_id = 1;
-  int32 double_rate = 6; // 加倍倍率
-  bytes hand_cards = 7;  // 手牌
+  int32 double_bet = 6; // 加倍倍率
+  bytes hand_cards = 7; // 手牌
   OutCardInfo curr_out_card = 8;
 }
 
-enum ActionType {
-  action_unknow = 0;
-  action_show_card = 20;  // 明牌
-  action_double_bet = 21; // 加倍
-  action_out_card = 30;   // 出牌
+message ActionPower {
+  ActionType action_type = 1;
+
+  message OutCardConf {
+    bool enable_pass = 1; // 是否可以 `不出` (pass)
+    bool is_windflow = 2; // 是否是接风
+  }
+
+  message DoubleBetConf {
+    bool super_double = 1; // 是否可以超级加倍
+  }
+
+  oneof conf {
+    OutCardConf outcard = 2;
+    DoubleBetConf double_bet = 3;
+  }
 }
 
-message ActionDetail {
-  ActionType action_type = 1;
-  oneof action {
-    int32 double_bet = 2;
-    OutCardInfo out_cards = 3;
-  }
+message GameConf {
+  int32 wildcard = 1;
 }
 
 message GameInfo {
   StageType stage = 1;
   int32 sub_stage = 2;
+  GameConf conf = 3;
   map<int32, PlayerGameInfo> player_info = 5;
-  int32 curr_action_seat_id = 6; // 当前操作玩家
+
+  int32 curr_action_power_seatid = 16;
+  ActionType curr_action_type = 17;
 }
 
 message ReqGameInfo {
@@ -86,18 +104,57 @@ message RespGameInfo {
   GameInfo game_info = 1;
 }
 
-message ReqPlayerAction {
-  ActionDetail action_detail = 1;
+message ReqPlayerOutCards {
+  enum MSGID {
+    unknow = 0;
+    ID = 3005;
+  }
+  OutCardInfo out_cards = 1;
 }
 
-message RespPlayerAction {
+message RespPlayerOutCards {
+  enum MSGID {
+    unknow = 0;
+    ID = 3006;
+  }
+  int32 flag = 1;
+  string errmsg = 2;
+  bytes hand_cards = 3; // 出牌后剩下的手牌
+}
+
+message NotifyPlayerOutCards {
+  enum MSGID {
+    unknow = 0;
+    ID = 3106;
+  }
+  int32 seat_id = 1;
+  OutCardInfo out_cards = 2;
+}
+
+message ReqPlayerDoubleBet {
+  enum MSGID {
+    unknow = 0;
+    ID = 3007;
+  }
+  int32 double_bet = 1;
+}
+
+message RespPlayerDoubleBet {
+  enum MSGID {
+    unknow = 0;
+    ID = 3008;
+  }
   int32 flag = 1;
   string errmsg = 2;
 }
 
-message NotifyPlayerAction {
+message NotifyPlayerDoubleBet {
+  enum MSGID {
+    unknow = 0;
+    ID = 3105;
+  }
   int32 seat_id = 1;
-  ActionDetail action_detail = 3;
+  int32 double_bet = 2;
 }
 
 message NotifyGameStage {
@@ -110,8 +167,8 @@ message NotifyGameStage {
   StageType curr_stage = 2; // 当前状态
   int32 curr_sub_stage = 3;
 
-  int64 deadline = 13;  // 截止时间, unix时间戳, 秒
-  int32 time_down = 14; // 参考倒计时,秒, 以截至时间为准
+  int64 deadline = 13; // 截止时间, unix时间戳, 秒
+  int32 downtime = 14; // 参考倒计时,秒, 以截至时间为准
 }
 
 message NotifyPlayerActionPower {
@@ -120,9 +177,9 @@ message NotifyPlayerActionPower {
     ID = 3102;
   }
   int32 seat_id = 1;
-  ActionType action = 2;
-  int64 deadline = 3;  // 截止时间, unix时间戳, 秒
-  int32 time_down = 4; // 参考倒计时,秒, 以截至时间为准
+  ActionPower action_power = 2;
+  int64 deadline = 3; // 截止时间, unix时间戳, 秒
+  int32 downtime = 4; // 参考倒计时,秒, 以截至时间为准
 }
 
 message NotifyPlayerHandCards {

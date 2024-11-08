@@ -17,7 +17,7 @@ func (h *Battle) reportBattleFinished(battleid string) {
 	}
 
 	d.Players.Range(func(p *table.Player) bool {
-		h.UIDUnBindBattleID(uint64(p.Uid), battleid)
+		h.UIDUnBindBattleID(int64(p.UID()), battleid)
 		return true
 	})
 	h.tables.Delete(battleid)
@@ -79,14 +79,14 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 		return
 	}
 
-	d.OnPlayerConn(uint64(ctx.Caller()), true)
+	d.OnPlayerConn(int64(ctx.Caller()), true)
 
 	ctx.Response(out, err)
 
-	h.UIDBindBattleID(uint64(ctx.Caller()), in.BattleId)
+	h.UIDBindBattleID(int64(ctx.Caller()), in.BattleId)
 }
 
-func (h *Battle) OnPlayerDisConn(uid uint64) {
+func (h *Battle) OnPlayerDisConn(uid int64) {
 	log.Info("OnPlayerDisConn:", uid)
 	tableids := h.LoadBattleByUID(uid)
 
@@ -104,7 +104,7 @@ func (h *Battle) OnReqQuitBattle(ctx core.Context, in *battlemsg.ReqQuitBattle) 
 		BattleId: in.BattleId,
 	}
 	uid := ctx.Caller()
-	h.UIDUnBindBattleID(uint64(uid), in.BattleId)
+	h.UIDUnBindBattleID(int64(uid), in.BattleId)
 	ctx.Response(resp, nil)
 }
 
@@ -114,5 +114,5 @@ func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *battlemsg.BattleMsgTo
 		log.Warnf("battle %s not found", in.BattleId)
 		return
 	}
-	d.OnPlayerMessage(uint64(ctx.Caller()), in.Msgid, in.Data)
+	d.OnPlayerMessage(int64(ctx.Caller()), in.Msgid, in.Data)
 }

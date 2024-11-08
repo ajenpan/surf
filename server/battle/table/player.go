@@ -20,7 +20,7 @@ func NewPlayer(p *msgBattle.PlayerInfo) *Player {
 func NewPlayers(infos []*msgBattle.PlayerInfo) ([]*Player, error) {
 	ret := make([]*Player, len(infos))
 
-	uidMap := make(map[uint64]struct{})
+	uidMap := make(map[int64]struct{})
 	seatidMap := make(map[int32]struct{})
 
 	for i, info := range infos {
@@ -46,6 +46,7 @@ func NewPlayers(infos []*msgBattle.PlayerInfo) ([]*Player, error) {
 
 type Player struct {
 	*msgBattle.PlayerInfo
+
 	Ready  int32
 	sender func(msgname uint32, raw []byte) error
 	online bool
@@ -64,7 +65,7 @@ func (p *Player) Score() int64 {
 	return p.PlayerInfo.Score
 }
 
-func (p *Player) UserID() uint64 {
+func (p *Player) UID() int64 {
 	return p.PlayerInfo.Uid
 }
 
@@ -89,7 +90,7 @@ type PlayerStore struct {
 	bySeatID sync.Map
 }
 
-func (ps *PlayerStore) ByUID(uid uint64) *Player {
+func (ps *PlayerStore) ByUID(uid int64) *Player {
 	p, has := ps.byUID.Load(uid)
 	if !has {
 		return nil
@@ -106,10 +107,9 @@ func (ps *PlayerStore) BySeat(seatid uint32) *Player {
 }
 
 func (ps *PlayerStore) Store(p *Player) error {
-	uid := p.Uid
 	seatid := p.SeatId
 	ps.bySeatID.Store(seatid, p)
-	ps.byUID.Store(uid, p)
+	ps.byUID.Store(p.UID(), p)
 	return nil
 }
 

@@ -34,18 +34,18 @@ func (h *Battle) ServerName() string {
 // 是否需要保持 uid - battleid 映射?
 // 1 uid -> n * battleid.
 // 当uid掉线时, 需要遍历所有的battleid, 并且通知battleid.
-func (h *Battle) UIDBindBattleID(uid uint64, bid string) error {
+func (h *Battle) UIDBindBattleID(uid int64, bid string) error {
 	battleMap, _ := h.userBattleMap.LoadOrStore(uid, &sync.Map{})
 	battleMap.(*sync.Map).Store(bid, time.Now())
 	return nil
 }
 
-func (h *Battle) UIDUnBindBattleID(uid uint64, bid string) {
+func (h *Battle) UIDUnBindBattleID(uid int64, bid string) {
 	battleMap, _ := h.userBattleMap.LoadOrStore(uid, &sync.Map{})
 	battleMap.(*sync.Map).Delete(bid)
 }
 
-func (h *Battle) LoadBattleByUID(uid uint64) []string {
+func (h *Battle) LoadBattleByUID(uid int64) []string {
 	battleMap, _ := h.userBattleMap.LoadOrStore(uid, &sync.Map{})
 	ret := []string{}
 	battleMap.(*sync.Map).Range(func(key, value any) bool {

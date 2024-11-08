@@ -7,18 +7,21 @@ type StageInfo struct {
 	OnExitFn    func()
 	OnProcessFn func(duration time.Duration)
 	ExitCond    func() bool
-	Stage       StageType
+	StageType   StageType
 	TimeToLive  time.Duration
 
 	subStage int32
 	enterAt  time.Time
 	exitAt   time.Time
+
+	age time.Duration
 }
 
 func (stage *StageInfo) OnProcess(duration time.Duration) {
 	if stage.OnProcessFn != nil {
 		stage.OnProcessFn(duration)
 	}
+	stage.age += duration
 }
 
 func (stage *StageInfo) OnEnter() {
@@ -38,6 +41,10 @@ func (stage *StageInfo) OnExit() {
 }
 
 func (stage *StageInfo) CheckExit() bool {
+	if stage.Timeout() {
+		return true
+	}
+
 	if stage.ExitCond != nil {
 		return stage.ExitCond()
 	}
@@ -46,7 +53,7 @@ func (stage *StageInfo) CheckExit() bool {
 
 func (stage *StageInfo) Timeout() bool {
 	if stage.TimeToLive > 0 {
-		return stage.enterAt.Add(stage.TimeToLive).After(time.Now())
+		return stage.age > stage.TimeToLive
 	}
 	return false
 }

@@ -41,9 +41,9 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 	return uint32(IDDesc.Number())
 }
 
-func init() {
-	battle.RegisterGame("niuniu", NewLogic)
-}
+// func init() {
+// 	battle.RegisterGame("niuniu", NewLogic)
+// }
 
 type NNPlayer struct {
 	raw battle.Player

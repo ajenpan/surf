@@ -17,7 +17,7 @@ func newTestGuandanTable() (*table.Table, *Guandan) {
 	players := []*table.Player{}
 	for i := 0; i < 4; i++ {
 		player := table.NewPlayer(&msgBattle.PlayerInfo{
-			Uid:    uint64(i),
+			Uid:    int64(i),
 			SeatId: int32(i),
 		})
 		players = append(players, player)
@@ -49,13 +49,13 @@ func TestGuandanDoStart(t *testing.T) {
 	defer table.Close()
 
 	for i := 0; i < 4; i++ {
-		table.OnPlayerConn(uint64(i), true)
+		table.OnPlayerConn(int64(i), true)
 	}
 
 	time.Sleep(time.Second * 1)
 
 	// check
-	if logic.getStage() != StageType_StageGameStart {
+	if logic.currStage.StageType != StageType_Stage_GameStart {
 		t.Fatal("stage error")
 	}
 }
@@ -70,9 +70,8 @@ func TestGuandanDealingCards1(t *testing.T) {
 	defer table.Close()
 	logic.doDealingCards()
 	for _, p := range logic.players {
-		t.Logf("seatid:%d, handcards:%v", p.seatId, p.rawHandCards.Chinese())
-
-		if len(p.HandCards) != 27 {
+		t.Logf("seatid:%d, handcards:%v", p.gameInfo.SeatId, p.handCards.Chinese())
+		if len(p.gameInfo.HandCards) != 27 {
 			t.Fatal("handcards error")
 		}
 	}
@@ -88,13 +87,13 @@ func TestGuandanDealingCards(t *testing.T) {
 	defer table.Close()
 
 	for i := 0; i < 4; i++ {
-		table.OnPlayerConn(uint64(i), true)
+		table.OnPlayerConn(int64(i), true)
 	}
 
 	for _, p := range logic.players {
-		p.DoubleRate = 1
+		p.gameInfo.DoubleBet = 1
 	}
 
-	logic.changeLogicStep(StageType_StageDealingCards)
+	// logic.changeLogicStep(StageType_Stage_DealingCards)
 	logic.OnTick(time.Second * 1)
 }

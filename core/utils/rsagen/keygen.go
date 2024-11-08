@@ -107,8 +107,10 @@ func LoadRsaPublicKeyFromUrl(f string) (*rsa.PublicKey, error) {
 			return nil, err
 		}
 		return ParseRsaPublicKeyFromPem(raw)
+	} else if u.Scheme == "file" {
+		return LoadRsaPublicKeyFromFile(u.Host + u.Path)
 	}
-	return LoadRsaPublicKeyFromFile(u.Path)
+	return nil, errors.New("unsupported scheme")
 }
 
 func LoadRsaPrivateKeyFromFile(fname string) (*rsa.PrivateKey, error) {

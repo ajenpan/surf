@@ -97,6 +97,7 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf []byte) er
 		Table:   d,
 		Players: iplayers,
 		Conf:    logicConf,
+		Log:     d.log,
 	}); err != nil {
 		return err
 	}
@@ -134,6 +135,7 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf []byte) er
 				sub := now.Sub(latest)
 				latest = now
 				d.OnTick(sub)
+
 			case <-d.quit:
 				return
 			}
@@ -218,10 +220,11 @@ func (d *Table) SendMessageToPlayer(p battle.Player, msgid uint32, msg proto.Mes
 	}
 
 	err = rp.Send(msgid, raw)
+
 	if err != nil {
-		d.log.Errorf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
+		d.log.Errorf("sendToUser err:%v uid:%v,msgname:%s,msgid:%d,msg:%v", err, rp.UID(), string(proto.MessageName(msg)), msgid, msg)
 	} else {
-		d.log.Debugf("sendto uid:%v,msgname:%s,msg:%v", rp.Uid, string(proto.MessageName(msg)), msg)
+		d.log.Debugf("sendToUser ok uid:%v,msgname:%s,msgid:%d,msg:%v", rp.UID(), string(proto.MessageName(msg)), msgid, msg)
 	}
 }
 
@@ -233,12 +236,12 @@ func (d *Table) BroadcastMessage(msgid uint32, msg proto.Message) {
 		return
 	}
 
-	d.log.Debugf("Broadcast msgname:%s,msg:%v", string(proto.MessageName(msg)), msg)
+	d.log.Debugf("broadcast msgname:%s,msgid:%d,msg:%v", string(proto.MessageName(msg)), msgid, msg)
 
 	d.Players.Range(func(p *Player) bool {
 		err := p.Send(msgid, raw)
 		if err != nil {
-			log.Error(err)
+			d.log.Errorf("broadcast err:%v uid:%v,msgname:%s,msgid:%d,msg:%v", err, p.UID(), string(proto.MessageName(msg)), msgid, msg)
 		}
 		return true
 	})
@@ -276,7 +279,7 @@ func (d *Table) PublishEvent(eventmsg proto.Message) {
 	d.opts.EventPublisher.Publish(warp)
 }
 
-func (d *Table) OnPlayerMessage(uid uint64, msgid uint32, iraw []byte) {
+func (d *Table) OnPlayerMessage(uid int64, msgid uint32, iraw []byte) {
 	d.Do(func() {
 		p := d.Players.ByUID(uid)
 		if p != nil && d.logic != nil {
@@ -345,7 +348,7 @@ func (d *Table) Start() {
 // 	})
 // }
 
-func (d *Table) OnPlayerConn(uid uint64, enable bool) {
+func (d *Table) OnPlayerConn(uid int64, enable bool) {
 	d.Do(func() {
 		p := d.Players.ByUID(uid)
 		if p == nil {
