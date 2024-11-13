@@ -98,7 +98,7 @@ func RealMain(c *cli.Context) error {
 	log.Info("testjwt:", testjwt)
 
 	cfg := &gate.Config{
-		RsaPublicKeyFile: PublicKeyFile,
+		RsaPublicKeyFile: "file://" + PublicKeyFile,
 		ClientListenAddr: ":11000",
 		NodeListenAddr:   ":13000",
 	}

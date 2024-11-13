@@ -17,11 +17,11 @@ type StageInfo struct {
 	age time.Duration
 }
 
-func (stage *StageInfo) OnProcess(duration time.Duration) {
+func (stage *StageInfo) OnProcess(delta time.Duration) {
 	if stage.OnProcessFn != nil {
-		stage.OnProcessFn(duration)
+		stage.OnProcessFn(delta)
 	}
-	stage.age += duration
+	stage.age += delta
 }
 
 func (stage *StageInfo) OnEnter() {

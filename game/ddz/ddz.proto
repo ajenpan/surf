@@ -3,6 +3,7 @@ syntax = "proto3";
 package game.ddz;
 
 option go_package = "./game/ddz;ddz";
+option csharp_namespace = "game.ddz";
 
 enum StageType {
   // stage 无需有序

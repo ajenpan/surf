@@ -41,9 +41,11 @@ type Table interface {
 
 	BroadcastMessage(msgid uint32, data proto.Message)
 
-	ReportBattleStatus(GameStatus)
+	ReportBattleStatus(gs GameStatus)
+
 	ReportBattleEvent(topic string, event proto.Message)
 
+	// Schedule a function to be called at table loop after a duration.
 	AfterFunc(time.Duration, func()) AfterCancelFunc
 }
 
@@ -55,9 +57,17 @@ type LogicOpts struct {
 }
 
 type Logic interface {
+	// Called when the logic is created.
 	OnInit(opts LogicOpts) error
-	OnTick(df time.Duration)
-	OnReset()
+
+	// Called every tick. 'delta' is the elapsed time since the previous tick.
+	OnTick(delta time.Duration)
+
+	// Called when a player connects or disconnects.
 	OnPlayerConnStatus(p Player, enable bool)
+
+	// Called when a player sends a message.
 	OnPlayerMessage(p Player, msgid uint32, data []byte)
+
+	OnReset()
 }

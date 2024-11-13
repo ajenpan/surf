@@ -161,9 +161,9 @@ func (c *WSClient) work(conn *WSConn) error {
 				switch packet.Meta.GetSubFlag() {
 				case uint8(PacketInnerSubType_Heartbeat):
 					now := time.Now().UnixMilli()
-					sendat := int64(binary.LittleEndian.Uint64(packet.GetHead()))
+					sendAt := int64(binary.LittleEndian.Uint64(packet.GetHead()))
 					svrtime := (int64)(binary.LittleEndian.Uint64(packet.GetBody()))
-					fix := now - (svrtime - (now-sendat)/2)
+					fix := now - (svrtime - (now-sendAt)/2)
 					atomic.StoreInt64(&c.timefix, fix)
 					log.Infof("recv Heartbeat %v", fix)
 				default:

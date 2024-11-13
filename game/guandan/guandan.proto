@@ -3,6 +3,7 @@ syntax = "proto3";
 package game.guandan;
 
 option go_package = "./game/guandan;guandan";
+option csharp_namespace = "game.guandan";
 
 enum StageType {
   Stage_None = 0;          // 无效

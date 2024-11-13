@@ -240,9 +240,9 @@ func (g *Guandan) OnReqPlayerOutCards(player *Player, msg *ReqPlayerOutCards) {
 			g.Errorf("parse outcards error:%v", err)
 			return 201
 		}
-		deckType := gdpoker.GetDeckType(poker.CardRank(g.conf.WildCardRank), cards)
-		if (DeckType)(deckType) != outcards.GetDeckType() {
-			g.Errorf("decktype not match, expect:%v, got:%v", deckType, outcards.GetDeckType())
+		result := gdpoker.GetDeckPower(poker.CardRank(g.conf.WildCardRank), cards)
+		if (DeckType)(result.DeckType) != outcards.GetDeckType() {
+			g.Errorf("decktype not match, expect:%v, got:%v", result.DeckType, outcards.GetDeckType())
 			return 202
 		}
 		ok := player.handCards.RemoveCards(cards)
@@ -309,8 +309,8 @@ func (g *Guandan) OnPlayerMessage(p battle.Player, msgid uint32, data []byte) {
 	method.Call(g, player, req)
 }
 
-func (g *Guandan) OnTick(duration time.Duration) {
-	g.gameTime += duration
+func (g *Guandan) OnTick(delta time.Duration) {
+	g.gameTime += delta
 
 	curr := g.currStage
 	if curr.CheckExit() {
@@ -320,7 +320,7 @@ func (g *Guandan) OnTick(duration time.Duration) {
 		return
 	}
 
-	curr.OnProcess(duration)
+	curr.OnProcess(delta)
 }
 
 func (g *Guandan) getStageDowntime(s StageType) time.Duration {
