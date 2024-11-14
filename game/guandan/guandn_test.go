@@ -49,7 +49,7 @@ func TestGuandanDoStart(t *testing.T) {
 	defer table.Close()
 
 	for i := 0; i < 4; i++ {
-		table.OnPlayerConn(int64(i), true)
+		table.OnPlayerConn(int64(i), nil, true)
 	}
 
 	time.Sleep(time.Second * 1)
@@ -87,7 +87,7 @@ func TestGuandanDealingCards(t *testing.T) {
 	defer table.Close()
 
 	for i := 0; i < 4; i++ {
-		table.OnPlayerConn(int64(i), true)
+		table.OnPlayerConn(int64(i), nil, true)
 	}
 
 	for _, p := range logic.players {

@@ -79,7 +79,15 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 		return
 	}
 
-	d.OnPlayerConn(int64(ctx.Caller()), true)
+	sender := func(msgid uint32, raw []byte) error {
+		return ctx.SendAsync(&battlemsg.BattleMsgToClient{
+			BattleId: in.BattleId,
+			Msgid:    msgid,
+			Data:     raw,
+		})
+	}
+
+	d.OnPlayerConn(int64(ctx.Caller()), sender, true)
 
 	ctx.Response(out, err)
 
@@ -95,7 +103,7 @@ func (h *Battle) OnPlayerDisConn(uid int64) {
 		if d == nil {
 			continue
 		}
-		d.OnPlayerConn(uid, false)
+		d.OnPlayerConn(uid, nil, false)
 	}
 }
 

@@ -348,13 +348,14 @@ func (d *Table) Start() {
 // 	})
 // }
 
-func (d *Table) OnPlayerConn(uid int64, enable bool) {
+func (d *Table) OnPlayerConn(uid int64, sender PlayerSender, enable bool) {
 	d.Do(func() {
 		p := d.Players.ByUID(uid)
 		if p == nil {
 			return
 		}
 
+		p.sender = sender
 		p.online = enable
 		d.logic.OnPlayerConnStatus(p, p.online)
 	})

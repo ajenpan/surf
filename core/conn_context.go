@@ -10,6 +10,7 @@ import (
 )
 
 type Context interface {
+	SendAsync(msg proto.Message) error
 	Response(msg proto.Message, err error)
 	Caller() uint32
 }

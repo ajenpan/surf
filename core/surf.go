@@ -92,10 +92,15 @@ func (s *Surf) Init(opt Options) error {
 	if opt.CTById == nil {
 		opt.CTById = calltable.NewCallTable[uint32]()
 	}
+
 	if opt.CTByName == nil {
 		opt.CTByName = converCalltable(opt.CTById)
 	} else {
 		opt.CTByName.Merge(converCalltable(opt.CTById), false)
+	}
+
+	if opt.Marshaler == nil {
+		opt.Marshaler = &marshal.ProtoMarshaler{}
 	}
 
 	pubkey, err := utilRsa.LoadRsaPublicKeyFromUrl(opt.PublicKeyFilePath)
@@ -432,6 +437,7 @@ func (h *Surf) onConnAuth(data []byte) (network.User, error) {
 }
 
 func (h *Surf) onConnStatus(c network.Conn, enable bool) {
+	// TOOD:
 	log.Infof("connid:%v, uid:%v status:%v", c.ConnID(), c.UserID(), enable)
 }
 

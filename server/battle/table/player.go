@@ -11,6 +11,8 @@ import (
 	bf "github.com/ajenpan/surf/server/battle"
 )
 
+type PlayerSender = func(msgid uint32, raw []byte) error
+
 func NewPlayer(p *msgBattle.PlayerInfo) *Player {
 	return &Player{
 		PlayerInfo: protobuf.Clone(p).(*msgBattle.PlayerInfo),
@@ -48,7 +50,7 @@ type Player struct {
 	*msgBattle.PlayerInfo
 
 	Ready  int32
-	sender func(msgname uint32, raw []byte) error
+	sender PlayerSender
 	online bool
 	ud     any
 }

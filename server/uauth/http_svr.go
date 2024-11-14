@@ -2,6 +2,7 @@ package uauth
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -48,7 +49,9 @@ func (ctx *httpCallContext) Response(msg proto.Message, err error) {
 		ctx.w.Write([]byte(encerr.Error()))
 	}
 }
-
+func (ctx *httpCallContext) SendAsync(msg proto.Message) error {
+	return fmt.Errorf("SendAsync is not impl")
+}
 func (ctx *httpCallContext) Caller() uint32 {
 	return ctx.uinfo.UId
 }

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
-	"golang.org/x/exp/rand"
 
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
@@ -85,7 +84,7 @@ func RealMain(c *cli.Context) error {
 		return err
 	}
 
-	testuid := uint32(rand.Int31n(300000) + 30000)
+	testuid := uint32(30000)
 	testuser := &auth.UserInfo{
 		UId:   testuid,
 		UName: fmt.Sprintf("yk%d", testuid),

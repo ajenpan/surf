@@ -50,7 +50,7 @@ func (ctx *httpCallContext) Request(msg proto.Message, cb func(pk *network.HVPac
 	// do nothing
 }
 
-func (ctx *httpCallContext) Async(msg proto.Message) error {
+func (ctx *httpCallContext) SendAsync(msg proto.Message) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 

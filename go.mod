@@ -15,7 +15,6 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/urfave/cli/v2 v2.27.5
 	go.etcd.io/etcd/client/v3 v3.5.16
-	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
 	google.golang.org/protobuf v1.35.1
 	gorm.io/datatypes v1.2.4
 	gorm.io/driver/mysql v1.5.7
@@ -52,6 +51,7 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.16 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
+	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
 	golang.org/x/net v0.30.0 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
