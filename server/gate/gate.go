@@ -95,8 +95,8 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 
 	if targetNode == nil {
-		rpk.SetSubType(network.RoutePackType_SubFlag_RouteFail)
-		gate.SendTo(s, rpk.ToHVPacket())
+		pk.Meta.SetSubFlag(network.RoutePackType_SubFlag_RouteFail)
+		gate.SendTo(s, pk)
 		return
 	}
 

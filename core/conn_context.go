@@ -27,10 +27,14 @@ func (ctx *connContext) Response(msg proto.Message, herr error) {
 	var err error
 
 	rpk := network.NewRoutePacket(nil)
-	rpk.Head.CopyFrom(ctx.ReqPacket.Head)
 
 	respmsgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	rpk.SetMsgId(respmsgid)
+	rpk.SetNodeId(ctx.Core.GetNodeId())
+	rpk.SetSvrType(ctx.Core.GetServerType())
+	rpk.SetSYN(ctx.ReqPacket.GetSYN())
+	rpk.SetClientId(ctx.ReqPacket.GetClientId())
+	rpk.SetMsgType(network.RoutePackMsgType_Response)
 
 	if herr != nil {
 		if err, ok := herr.(*errors.Error); ok {
@@ -49,9 +53,7 @@ func (ctx *connContext) Response(msg proto.Message, herr error) {
 		rpk.Body = body
 	}
 
-	pk := rpk.ToHVPacket()
-	err = ctx.Conn.Send(pk)
-
+	err = ctx.Conn.Send(rpk.ToHVPacket())
 	if err != nil {
 		log.Error(err)
 	}

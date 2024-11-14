@@ -27,14 +27,15 @@ type Server interface {
 }
 
 type Options struct {
-	Server    Server
-	GateToken []byte
-	UInfo     auth.User
+	Server Server
+
+	GateToken    []byte
+	UInfo        auth.User
+	GateAddrList []string
 
 	HttpListenAddr string
 	WsListenAddr   string
 	TcpListenAddr  string
-	GateAddrList   []string
 
 	CTByName *calltable.CallTable[string]
 	CTById   *calltable.CallTable[uint32]

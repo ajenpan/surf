@@ -51,8 +51,8 @@ func NewRouteFailedPacket(subtype uint8) *RoutePacket {
 	}
 }
 
-func (routePacketHead) CopyFrom(source routePacketHead) {
-	copy(source, source)
+func (dst routePacketHead) CopyFrom(src routePacketHead) {
+	copy(dst, src)
 }
 
 type RoutePacket struct {
@@ -73,6 +73,7 @@ func (r *RoutePacket) ToHVPacket() *HVPacket {
 	ret := NewHVPacket()
 	ret.Meta.SetType(PacketType_Route)
 	ret.Meta.SetSubFlag(r.subtype)
+	ret.SetHead(r.Head)
 	ret.SetBody(r.Body)
 	return ret
 }
@@ -98,7 +99,7 @@ func (r *RoutePacket) GetClientId() uint32 {
 }
 
 func (r *RoutePacket) GetNodeId() uint32 {
-	return binary.LittleEndian.Uint32(r.Head[8:16])
+	return binary.LittleEndian.Uint32(r.Head[12:16])
 }
 
 func (r *RoutePacket) GetSvrType() uint16 {
