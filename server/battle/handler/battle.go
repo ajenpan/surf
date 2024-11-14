@@ -24,7 +24,7 @@ func New() *Battle {
 }
 
 func (h *Battle) ServerType() uint16 {
-	return 1
+	return 101
 }
 
 func (h *Battle) ServerName() string {

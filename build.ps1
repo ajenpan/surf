@@ -9,7 +9,7 @@ go version
 
 $current_os = $(go env GOOS)
 
-$svrlist = @("gate", "battle", "uauth")
+$svrlist = @("gate", "battle", "uauth", "gateclient")
 
 go env -w GOOS="linux"
 foreach ($svr in $svrlist) {

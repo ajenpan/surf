@@ -42,6 +42,9 @@ func (cs *ConnStore) SwapByUID(c network.Conn) (network.Conn, bool) {
 	cid, has := cs.uid2cid[uid]
 	if has {
 		ret, ok = cs.conn[cid]
+		if ok {
+			delete(cs.conn, cid)
+		}
 	}
 
 	cs.uid2cid[uid] = c.ConnID()

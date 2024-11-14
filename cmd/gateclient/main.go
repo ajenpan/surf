@@ -120,30 +120,33 @@ func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 	}, nil
 }
 
-func StartWs(ppk *rsa.PrivateKey) (func(), error) {
+func StartWsSvr() {
+	// wssvr, err := network.NewWSServer(network.WSServerOptions{
+	// 	ListenAddr:   ":18888",
+	// 	OnConnPacket: gatesvr.OnNodePacket,
+	// 	OnConnStatus: gatesvr.OnNodeStatus,
+	// 	OnConnAuth: func(data []byte) (network.User, error) {
+	// 		return auth.VerifyToken(&ppk.PublicKey, data)
+	// 	}},
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// wssvr.Start()
+}
+
+func StartWsClient(ppk *rsa.PrivateKey) (func(), error) {
 	uinfo := &auth.UserInfo{
 		UId:   10001,
 		UName: "gdclient",
 		URole: 0,
 	}
 	jwt, _ := auth.GenerateToken(ppk, uinfo, 2400*time.Hour)
+
 	fmt.Println(jwt)
 
-	tcpsvr, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   ":18888",
-		OnConnPacket: gatesvr.OnNodePacket,
-		OnConnStatus: gatesvr.OnNodeStatus,
-		OnConnAuth: func(data []byte) (network.User, error) {
-			return auth.VerifyToken(&ppk.PublicKey, data)
-		}},
-	)
-	if err != nil {
-		return nil, err
-	}
-	tcpsvr.Start()
-
 	client := network.NewWSClient(network.WSClientOptions{
-		RemoteAddress:  "ws://localhost:18888",
+		RemoteAddress:  "ws://localhost:11000",
 		AuthToken:      []byte(jwt),
 		UInfo:          uinfo,
 		ReconnectDelay: time.Second,
@@ -154,9 +157,9 @@ func StartWs(ppk *rsa.PrivateKey) (func(), error) {
 			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
 		},
 	})
+
 	client.Start()
 	return func() {
-		tcpsvr.Stop()
 		client.Close()
 	}, nil
 }
@@ -175,7 +178,7 @@ func RealMain(c *cli.Context) error {
 	gatesvr.NodePublicKey = &ppk.PublicKey
 	gatesvr.ClientPublicKey = &ppk.PublicKey
 
-	wsclose, err := StartWs(ppk)
+	wsclose, err := StartWsClient(ppk)
 	if err != nil {
 		return err
 	}

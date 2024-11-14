@@ -29,8 +29,9 @@ func SendRequestToClient[T proto.Message](uid uint32, msgid uint32, msg any, cb 
 			cb(true, nil, resp)
 			return
 		}
-		head := network.RoutePacketHead(pk.GetHead())
-		errcode := head.GetErrCode()
+		rpk := network.NewRoutePacket(nil).FromHVPacket(pk)
+
+		errcode := rpk.GetErrCode()
 		if errcode != 0 {
 			cb(false, errors.New(int32(errcode), "resp err"), nil)
 			return

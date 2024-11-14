@@ -31,11 +31,10 @@ type Options struct {
 	GateToken []byte
 	UInfo     auth.User
 
-	ControlListenAddr string
-	HttpListenAddr    string
-	WsListenAddr      string
-	TcpListenAddr     string
-	GateAddrList      []string
+	HttpListenAddr string
+	WsListenAddr   string
+	TcpListenAddr  string
+	GateAddrList   []string
 
 	CTByName *calltable.CallTable[string]
 	CTById   *calltable.CallTable[uint32]
@@ -132,10 +131,6 @@ func (s *Surf) Start() error {
 
 	if len(s.opts.TcpListenAddr) > 1 {
 		s.startTcpSvr()
-	}
-
-	if len(s.opts.ControlListenAddr) > 1 {
-		// todo:
 	}
 
 	return nil
@@ -319,15 +314,17 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 		return err
 	}
 	syn := s.GetSYN()
-	head := network.RoutePacketHead(make([]byte, network.RoutePackHeadLen))
-	head.SetClientId(uid)
-	head.SetMsgId(msgid)
-	head.SetNodeId(s.GetNodeId())
-	head.SetSYN(syn)
+
+	rpk := network.NewRoutePacket(body)
+	rpk.SetMsgType(1)
+	rpk.SetClientId(uid)
+	rpk.SetMsgId(msgid)
+	rpk.SetNodeId(s.GetNodeId())
+	rpk.SetSYN(syn)
 
 	s.pushRespCallback(syn, cb)
 
-	pk := network.NewRoutePacket(network.RoutePackType_SubFlag_Request, head, body)
+	pk := rpk.ToHVPacket()
 
 	err = conn.Send(pk)
 	if err != nil {
@@ -342,14 +339,14 @@ func (s *Surf) SendAsyncToClient(conn network.Conn, uid uint32, msgid uint32, ms
 		return err
 	}
 
-	head := network.RoutePacketHead(make([]byte, network.RoutePackHeadLen))
-	head.SetClientId(uid)
-	head.SetMsgId(msgid)
-	head.SetNodeId(s.GetNodeId())
-	head.SetSYN(s.GetSYN())
+	rpk := network.NewRoutePacket(body)
+	rpk.SetMsgType(0)
+	rpk.SetClientId(uid)
+	rpk.SetMsgId(msgid)
+	rpk.SetNodeId(s.GetNodeId())
+	rpk.SetSYN(s.GetSYN())
 
-	pk := network.NewRoutePacket(network.RoutePackType_SubFlag_Async, head, body)
-	return conn.Send(pk)
+	return conn.Send(rpk.ToHVPacket())
 }
 
 func (s *Surf) SendAsyncToClientByUId(uid uint32, msgid uint32, msg any) error {
@@ -432,6 +429,7 @@ func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
 func (h *Surf) onConnAuth(data []byte) (network.User, error) {
 	return auth.VerifyToken(h.PublicKey, data)
 }
+
 func (h *Surf) onConnStatus(c network.Conn, enable bool) {
 	log.Infof("connid:%v, uid:%v status:%v", c.ConnID(), c.UserID(), enable)
 }
@@ -447,28 +445,31 @@ func (s *Surf) onNodeInnerPacket(c network.Conn, pk *network.HVPacket) {
 }
 
 func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
-	// defer s.catch()
-
 	if len(pk.Head) != network.RoutePackHeadLen {
 		log.Error("invalid packet head length:", len(pk.Head))
 		return
 	}
 
-	head := network.RoutePacketHead(pk.Head)
+	rpk := network.NewRoutePacket(nil).FromHVPacket(pk)
 
-	switch pk.Meta.GetSubFlag() {
-	case network.RoutePackType_SubFlag_Async:
+	if rpk.GetSubType() != 0 {
+		log.Error("recv err packet subtype:", rpk.GetSubType())
+		return
+	}
+
+	switch rpk.GetMsgType() {
+	case network.RoutePackMsgType_Async:
 		fallthrough
-	case network.RoutePackType_SubFlag_Request:
-		method := s.opts.CTById.Get(head.GetMsgId())
+	case network.RoutePackMsgType_Request:
+		method := s.opts.CTById.Get(rpk.GetMsgId())
 		if method == nil {
-			log.Error("invalid msgid:", head.GetMsgId())
+			log.Error("invalid msgid:", rpk.GetMsgId())
 			//todo send error packet
 			return
 		}
-		marshaler := marshal.NewMarshalerById(head.GetMarshalType())
+		marshaler := marshal.NewMarshalerById(rpk.GetMarshalType())
 		if marshaler == nil {
-			log.Error("invalid marshaler type:", head.GetMarshalType())
+			log.Error("invalid marshaler type:", rpk.GetMarshalType())
 			//todo send error packet
 			return
 		}
@@ -483,14 +484,14 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 		ctx := &connContext{
 			Conn:      c,
 			Core:      s,
-			ReqPacket: pk,
-			caller:    head.GetClientId(),
+			ReqPacket: rpk,
+			caller:    rpk.GetClientId(),
 			Marshal:   marshaler,
 		}
 
 		method.Call(s.opts.Server, ctx, req)
-	case network.RoutePackType_SubFlag_Response:
-		cbinfo := s.popRespCallback(head.GetSYN())
+	case network.RoutePackMsgType_Response:
+		cbinfo := s.popRespCallback(rpk.GetSYN())
 		if cbinfo == nil {
 			return
 		}
@@ -500,7 +501,6 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 		if cbinfo.cbfun != nil {
 			cbinfo.cbfun(false, pk)
 		}
-	case network.RoutePackType_SubFlag_RouteErr:
 	default:
 	}
 }

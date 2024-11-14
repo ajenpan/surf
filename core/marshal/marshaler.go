@@ -12,7 +12,7 @@ type Marshaler interface {
 	ContentType(interface{}) string
 }
 
-func NewMarshalerById(typ uint16) Marshaler {
+func NewMarshalerById(typ uint8) Marshaler {
 	switch typ {
 	case 0:
 		return &ProtoMarshaler{}

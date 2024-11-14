@@ -57,8 +57,9 @@ type LogicConfig struct {
 type Guandan struct {
 	logger.Logger
 
-	table battle.Table
-	conf  *LogicConfig
+	WildCard poker.Card
+	table    battle.Table
+	conf     *LogicConfig
 	// info    *GameInfo
 	// players []*Player // seatid to player
 	players map[int32]*Player
@@ -184,6 +185,7 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 		}
 	}
 
+	g.WildCard = poker.NewCard(poker.HEART, (poker.CardRank)(g.conf.WildCardRank))
 	g.currStage = g.getStageInfo(StageType_Stage_None)
 	g.currStage.OnEnter()
 
@@ -240,7 +242,7 @@ func (g *Guandan) OnReqPlayerOutCards(player *Player, msg *ReqPlayerOutCards) {
 			g.Errorf("parse outcards error:%v", err)
 			return 201
 		}
-		result := gdpoker.GetDeckPower(poker.CardRank(g.conf.WildCardRank), cards)
+		result := gdpoker.GetDeckPower(g.WildCard, cards)
 		if (DeckType)(result.DeckType) != outcards.GetDeckType() {
 			g.Errorf("decktype not match, expect:%v, got:%v", result.DeckType, outcards.GetDeckType())
 			return 202

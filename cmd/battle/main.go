@@ -83,11 +83,11 @@ func RealMain(c *cli.Context) error {
 	CTByID, CTByName := calltable.ExtractMethodFromDesc(battleMsg.File_battle_proto.Messages(), h)
 
 	uid := 10001
-	uname := fmt.Sprintf("battle_%d", uid)
+
 	uinfo := &auth.UserInfo{
 		UId:   uint32(uid),
-		UName: uname,
-		URole: 6000,
+		UName: fmt.Sprintf("%s_%d", h.ServerName(), uid),
+		URole: uint32(h.ServerType()),
 	}
 
 	jwt, err := auth.GenerateToken(pk, uinfo, 2400*time.Hour)
