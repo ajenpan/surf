@@ -14,7 +14,7 @@ type TcpServerOptions struct {
 	HeatbeatInterval time.Duration
 
 	OnConnPacket  FuncOnConnPacket
-	OnConnStatus  FuncOnConnStatus
+	OnConnStatus  FuncOnConnEnable
 	OnConnAuth    FuncOnConnAuth
 	OnConnAccpect func(net.Conn) bool
 }

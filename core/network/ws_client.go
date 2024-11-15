@@ -19,7 +19,7 @@ type WSClientOptions struct {
 	RWTimeout        time.Duration
 
 	OnConnPacket   FuncOnConnPacket
-	OnConnStatus   FuncOnConnStatus
+	OnConnEnable   FuncOnConnEnable
 	AuthToken      []byte
 	UInfo          User
 	ReconnectDelay time.Duration
@@ -69,8 +69,8 @@ func (c *WSClient) Close() error {
 }
 
 func (c *WSClient) onConnStatus(enable bool) {
-	if c.opts.OnConnStatus != nil {
-		c.opts.OnConnStatus(c.wconn, enable)
+	if c.opts.OnConnEnable != nil {
+		c.opts.OnConnEnable(c.wconn, enable)
 	}
 	if !enable {
 		c.reconnect()

@@ -33,3 +33,7 @@ func (j *JSONPb) String() string {
 func (*JSONPb) ContentType(_ interface{}) string {
 	return "application/json"
 }
+
+func (*JSONPb) ContentTypeID() uint8 {
+	return 1
+}

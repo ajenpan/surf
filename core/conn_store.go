@@ -1,4 +1,4 @@
-package gate
+package core
 
 import (
 	"sync"

@@ -10,12 +10,16 @@ func NewNodePacketHead() nodePacketHead {
 	return make(nodePacketHead, NodePackHeadLen)
 }
 
+const NodePackMsgType_Async = 0
+const NodePackMsgType_Reqest = 1
+const NodePackMsgType_Response = 2
+
 type nodePacketHead []uint8
 
-func NewEmptyNodePacket() *NodePacket {
+func NewNodePacket(body []byte) *NodePacket {
 	return &NodePacket{
 		Head: NewNodePacketHead(),
-		Body: nil,
+		Body: body,
 	}
 }
 
@@ -79,7 +83,8 @@ func (r *NodePacket) ToHVPacket() *HVPacket {
 	return ret
 }
 
-func (r *NodePacket) FromHVPacket(pk *HVPacket) {
+func (r *NodePacket) FromHVPacket(pk *HVPacket) *NodePacket {
 	r.Head = pk.GetHead()
 	r.Body = pk.Body
+	return r
 }

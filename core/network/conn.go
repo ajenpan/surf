@@ -54,7 +54,7 @@ func (u *userInfo) fromUser(user User) {
 }
 
 type FuncOnConnAuth func(data []byte) (User, error)
-type FuncOnConnStatus func(Conn, bool)
+type FuncOnConnEnable func(Conn, bool)
 type FuncOnConnPacket func(Conn, *HVPacket)
 
 var sid uint64 = 0

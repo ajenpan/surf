@@ -15,7 +15,7 @@ type TcpClientOptions struct {
 	HeatbeatInterval time.Duration
 
 	OnConnPacket   FuncOnConnPacket
-	OnConnStatus   FuncOnConnStatus
+	OnConnStatus   FuncOnConnEnable
 	AuthToken      []byte
 	UInfo          auth.User
 	ReconnectDelay time.Duration

@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"github.com/ajenpan/surf/core"
 	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
@@ -9,27 +10,11 @@ import (
 
 var log = logger.Default
 
-func StartClientListener(r *Gate, addr string) (func(), error) {
-	ws, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   addr,
-		OnConnPacket: r.OnConnPacket,
-		OnConnStatus: r.OnConnEnable,
-		OnConnAuth:   r.OnConnAuth,
-	})
-	if err != nil {
-		return nil, err
-	}
-	err = ws.Start()
-	return func() {
-		ws.Stop()
-	}, err
-}
-
 func StartNodeListener(r *Gate, addr string) (func(), error) {
 	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   addr,
 		OnConnPacket: r.OnNodePacket,
-		OnConnStatus: r.OnNodeStatus,
+		OnConnEnable: r.OnNodeStatus,
 		OnConnAuth:   r.OnNodeAuth,
 	})
 	if err != nil {
@@ -68,16 +53,25 @@ func Start(cfg *Config) (func() error, error) {
 	}()
 
 	r := &Gate{
-		ClientConn:      NewConnStore(),
-		NodeConn:        NewConnStore(),
+		NodeConn:        core.NewConnStore(),
 		Marshaler:       &marshal.ProtoMarshaler{},
 		ClientPublicKey: ppk,
 		NodePublicKey:   ppk,
 	}
 
-	ccloser, err = StartClientListener(r, cfg.ClientListenAddr)
+	ug := core.NewClientGate(core.ClientGateOptions{
+		WsListenAddr: cfg.ClientListenAddr,
+		OnConnPacket: r.OnConnPacket,
+		OnConnEnable: r.OnConnEnable,
+		OnConnAuth:   r.OnConnAuth,
+	})
+	err = ug.Start()
 	if err != nil {
 		return nil, err
+	}
+
+	ccloser = func() {
+		ug.Stop()
 	}
 
 	ncloser, err = StartNodeListener(r, cfg.NodeListenAddr)
@@ -85,6 +79,7 @@ func Start(cfg *Config) (func() error, error) {
 		return nil, err
 	}
 
+	r.ClientConn = ug
 	initok = true
 	return closer, nil
 }

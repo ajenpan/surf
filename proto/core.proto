@@ -4,38 +4,16 @@ package openproto.core;
 option go_package = "msg/core";
 option csharp_namespace = "src.msg.core";
 
-message Error {
-  int32 code = 1;
-  string detail = 2;
-}
+message NotifyClientDisconnect {
+  enum MSGID {
+    __invilid__MSGID = 0;
+    ID = 10001;
+  }
 
-enum MsgType {
-  Async = 0;
-  Request = 1;
-  Response = 2;
+  uint32 uid = 1;
+  enum Reason {
+    Disconnect = 0;
+  }
+  Reason reason = 2;
+  uint32 gate_node_id = 3;
 }
-
-message MsgWrap {
-  Error err = 1;
-  MsgType msg_type = 2;
-  uint32 seqid = 3;
-  int32 msgid = 4;
-  bytes data = 5;
-  uint64 from = 6;
-}
-
-// message AsyncMsgWrap {
-//   string name = 1;
-//   bytes body = 2;
-// }
-// message RequestMsgWrap {
-//   string name = 1;
-//   bytes body = 2;
-//   uint32 seqid = 3;
-// }
-// message ResponseMsgWrap {
-//   string name = 1;
-//   bytes body = 2;
-//   uint32 seqid = 3;
-//   Error err = 4;
-// }

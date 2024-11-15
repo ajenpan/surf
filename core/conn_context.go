@@ -12,14 +12,17 @@ import (
 type Context interface {
 	SendAsync(msg proto.Message) error
 	Response(msg proto.Message, err error)
-	Caller() uint32
+
+	UserID() uint32
+	UserRole() uint32
 }
 
 type connContext struct {
 	Conn      network.Conn
 	Core      *Surf
 	ReqPacket *network.RoutePacket
-	caller    uint32
+	uid       uint32
+	urole     uint32
 	Marshal   marshal.Marshaler
 }
 
@@ -31,10 +34,11 @@ func (ctx *connContext) Response(msg proto.Message, herr error) {
 
 	respmsgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	rpk.SetMsgId(respmsgid)
-	rpk.SetNodeId(ctx.Core.GetNodeId())
-	rpk.SetSvrType(ctx.Core.GetServerType())
+	rpk.SetToUID(ctx.ReqPacket.GetFromUID())
+	rpk.SetToURole(ctx.ReqPacket.GetFromURole())
 	rpk.SetSYN(ctx.ReqPacket.GetSYN())
-	rpk.SetClientId(ctx.ReqPacket.GetClientId())
+	rpk.SetFromUID(ctx.Core.GetNodeId())
+	rpk.SetFromURole(ctx.Core.GetServerType())
 	rpk.SetMsgType(network.RoutePackMsgType_Response)
 
 	if herr != nil {
@@ -62,9 +66,13 @@ func (ctx *connContext) Response(msg proto.Message, herr error) {
 
 func (ctx *connContext) SendAsync(msg proto.Message) error {
 	msgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
-	return ctx.Core.SendAsyncToClient(ctx.Conn, ctx.caller, msgid, msg)
+	return ctx.Core.SendAsyncToClient(ctx.Conn, ctx.uid, msgid, msg)
 }
 
-func (ctx *connContext) Caller() uint32 {
-	return ctx.caller
+func (ctx *connContext) UserID() uint32 {
+	return ctx.uid
+}
+
+func (ctx *connContext) UserRole() uint32 {
+	return ctx.urole
 }

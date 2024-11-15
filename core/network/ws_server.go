@@ -18,7 +18,7 @@ type WSServerOptions struct {
 	HeatbeatInterval time.Duration
 
 	OnConnPacket  FuncOnConnPacket
-	OnConnStatus  FuncOnConnStatus
+	OnConnEnable  FuncOnConnEnable
 	OnConnAuth    FuncOnConnAuth
 	OnConnAccpect func(r *http.Request) bool
 }
@@ -134,9 +134,9 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn.writePacket(pk)
 
 	// the connection is established here
-	if s.OnConnStatus != nil {
-		s.OnConnStatus(conn, true)
-		defer s.OnConnStatus(conn, false)
+	if s.OnConnEnable != nil {
+		s.OnConnEnable(conn, true)
+		defer s.OnConnEnable(conn, false)
 	}
 
 	conn.status = Connected

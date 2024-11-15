@@ -49,11 +49,17 @@ func (ctx *httpCallContext) Response(msg proto.Message, err error) {
 		ctx.w.Write([]byte(encerr.Error()))
 	}
 }
+
 func (ctx *httpCallContext) SendAsync(msg proto.Message) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
-func (ctx *httpCallContext) Caller() uint32 {
+
+func (ctx *httpCallContext) UserID() uint32 {
 	return ctx.uinfo.UId
+}
+
+func (ctx *httpCallContext) UserRole() uint32 {
+	return ctx.uinfo.URole
 }
 
 type HttpSvr struct {

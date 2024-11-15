@@ -108,7 +108,7 @@ func RealMain(c *cli.Context) error {
 
 	RegGames()
 
-	err = core.Init(core.Options{
+	opts := core.Options{
 		Server:         h,
 		HttpListenAddr: ":13300",
 		WsListenAddr:   ":13301",
@@ -121,12 +121,11 @@ func RealMain(c *cli.Context) error {
 		},
 		GateToken: []byte(jwt),
 		UInfo:     uinfo,
-	})
-
+	}
+	surf, err := core.NewSurf(opts)
 	if err != nil {
 		return err
 	}
-
-	err = core.Run()
+	err = surf.Run()
 	return err
 }

@@ -10,6 +10,7 @@ type Marshaler interface {
 	// The parameter describes the type which is being marshalled, which can sometimes
 	// affect the content type returned.
 	ContentType(interface{}) string
+	ContentTypeID() uint8
 }
 
 func NewMarshalerById(typ uint8) Marshaler {

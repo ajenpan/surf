@@ -4,16 +4,3 @@ package openproto.gate;
 option go_package = "msg/gate";
 option csharp_namespace = "src.msg.gate";
 
-message NotifyClientDisconnect {
-  enum MSGID {
-    __invilid__MSGID = 0;
-    ID = 10001;
-  }
-
-  uint32 uid = 1;
-  enum Reason {
-    Disconnect = 0;
-  }
-  Reason reason = 2;
-  uint32 gate_node_id = 3;
-}

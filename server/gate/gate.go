@@ -5,24 +5,26 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/calltable"
-	msgGate "github.com/ajenpan/surf/msg/gate"
+	msgCore "github.com/ajenpan/surf/msg/core"
 )
 
 type Gate struct {
 	Calltable *calltable.CallTable[uint32]
 	Marshaler marshal.Marshaler
 
-	ClientConn *ConnStore
-	NodeConn   *ConnStore
+	NodeConn *core.ConnStore
 
 	Selfinfo *auth.UserInfo
 
 	ClientPublicKey *rsa.PublicKey
 	NodePublicKey   *rsa.PublicKey
+
+	ClientConn *core.ClientGate
 }
 
 func (gate *Gate) OnConnAuth(data []byte) (network.User, error) {
@@ -31,24 +33,9 @@ func (gate *Gate) OnConnAuth(data []byte) (network.User, error) {
 
 func (gate *Gate) OnConnEnable(conn network.Conn, enable bool) {
 	if enable {
-		log.Debugf("OnConnEnable: id:%v,addr:%v,uid:%v,urid:%v,enable:%v", conn.ConnID(), conn.RemoteAddr(), conn.UserID(), conn.UserRole(), enable)
-		currConn, got := gate.ClientConn.SwapByUID(conn)
-		if got {
-			ud := currConn.GetUserData()
-			currConn.SetUserData(nil)
-
-			conn.SetUserData(ud)
-
-			log.Infof("OnConnEnable: repeat conn, close old conn:%v,uid:%v", currConn.ConnID(), currConn.UserID())
-			currConn.Close()
-		} else {
-			gate.onUserOnline(conn)
-		}
+		gate.onUserOnline(conn)
 	} else {
-		currConn, got := gate.ClientConn.Delete(conn.ConnID())
-		if got {
-			gate.onUserOffline(currConn)
-		}
+		gate.onUserOffline(conn)
 	}
 }
 
@@ -65,8 +52,8 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		return
 	}
 
-	rpk.SetClientId(s.UserID())
-	svrtype := rpk.GetSvrType()
+	rpk.SetFromUId(s.UserID())
+	svrtype := rpk.GetFromURole()
 
 	if svrtype == 0 {
 		gate.OnCall(s, rpk)
@@ -75,8 +62,8 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 
 	ud := s.GetUserData().(*ConnUserData)
 
-	nodeid := rpk.GetNodeId()
-	serverType := rpk.GetSvrType()
+	nodeid := rpk.GetToUID()
+	serverType := rpk.GetFromURole()
 
 	var targetNode network.Conn
 
@@ -166,13 +153,13 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 	case network.PacketType_Route:
 		rpk := network.NewRoutePacket(nil).FromHVPacket(pk)
 
-		clientUID := rpk.GetClientId()
+		clientUID := rpk.GetFromUID()
 		if clientUID == 0 {
 			log.Warnf("client not found clientUID:%d", clientUID)
 			return
 		}
 
-		v, found := gate.ClientConn.LoadByUID(clientUID)
+		v, found := gate.ClientConn.GetConnByUid(clientUID)
 		if !found {
 			log.Warnf("client not found cid:%d", clientUID)
 			pk.Meta.SetSubFlag(network.RoutePackType_SubFlag_RouteFail)
@@ -225,7 +212,7 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 		"uid":    conn.UserID(),
 		"enable": false,
 	})
-	notify := &msgGate.NotifyClientDisconnect{
+	notify := &msgCore.NotifyClientDisconnect{
 		Uid: conn.UserID(),
 	}
 	ud := conn.GetUserData().(*ConnUserData)
@@ -239,10 +226,9 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 	}
 
 	msgid := calltable.GetMessageMsgID(notify.ProtoReflect().Descriptor())
-	npk := network.NewEmptyNodePacket()
+	npk := network.NewNodePacket(body)
 	npk.SetMarshal(0)
 	npk.SetMsgId(msgid)
-	npk.SetBody(body)
 	npk.SetSyn(0)
 
 	for nodeid := range ud.nodeids {

@@ -57,13 +57,10 @@ func converCalltable(source *calltable.CallTable[uint32]) *calltable.CallTable[s
 	return result
 }
 
-func NewSurf(opt Options) *Surf {
+func NewSurf(opt Options) (*Surf, error) {
 	s := &Surf{}
 	err := s.Init(opt)
-	if err != nil {
-		panic(err)
-	}
-	return s
+	return s, err
 }
 
 type RequestCallbackFunc func(timeout bool, pk *network.HVPacket)
@@ -159,8 +156,8 @@ func (s *Surf) Run() error {
 		log.Infof("start gate client, addr: %s", addr)
 		client := network.NewWSClient(network.WSClientOptions{
 			RemoteAddress:  addr,
-			OnConnPacket:   s.onConnPacket,
-			OnConnStatus:   s.onConnStatus,
+			OnConnPacket:   s.onGatePacket,
+			OnConnEnable:   s.onGateStatus,
 			AuthToken:      []byte(s.opts.GateToken),
 			UInfo:          s.opts.UInfo,
 			ReconnectDelay: 3 * time.Second,
@@ -212,8 +209,8 @@ func (s *Surf) startWsSvr() {
 
 	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   s.opts.WsListenAddr,
-		OnConnPacket: s.onConnPacket,
-		OnConnStatus: s.onConnStatus,
+		OnConnPacket: s.onGatePacket,
+		OnConnEnable: s.onGateStatus,
 		OnConnAuth:   s.onConnAuth,
 	})
 	if err != nil {
@@ -230,8 +227,8 @@ func (s *Surf) startTcpSvr() {
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
 		ListenAddr:       s.opts.TcpListenAddr,
 		HeatbeatInterval: 30 * time.Second,
-		OnConnPacket:     s.onConnPacket,
-		OnConnStatus:     s.onConnStatus,
+		OnConnPacket:     s.onGatePacket,
+		OnConnStatus:     s.onGateStatus,
 		OnConnAuth:       s.onConnAuth,
 	})
 	if err != nil {
@@ -322,10 +319,12 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 	syn := s.GetSYN()
 
 	rpk := network.NewRoutePacket(body)
-	rpk.SetMsgType(1)
-	rpk.SetClientId(uid)
+	rpk.SetMsgType(network.RoutePackMsgType_Request)
 	rpk.SetMsgId(msgid)
-	rpk.SetNodeId(s.GetNodeId())
+	rpk.SetToUID(uid)
+	rpk.SetToURole(1)
+	rpk.SetFromUID(s.GetNodeId())
+	rpk.SetFromURole(s.GetServerType())
 	rpk.SetSYN(syn)
 
 	s.pushRespCallback(syn, cb)
@@ -347,9 +346,11 @@ func (s *Surf) SendAsyncToClient(conn network.Conn, uid uint32, msgid uint32, ms
 
 	rpk := network.NewRoutePacket(body)
 	rpk.SetMsgType(0)
-	rpk.SetClientId(uid)
+	rpk.SetToUID(uid)
+	rpk.SetToURole(uint16(ServerType_Client))
 	rpk.SetMsgId(msgid)
-	rpk.SetNodeId(s.GetNodeId())
+	rpk.SetFromUID(s.GetNodeId())
+	rpk.SetFromURole(s.GetServerType())
 	rpk.SetSYN(s.GetSYN())
 
 	return conn.Send(rpk.ToHVPacket())
@@ -422,7 +423,7 @@ func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc
 	}
 }
 
-func (h *Surf) onConnPacket(s network.Conn, pk *network.HVPacket) {
+func (h *Surf) onGatePacket(s network.Conn, pk *network.HVPacket) {
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		h.onRoutePacket(s, pk)
@@ -436,9 +437,9 @@ func (h *Surf) onConnAuth(data []byte) (network.User, error) {
 	return auth.VerifyToken(h.PublicKey, data)
 }
 
-func (h *Surf) onConnStatus(c network.Conn, enable bool) {
+func (h *Surf) onGateStatus(c network.Conn, enable bool) {
 	// TOOD:
-	log.Infof("connid:%v, uid:%v status:%v", c.ConnID(), c.UserID(), enable)
+	log.Infof("connid:%v, uid:%v,utype:%v, status:%v", c.ConnID(), c.UserID(), c.UserRole(), enable)
 }
 
 func (s *Surf) catch() {
@@ -448,7 +449,28 @@ func (s *Surf) catch() {
 }
 
 func (s *Surf) onNodeInnerPacket(c network.Conn, pk *network.HVPacket) {
-	//todo:
+	if len(pk.Head) != network.NodePackHeadLen {
+		log.Error("invalid packet head length:", len(pk.Head))
+		return
+	}
+
+	npk := network.NewNodePacket(nil).FromHVPacket(pk)
+	switch npk.GetMsgType() {
+	case network.NodePackMsgType_Async:
+		fallthrough
+	case network.NodePackMsgType_Reqest:
+		// ctx := &connContext{
+		// 	Conn:      c,
+		// 	Core:      s,
+		// 	ReqPacket: rpk,
+		// 	uid:       rpk.GetClientId(),
+		// 	urole:     1,
+		// 	Marshal:   marshaler,
+		// }
+
+	case network.NodePackMsgType_Response:
+		// todo
+	}
 }
 
 func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
@@ -492,7 +514,8 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 			Conn:      c,
 			Core:      s,
 			ReqPacket: rpk,
-			caller:    rpk.GetClientId(),
+			uid:       rpk.GetFromUID(),
+			urole:     1,
 			Marshal:   marshaler,
 		}
 

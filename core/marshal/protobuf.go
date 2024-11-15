@@ -36,3 +36,7 @@ func (*ProtoMarshaler) String() string {
 func (*ProtoMarshaler) ContentType(_ interface{}) string {
 	return "application/protobuf"
 }
+
+func (*ProtoMarshaler) ContentTypeID() uint8 {
+	return 0
+}

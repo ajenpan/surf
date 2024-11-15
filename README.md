@@ -12,10 +12,13 @@ surf is an utils lib for my golang serivce
 
 ## todolist
 
-### gate
-
-1. conn 状态订阅
-
-### lobby
-
-### battle
+- [ ] gate conn 状态通知 (使用消息队列感觉有延迟)
+- [ ] 拆分 gate
+- [ ] 日志改进
+- [ ] guandan 玩法
+- [ ] lobby 模块
+- [ ] auth 改进
+- [ ] 消息订阅设计
+- [ ] IM 模块
+- [ ] gate 多节点支持
+- [ ] 服务发现
