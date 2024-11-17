@@ -24,19 +24,18 @@ func Run() error {
 func SendRequestToClient[T proto.Message](uid uint32, msgid uint32, msg any, cb func(timeout bool, err error, resp *T)) {
 	resp := new(T)
 
-	wrapfn := func(timeout bool, pk *network.HVPacket) {
+	wrapfn := func(timeout bool, rpk *RoutePacket) {
 		if timeout {
 			cb(true, nil, resp)
 			return
 		}
-		rpk := network.NewRoutePacket(nil).FromHVPacket(pk)
 
 		errcode := rpk.GetErrCode()
 		if errcode != 0 {
 			cb(false, errors.New(int32(errcode), "resp err"), nil)
 			return
 		}
-		err := GSurf.opts.Marshaler.Unmarshal(pk.GetBody(), resp)
+		err := GSurf.opts.Marshaler.Unmarshal(rpk.GetBody(), resp)
 		if err != nil {
 			cb(false, err, nil)
 			return

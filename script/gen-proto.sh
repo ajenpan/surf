@@ -2,7 +2,7 @@
 
 protoc --version
 
-pbfiles=$(find . -name "*.proto" -type f)
+pbfiles=$(find ../proto -name "*.proto" -type f)
 
 # todo:
 # for file in $pbfiles; do

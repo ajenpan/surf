@@ -56,7 +56,7 @@ func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *
 			respType := methodt.Out(0).Elem()
 
 			m := &Method{
-				HandleName:   rpcMethodName,
+				Name:         rpcMethodName,
 				Func:         methodv.Func,
 				RequestType:  reqType,
 				ResponseType: respType,
@@ -97,7 +97,7 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 		}
 
 		m := &Method{
-			HandleName:  method.Name,
+			Name:        method.Name,
 			Func:        method.Func,
 			RequestType: reqMsgType.Elem(),
 		}
@@ -176,8 +176,8 @@ func ExtractMethodFromDesc(ms protoreflect.MessageDescriptors, h interface{}) (*
 		hname = strings.TrimSuffix(hname, MsgSuffix)
 
 		m := &Method{
-			HandleName:  hname,
-			HandleMsgid: msgid,
+			Name:        hname,
+			Msgid:       msgid,
 			Func:        method.Func,
 			RequestType: reqMsgType.Elem(),
 		}

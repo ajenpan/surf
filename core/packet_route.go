@@ -1,7 +1,9 @@
-package network
+package core
 
 import (
 	"encoding/binary"
+
+	"github.com/ajenpan/surf/core/network"
 )
 
 // | msgid | syn | from_uid | to_uid | from_urole | to_urole | errcode | msgtyp | marshal |
@@ -45,16 +47,16 @@ type RoutePacket struct {
 	Body []byte
 }
 
-func (r *RoutePacket) FromHVPacket(hv *HVPacket) *RoutePacket {
+func (r *RoutePacket) FromHVPacket(hv *network.HVPacket) *RoutePacket {
 	r.subtype = hv.Meta.GetSubFlag()
 	r.Head = hv.GetHead()
 	r.Body = hv.GetBody()
 	return r
 }
 
-func (r *RoutePacket) ToHVPacket() *HVPacket {
-	ret := NewHVPacket()
-	ret.Meta.SetType(PacketType_Route)
+func (r *RoutePacket) ToHVPacket() *network.HVPacket {
+	ret := network.NewHVPacket()
+	ret.Meta.SetType(network.PacketType_Route)
 	ret.Meta.SetSubFlag(r.subtype)
 	ret.SetHead(r.Head)
 	ret.SetBody(r.Body)

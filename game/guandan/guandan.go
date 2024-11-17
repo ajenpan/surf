@@ -231,7 +231,6 @@ func (g *Guandan) OnReqPlayerDoubleBet(player *Player, msg *ReqPlayerDoubleBet) 
 }
 
 func (g *Guandan) OnReqPlayerOutCards(player *Player, msg *ReqPlayerOutCards) {
-
 	flag := func() int32 {
 		if player.actionPower == nil {
 			return 101

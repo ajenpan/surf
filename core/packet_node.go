@@ -1,6 +1,10 @@
-package network
+package core
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/ajenpan/surf/core/network"
+)
 
 // | msgid | syn | errcode | msgtype | marshal |
 // | 4     | 4   | 2       | 1       | 1       |
@@ -11,7 +15,7 @@ func NewNodePacketHead() nodePacketHead {
 }
 
 const NodePackMsgType_Async = 0
-const NodePackMsgType_Reqest = 1
+const NodePackMsgType_Request = 1
 const NodePackMsgType_Response = 2
 
 type nodePacketHead []uint8
@@ -60,11 +64,11 @@ func (r *NodePacket) SetMsgType(d uint8) {
 	r.Head[10] = d
 }
 
-func (r *NodePacket) GetMarshal() uint8 {
+func (r *NodePacket) GetMarshalType() uint8 {
 	return r.Head[11]
 }
 
-func (r *NodePacket) SetMarshal(d uint8) {
+func (r *NodePacket) SetMarshalType(d uint8) {
 	r.Head[11] = d
 }
 
@@ -76,14 +80,14 @@ func (r *NodePacket) GetBody() []byte {
 	return r.Body
 }
 
-func (r *NodePacket) ToHVPacket() *HVPacket {
-	ret := NewHVPacket()
-	ret.Meta.SetType(PacketType_Node)
+func (r *NodePacket) ToHVPacket() *network.HVPacket {
+	ret := network.NewHVPacket()
+	ret.Meta.SetType(network.PacketType_Node)
 	ret.SetBody(r.Body)
 	return ret
 }
 
-func (r *NodePacket) FromHVPacket(pk *HVPacket) *NodePacket {
+func (r *NodePacket) FromHVPacket(pk *network.HVPacket) *NodePacket {
 	r.Head = pk.GetHead()
 	r.Body = pk.Body
 	return r

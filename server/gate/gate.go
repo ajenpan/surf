@@ -27,6 +27,14 @@ type Gate struct {
 	ClientConn *core.ClientGate
 }
 
+func ServerType() uint16 {
+	return core.ServerType_Gate
+}
+
+func ServerName() string {
+	return "gate"
+}
+
 func (gate *Gate) OnConnAuth(data []byte) (network.User, error) {
 	return auth.VerifyToken(gate.NodePublicKey, data)
 }
@@ -42,20 +50,24 @@ func (gate *Gate) OnConnEnable(conn network.Conn, enable bool) {
 func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	log.Infof("OnConnPacket sid:%v,uid:%v,type:%v,datalen:%v", s.ConnID(), s.UserID(), pk.Meta.GetType(), len(pk.Body))
 
-	if pk.Meta.GetType() != network.PacketType_Route || len(pk.Body) < network.RoutePackHeadLen {
+	if pk.Meta.GetType() != network.PacketType_Route || len(pk.Body) < core.RoutePackHeadLen {
 		return
 	}
 
-	rpk := network.NewRoutePacket(nil).FromHVPacket(pk)
+	rpk := core.NewRoutePacket(nil).FromHVPacket(pk)
 	if rpk == nil {
 		log.Warnf("OnConnPacket parse route packet failed: %v", pk)
 		return
 	}
+	rpk.SetFromUID(s.UserID())
 
-	rpk.SetFromUId(s.UserID())
 	svrtype := rpk.GetFromURole()
-
 	if svrtype == 0 {
+		log.Warnf("OnConnPacket from server type is 0")
+		return
+	}
+
+	if svrtype == ServerType() {
 		gate.OnCall(s, rpk)
 		return
 	}
@@ -82,7 +94,7 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 
 	if targetNode == nil {
-		pk.Meta.SetSubFlag(network.RoutePackType_SubFlag_RouteFail)
+		pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
 		gate.SendTo(s, pk)
 		return
 	}
@@ -106,24 +118,6 @@ func (gate *Gate) FindIdleNode(servertype uint16) network.Conn {
 	})
 	return ret
 }
-
-// func (r *Router) GetUserSession(uid uint32) network.Conn {
-// 	r.userSessionLock.RLock()
-// 	defer r.userSessionLock.RUnlock()
-// 	return r.userSession[uid]
-// }
-
-// func (r *Router) StoreUserSession(uid uint32, s network.Conn) {
-// 	r.userSessionLock.Lock()
-// 	defer r.userSessionLock.Unlock()
-// 	r.userSession[uid] = s
-// }
-
-//	func (r *Router) RemoveUserSession(uid uint32) {
-//		r.userSessionLock.Lock()
-//		defer r.userSessionLock.Unlock()
-//		delete(r.userSession, uid)
-//	}
 
 func (gate *Gate) OnNodeAuth(data []byte) (network.User, error) {
 	return auth.VerifyToken(gate.NodePublicKey, data)
@@ -151,7 +145,7 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 	log.Infof("OnNodePacket sid:%v,uid:%v,type:%v,datalen:%v", s.ConnID(), s.UserID(), pk.Meta.GetType(), len(pk.Body))
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
-		rpk := network.NewRoutePacket(nil).FromHVPacket(pk)
+		rpk := core.NewRoutePacket(nil).FromHVPacket(pk)
 
 		clientUID := rpk.GetFromUID()
 		if clientUID == 0 {
@@ -162,7 +156,7 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 		v, found := gate.ClientConn.GetConnByUid(clientUID)
 		if !found {
 			log.Warnf("client not found cid:%d", clientUID)
-			pk.Meta.SetSubFlag(network.RoutePackType_SubFlag_RouteFail)
+			pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
 			gate.SendTo(s, pk)
 			return
 		}
@@ -200,9 +194,11 @@ func (gate *Gate) onUserOnline(conn network.Conn) {
 	conn.SetUserData(NewConnUserData(conn))
 
 	gate.PublishEvent("UserOnline", map[string]any{
-		"sid":    conn.ConnID(),
-		"uid":    conn.UserID(),
-		"enable": true,
+		"sid":      conn.ConnID(),
+		"uid":      conn.UserID(),
+		"node_id":  0,
+		"svr_type": ServerType(),
+		"enable":   true,
 	})
 }
 
@@ -226,10 +222,8 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 	}
 
 	msgid := calltable.GetMessageMsgID(notify.ProtoReflect().Descriptor())
-	npk := network.NewNodePacket(body)
-	npk.SetMarshal(0)
+	npk := core.NewNodePacket(body)
 	npk.SetMsgId(msgid)
-	npk.SetSyn(0)
 
 	for nodeid := range ud.nodeids {
 		node, _ := gate.NodeConn.LoadByUID(nodeid)
@@ -244,12 +238,12 @@ func (gate *Gate) PublishEvent(ename string, event any) {
 	log.Infof("[Mock PublishEvent] name:%v,event:%v", ename, event)
 }
 
-func (gate *Gate) OnCall(c network.Conn, pk *network.RoutePacket) {
+func (gate *Gate) OnCall(c network.Conn, pk *core.RoutePacket) {
 	var err error
 	switch pk.GetMsgType() {
-	case network.RoutePackMsgType_Async:
+	case core.RoutePackMsgType_Async:
 		fallthrough
-	case network.RoutePackMsgType_Request:
+	case core.RoutePackMsgType_Request:
 		method := gate.Calltable.Get(pk.GetMsgId())
 		if method == nil {
 			return
@@ -276,7 +270,7 @@ func (gate *Gate) OnCall(c network.Conn, pk *network.RoutePacket) {
 
 type gateContext struct {
 	Conn      network.Conn
-	ReqPacket *network.RoutePacket
+	ReqPacket *core.RoutePacket
 	caller    uint32
 	Marshal   marshal.Marshaler
 }

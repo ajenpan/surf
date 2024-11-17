@@ -20,7 +20,7 @@ type Context interface {
 type connContext struct {
 	Conn      network.Conn
 	Core      *Surf
-	ReqPacket *network.RoutePacket
+	ReqPacket *RoutePacket
 	uid       uint32
 	urole     uint32
 	Marshal   marshal.Marshaler
@@ -30,7 +30,7 @@ func (ctx *connContext) Response(msg proto.Message, herr error) {
 	var body []byte
 	var err error
 
-	rpk := network.NewRoutePacket(nil)
+	rpk := NewRoutePacket(nil)
 
 	respmsgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	rpk.SetMsgId(respmsgid)
@@ -39,7 +39,7 @@ func (ctx *connContext) Response(msg proto.Message, herr error) {
 	rpk.SetSYN(ctx.ReqPacket.GetSYN())
 	rpk.SetFromUID(ctx.Core.GetNodeId())
 	rpk.SetFromURole(ctx.Core.GetServerType())
-	rpk.SetMsgType(network.RoutePackMsgType_Response)
+	rpk.SetMsgType(RoutePackMsgType_Response)
 
 	if herr != nil {
 		if err, ok := herr.(*errors.Error); ok {
