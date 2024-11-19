@@ -10,6 +10,7 @@ import (
 
 type Options struct {
 	NodeId     string
+	ServerType uint16
 	ServerName string
 	NodeData   string
 	EtcdConf   etcclientv3.Config `json:"etcd_conf"`

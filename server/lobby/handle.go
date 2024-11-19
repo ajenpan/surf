@@ -6,7 +6,7 @@ import (
 )
 
 func (h *Lobby) OnReqLoginLobby(ctx core.Context, in *lobbymsg.ReqLoginLobby) {
-	uid := ctx.UserID()
+	uid := ctx.FromUserID()
 	h.GetUserGameInfo(uid)
 }
 

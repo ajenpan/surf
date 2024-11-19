@@ -19,7 +19,7 @@ type Gate struct {
 
 	NodeConn *core.ConnStore
 
-	Selfinfo *auth.UserInfo
+	NodeID uint32
 
 	ClientPublicKey *rsa.PublicKey
 	NodePublicKey   *rsa.PublicKey
@@ -29,11 +29,11 @@ type Gate struct {
 	caller *core.PacketRouteCaller
 }
 
-func ServerType() uint16 {
+func (gate *Gate) ServerType() uint16 {
 	return core.ServerType_Gate
 }
 
-func ServerName() string {
+func (gate *Gate) ServerName() string {
 	return "gate"
 }
 
@@ -61,37 +61,35 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		log.Warnf("OnConnPacket parse route packet failed: %v", pk)
 		return
 	}
-	rpk.SetFromUID(s.UserID())
 
-	svrtype := rpk.GetFromURole()
-	if svrtype == 0 {
-		log.Warnf("OnConnPacket from server type is 0")
+	target_svrtype := rpk.GetToURole()
+	target_nodeid := rpk.GetToUID()
+
+	if target_svrtype == 0 && target_nodeid == 0 {
+		log.Warnf("OnConnPacket from server type and nodeid is 0")
 		return
 	}
 
-	if svrtype == ServerType() {
+	if target_nodeid == gate.NodeID || target_svrtype == gate.ServerType() {
 		gate.OnCall(s, rpk)
 		return
 	}
 
 	ud := s.GetUserData().(*ConnUserData)
 
-	nodeid := rpk.GetToUID()
-	serverType := rpk.GetFromURole()
-
 	var targetNode network.Conn
 
-	if nodeid != 0 {
-		targetNode, _ = gate.NodeConn.LoadByUID(nodeid)
+	if target_nodeid != 0 {
+		targetNode, _ = gate.NodeConn.LoadByUID(target_nodeid)
 	} else {
 		// get nodeid by servertype
-		nodeid, has := ud.serverType2NodeID[serverType]
+		nodeid, has := ud.serverType2NodeID[target_svrtype]
 		if has {
 			targetNode, _ = gate.NodeConn.LoadByUID(nodeid)
 		}
 		if !has || targetNode == nil {
-			targetNode = gate.FindIdleNode(serverType)
-			ud.serverType2NodeID[serverType] = targetNode.UserID()
+			targetNode = gate.FindIdleNode(target_svrtype)
+			ud.serverType2NodeID[target_svrtype] = targetNode.UserID()
 		}
 	}
 
@@ -105,6 +103,8 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		ud.nodeids[targetNode.UserID()] = struct{}{}
 	}
 
+	rpk.SetFromUID(s.UserID())
+	rpk.SetFromURole(core.ServerType_User)
 	gate.SendTo(targetNode, pk)
 }
 
@@ -149,7 +149,7 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 	case network.PacketType_Route:
 		rpk := core.NewRoutePacket(nil).FromHVPacket(pk)
 
-		clientUID := rpk.GetFromUID()
+		clientUID := rpk.GetToUID()
 		if clientUID == 0 {
 			log.Warnf("client not found clientUID:%d", clientUID)
 			return
@@ -199,7 +199,7 @@ func (gate *Gate) onUserOnline(conn network.Conn) {
 		"sid":      conn.ConnID(),
 		"uid":      conn.UserID(),
 		"node_id":  0,
-		"svr_type": ServerType(),
+		"svr_type": gate.ServerType(),
 		"enable":   true,
 	})
 }
@@ -211,7 +211,9 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 		"enable": false,
 	})
 	notify := &msgCore.NotifyClientDisconnect{
-		Uid: conn.UserID(),
+		Uid:        conn.UserID(),
+		GateNodeId: gate.NodeID,
+		Reason:     msgCore.NotifyClientDisconnect_Disconnect,
 	}
 	ud := conn.GetUserData().(*ConnUserData)
 	conn.SetUserData(nil)
@@ -224,14 +226,22 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 	}
 
 	msgid := calltable.GetMessageMsgID(notify.ProtoReflect().Descriptor())
-	npk := core.NewNodePacket(body)
-	npk.SetMsgId(msgid)
 
 	for nodeid := range ud.nodeids {
 		node, _ := gate.NodeConn.LoadByUID(nodeid)
 		if node == nil {
 			continue
 		}
+
+		npk := core.NewRoutePacket(body)
+		npk.SetMsgId(msgid)
+		npk.SetFromUID(gate.NodeID)
+		npk.SetFromURole(gate.ServerType())
+
+		npk.SetToUID(nodeid)
+		// this msg is from gate to core
+		npk.SetToURole(core.ServerType_Core)
+
 		gate.SendTo(node, npk.ToHVPacket())
 	}
 }

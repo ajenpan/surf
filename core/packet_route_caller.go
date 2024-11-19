@@ -62,7 +62,7 @@ func (s *PacketRouteCaller) popRespCallback(syn uint32) *RequestCallbackCache {
 	return cache.(*RequestCallbackCache)
 }
 
-func (p *PacketRouteCaller) Call(ctx *connContext) {
+func (p *PacketRouteCaller) Call(ctx *ConnContext) {
 	rpk := ctx.ReqPacket
 
 	if rpk.GetSubType() != 0 {
@@ -76,8 +76,8 @@ func (p *PacketRouteCaller) Call(ctx *connContext) {
 	case RoutePackMsgType_Request:
 		method := p.calltable.GetByID(rpk.GetMsgId())
 		if method == nil {
-			log.Error("invalid msgid:", rpk.GetMsgId())
-			//todo send error packet
+			log.Errorf("not found msg handler by msgid:%v,from_uid:%v,from_svrtype:%v,to_uid:%v,to_svrtype:%v",
+				rpk.GetMsgId(), rpk.GetFromUID(), rpk.GetFromURole(), rpk.GetToUID(), rpk.GetToURole())
 			return
 		}
 		marshaler := marshal.NewMarshalerById(rpk.GetMarshalType())

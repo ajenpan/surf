@@ -54,11 +54,11 @@ func (ctx *httpCallContext) SendAsync(msg proto.Message) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 
-func (ctx *httpCallContext) UserID() uint32 {
+func (ctx *httpCallContext) FromUserID() uint32 {
 	return ctx.uinfo.UId
 }
 
-func (ctx *httpCallContext) UserRole() uint32 {
+func (ctx *httpCallContext) UserRole() uint16 {
 	return ctx.uinfo.URole
 }
 
@@ -124,36 +124,10 @@ func (s *HttpSvr) WrapMethod(method *calltable.Method) http.HandlerFunc {
 			return
 		}
 
-		var ctx core.Context = &httpCallContext{
-			w: w,
-			r: r,
+		var ctx core.Context = &core.HttpContext{
+			W: w,
+			R: r,
 		}
-		// here call method
 		method.Call(ctx, req)
-		// respArgs := method.Call(ctx, req)
-
-		// if len(respArgs) != 2 {
-		// 	return
-		// }
-
-		// var respErr error
-
-		// if !respArgs[1].IsNil() {
-		// 	respErr = respArgs[1].Interface().(error)
-		// 	w.WriteHeader(http.StatusInternalServerError)
-		// 	w.Write([]byte(respErr.Error()))
-		// 	return
-		// }
-
-		// if !respArgs[0].IsNil() {
-		// 	respData, err := s.Marshal.Marshal(respArgs[0].Interface())
-		// 	if err != nil {
-		// 		w.WriteHeader(http.StatusInternalServerError)
-		// 		w.Write([]byte(err.Error()))
-		// 		return
-		// 	}
-		// 	w.Write(respData)
-		// }
-		// w.WriteHeader(http.StatusOK)
 	}
 }

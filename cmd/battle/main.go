@@ -87,7 +87,7 @@ func RealMain(c *cli.Context) error {
 	uinfo := &auth.UserInfo{
 		UId:   uint32(uid),
 		UName: fmt.Sprintf("%s_%d", h.ServerName(), uid),
-		URole: uint32(h.ServerType()),
+		URole: uint16(h.ServerType()),
 	}
 
 	jwt, err := auth.GenerateToken(pk, uinfo, 2400*time.Hour)
@@ -112,7 +112,7 @@ func RealMain(c *cli.Context) error {
 		Server:         h,
 		HttpListenAddr: ":13300",
 		WsListenAddr:   ":13301",
-		RouteCallTable: CTByID,
+		Calltable:      CTByID,
 		// PublicKeyFilePath: "http://myali01:9999/publickey",
 		PublicKeyFilePath: "file://./public.pem",
 		GateAddrList: []string{

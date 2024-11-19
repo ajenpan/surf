@@ -13,20 +13,18 @@ type Context interface {
 	SendAsync(msg proto.Message) error
 	Response(msg proto.Message, err error)
 
-	UserID() uint32
-	UserRole() uint32
+	FromUserID() uint32
+	FromUserRole() uint16
 }
 
-type connContext struct {
+type ConnContext struct {
 	Conn      network.Conn
 	Core      *Surf
 	ReqPacket *RoutePacket
-	uid       uint32
-	urole     uint32
 	Marshal   marshal.Marshaler
 }
 
-func (ctx *connContext) Response(msg proto.Message, herr error) {
+func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 	var body []byte
 	var err error
 
@@ -64,15 +62,15 @@ func (ctx *connContext) Response(msg proto.Message, herr error) {
 	}
 }
 
-func (ctx *connContext) SendAsync(msg proto.Message) error {
+func (ctx *ConnContext) SendAsync(msg proto.Message) error {
 	msgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
-	return ctx.Core.SendAsyncToClient(ctx.Conn, ctx.uid, msgid, msg)
+	return ctx.Core.SendAsyncToClient(ctx.Conn, ctx.FromUserID(), ctx.FromUserRole(), msgid, msg)
 }
 
-func (ctx *connContext) UserID() uint32 {
-	return ctx.uid
+func (ctx *ConnContext) FromUserID() uint32 {
+	return ctx.ReqPacket.GetFromUID()
 }
 
-func (ctx *connContext) UserRole() uint32 {
-	return ctx.urole
+func (ctx *ConnContext) FromUserRole() uint16 {
+	return ctx.ReqPacket.GetFromURole()
 }

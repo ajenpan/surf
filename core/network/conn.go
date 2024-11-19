@@ -26,20 +26,20 @@ const (
 type User interface {
 	UserID() uint32
 	UserName() string
-	UserRole() uint32
+	UserRole() uint16
 }
 
 type userInfo struct {
 	UId   uint32 `json:"uid"`
 	UName string `json:"uname"`
-	URole uint32 `json:"urid"`
+	URole uint16 `json:"urid"`
 }
 
 func (u *userInfo) UserID() uint32 {
 	return u.UId
 }
 
-func (u *userInfo) UserRole() uint32 {
+func (u *userInfo) UserRole() uint16 {
 	return u.URole
 }
 

@@ -66,7 +66,7 @@ type Guandan struct {
 
 	gameTime time.Duration
 
-	CT *calltable.CallTable[uint32]
+	CT *calltable.CallTable
 
 	lastStage *StageInfo
 	currStage *StageInfo
@@ -169,7 +169,7 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 		return fmt.Errorf("player count not match, expect 4, got:%v", len(opts.Players))
 	}
 
-	g.CT = calltable.NewCallTable[uint32]()
+	g.CT = calltable.NewCallTable()
 
 	for _, p := range opts.Players {
 		if p.SeatID() < 0 || p.SeatID() >= MaxSeatCnt {
@@ -293,7 +293,7 @@ func (g *Guandan) OnPlayerConnStatus(p battle.Player, enable bool) {
 }
 
 func (g *Guandan) OnPlayerMessage(p battle.Player, msgid uint32, data []byte) {
-	method := g.CT.Get(msgid)
+	method := g.CT.GetByID(msgid)
 	if method == nil {
 		return
 	}

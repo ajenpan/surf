@@ -17,6 +17,7 @@ import (
 	"github.com/ajenpan/surf/core/utils/calltable"
 	utilRsa "github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
+	msgCore "github.com/ajenpan/surf/msg/core"
 )
 
 type Server interface {
@@ -35,10 +36,12 @@ type Options struct {
 	WsListenAddr   string
 	TcpListenAddr  string
 
-	RouteCallTable *calltable.CallTable
+	Calltable *calltable.CallTable
 
 	Marshaler         marshal.Marshaler
 	PublicKeyFilePath string
+
+	OnClientDisconnect func(uid uint32, gateNodeId uint32, reason int32)
 }
 
 func NewSurf(opt Options) (*Surf, error) {
@@ -58,7 +61,8 @@ type Surf struct {
 	httpsvr *http.Server
 	nodeid  uint32
 
-	routeCaller *PacketRouteCaller
+	serverCaller *PacketRouteCaller
+	innerCaller  *PacketRouteCaller
 }
 
 func (s *Surf) Init(opt Options) error {
@@ -68,19 +72,20 @@ func (s *Surf) Init(opt Options) error {
 	}
 	s.PublicKey = pubkey
 
-	if opt.RouteCallTable == nil {
-		opt.RouteCallTable = calltable.NewCallTable()
-	}
-
 	if opt.Marshaler == nil {
 		opt.Marshaler = &marshal.ProtoMarshaler{}
 	}
 
 	s.opts = opt
 
-	s.routeCaller = &PacketRouteCaller{
-		calltable: opt.RouteCallTable,
+	s.serverCaller = &PacketRouteCaller{
+		calltable: opt.Calltable,
 		Handler:   opt.Server,
+	}
+
+	s.innerCaller = &PacketRouteCaller{
+		calltable: calltable.ExtractProtoFile(msgCore.File_core_proto, s),
+		Handler:   s,
 	}
 	return nil
 }
@@ -115,7 +120,7 @@ func (s *Surf) Start() error {
 }
 
 func (s *Surf) Run() error {
-	s.opts.RouteCallTable.RangeByID(func(key uint32, value *calltable.Method) bool {
+	s.opts.Calltable.RangeByID(func(key uint32, value *calltable.Method) bool {
 		log.Infof("handle func,msgid:%d, funcname:%s", key, value.Name)
 		return true
 	})
@@ -150,7 +155,7 @@ func (s *Surf) startHttpSvr() {
 
 	mux := http.NewServeMux()
 
-	s.opts.RouteCallTable.RangeByName(func(key string, method *calltable.Method) bool {
+	s.opts.Calltable.RangeByName(func(key string, method *calltable.Method) bool {
 
 		svrname := s.opts.Server.ServerName()
 
@@ -235,29 +240,29 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 	if err != nil {
 		return err
 	}
-	syn := s.routeCaller.GetSYN()
+	syn := s.serverCaller.GetSYN()
 
 	rpk := NewRoutePacket(body)
 	rpk.SetMsgType(RoutePackMsgType_Request)
 	rpk.SetMsgId(msgid)
 	rpk.SetToUID(uid)
-	rpk.SetToURole(ServerType_Client)
+	rpk.SetToURole(ServerType_User)
 	rpk.SetFromUID(s.GetNodeId())
 	rpk.SetFromURole(s.GetServerType())
 	rpk.SetSYN(syn)
 
-	s.routeCaller.pushRespCallback(syn, cb)
+	s.serverCaller.pushRespCallback(syn, cb)
 
 	pk := rpk.ToHVPacket()
 
 	err = conn.Send(pk)
 	if err != nil {
-		s.routeCaller.popRespCallback(syn)
+		s.serverCaller.popRespCallback(syn)
 	}
 	return err
 }
 
-func (s *Surf) SendAsyncToClient(conn network.Conn, uid uint32, msgid uint32, msg any) error {
+func (s *Surf) SendAsyncToClient(conn network.Conn, to_uid uint32, to_urole uint16, msgid uint32, msg any) error {
 	body, err := s.opts.Marshaler.Marshal(msg)
 	if err != nil {
 		return err
@@ -265,12 +270,12 @@ func (s *Surf) SendAsyncToClient(conn network.Conn, uid uint32, msgid uint32, ms
 
 	rpk := NewRoutePacket(body)
 	rpk.SetMsgType(0)
-	rpk.SetToUID(uid)
-	rpk.SetToURole(ServerType_Client)
+	rpk.SetToUID(to_uid)
+	rpk.SetToURole(to_urole)
 	rpk.SetMsgId(msgid)
 	rpk.SetFromUID(s.GetNodeId())
 	rpk.SetFromURole(s.GetServerType())
-	rpk.SetSYN(s.routeCaller.GetSYN())
+	rpk.SetSYN(s.serverCaller.GetSYN())
 
 	return conn.Send(rpk.ToHVPacket())
 }
@@ -280,7 +285,7 @@ func (s *Surf) SendAsyncToClientByUId(uid uint32, msgid uint32, msg any) error {
 	if conn == nil {
 		return fmt.Errorf("not found route")
 	}
-	return s.SendAsyncToClient(conn, uid, msgid, msg)
+	return s.SendAsyncToClient(conn, uid, ServerType_User, msgid, msg)
 }
 
 func (s *Surf) SendToNode(nodeid uint32, pk *network.HVPacket) error {
@@ -328,14 +333,10 @@ func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc
 			return
 		}
 
-		// contenttype := r.Header.Get("Content-Type")
-		// w.Header().Set("Content-Type", contenttype)
-
-		var ctx Context = &httpCallContext{
-			w:     w,
-			r:     r,
-			core:  s,
-			uinfo: uinfo,
+		var ctx Context = &HttpContext{
+			W:     w,
+			R:     r,
+			UInfo: uinfo,
 		}
 
 		method.Call(s.opts.Server, ctx, req)
@@ -345,9 +346,8 @@ func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc
 func (h *Surf) onGatePacket(s network.Conn, pk *network.HVPacket) {
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
-		h.onRoutePacket(s, pk)
-	case network.PacketType_Node:
-		h.onNodePacket(s, pk)
+		rpk := NewRoutePacket(nil).FromHVPacket(pk)
+		h.onRoutePacket(s, rpk)
 	default:
 	}
 }
@@ -367,43 +367,31 @@ func (s *Surf) catch() {
 	}
 }
 
-func (s *Surf) onNodePacket(c network.Conn, pk *network.HVPacket) {
-	npk := NewNodePacket(nil).FromHVPacket(pk)
-	switch npk.GetMsgType() {
-	case NodePackMsgType_Notify:
+func (s *Surf) OnNotifyClientDisconnect(ctx Context, msg *msgCore.NotifyClientDisconnect) {
+	log.Infof("recv notify client disconnect, uid:%v, gateNodeId:%v, reason:%v", msg.Uid, msg.GateNodeId, msg.Reason)
 
-	case NodePackMsgType_Async:
-	case NodePackMsgType_Request:
-		if npk.GetMsgId() == 0 {
-			log.Error("invalid async msgid:", npk.GetMsgId())
-			return
-		}
-		marshaler := marshal.NewMarshalerById(npk.GetMarshalType())
-		if marshaler == nil {
-			log.Error("invalid marshaler type:", npk.GetMarshalType())
-			return
-		}
+	if s.opts.OnClientDisconnect != nil {
+		s.opts.OnClientDisconnect(msg.Uid, msg.GateNodeId, int32(msg.Reason))
 	}
 }
 
-func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
-	if len(pk.Head) != RoutePackHeadLen {
-		log.Error("invalid packet head length:", len(pk.Head))
-		return
-	}
-	rpk := NewRoutePacket(nil).FromHVPacket(pk)
+func (s *Surf) onRoutePacket(c network.Conn, rpk *RoutePacket) {
 	marshaler := marshal.NewMarshalerById(rpk.GetMarshalType())
 	if marshaler == nil {
 		log.Error("invalid marshaler type:", rpk.GetMarshalType())
 		return
 	}
-	ctx := &connContext{
+
+	ctx := &ConnContext{
 		Conn:      c,
 		Core:      s,
 		ReqPacket: rpk,
-		uid:       rpk.GetFromUID(),
-		urole:     uint32(rpk.GetFromURole()),
 		Marshal:   marshaler,
 	}
-	s.routeCaller.Call(ctx)
+
+	if rpk.GetToURole() == ServerType_Core {
+		s.innerCaller.Call(ctx)
+	} else {
+		s.serverCaller.Call(ctx)
+	}
 }

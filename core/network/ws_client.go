@@ -152,7 +152,6 @@ func (c *WSClient) work(conn *WSConn) error {
 			pk.SetHead(head)
 			binary.LittleEndian.PutUint64(head, uint64(time.Now().UnixMilli()))
 			conn.Send(pk)
-			log.Infof("send Heartbeat")
 		case packet, ok := <-conn.chRead:
 			if !ok {
 				return nil
@@ -165,7 +164,6 @@ func (c *WSClient) work(conn *WSConn) error {
 					svrtime := (int64)(binary.LittleEndian.Uint64(packet.GetBody()))
 					fix := now - (svrtime - (now-sendAt)/2)
 					atomic.StoreInt64(&c.timefix, fix)
-					log.Infof("recv Heartbeat %v", fix)
 				default:
 					return nil
 				}

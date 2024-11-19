@@ -11,12 +11,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type httpCallContext struct {
-	w     http.ResponseWriter
-	r     *http.Request
-	core  *Surf
-	uinfo *auth.UserInfo
-	// marshaler marshal.Marshaler
+type HttpContext struct {
+	W     http.ResponseWriter
+	R     *http.Request
+	UInfo *auth.UserInfo
 }
 
 type httpResponeWrap struct {
@@ -25,8 +23,8 @@ type httpResponeWrap struct {
 	Data    interface{} `json:"data"`
 }
 
-func (ctx *httpCallContext) Response(msg proto.Message, err error) {
-	enc := json.NewEncoder(ctx.w)
+func (ctx *HttpContext) Response(msg proto.Message, err error) {
+	enc := json.NewEncoder(ctx.W)
 	wrap := &httpResponeWrap{Data: msg}
 
 	if err != nil {
@@ -41,23 +39,23 @@ func (ctx *httpCallContext) Response(msg proto.Message, err error) {
 	encerr := enc.Encode(wrap)
 
 	if encerr != nil {
-		ctx.w.WriteHeader(http.StatusInternalServerError)
-		ctx.w.Write([]byte(encerr.Error()))
+		ctx.W.WriteHeader(http.StatusInternalServerError)
+		ctx.W.Write([]byte(encerr.Error()))
 	}
 }
 
-func (ctx *httpCallContext) Request(msg proto.Message, cb func(pk *network.HVPacket, err error)) {
+func (ctx *HttpContext) Request(msg proto.Message, cb func(pk *network.HVPacket, err error)) {
 	// do nothing
 }
 
-func (ctx *httpCallContext) SendAsync(msg proto.Message) error {
+func (ctx *HttpContext) SendAsync(msg proto.Message) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 
-func (ctx *httpCallContext) UserID() uint32 {
-	return ctx.uinfo.UId
+func (ctx *HttpContext) FromUserID() uint32 {
+	return ctx.UInfo.UId
 }
 
-func (ctx *httpCallContext) UserRole() uint32 {
-	return ctx.uinfo.URole
+func (ctx *HttpContext) FromUserRole() uint16 {
+	return ctx.UInfo.URole
 }

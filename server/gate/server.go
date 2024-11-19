@@ -54,6 +54,7 @@ func Start(cfg *Config) (func() error, error) {
 
 	r := &Gate{
 		NodeConn:        core.NewConnStore(),
+		NodeID:          cfg.NodeID,
 		Marshaler:       &marshal.ProtoMarshaler{},
 		ClientPublicKey: ppk,
 		NodePublicKey:   ppk,
@@ -69,7 +70,7 @@ func Start(cfg *Config) (func() error, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	log.Infof("gate client listen on %s start success", cfg.ClientListenAddr)
 	ccloser = func() {
 		ug.Stop()
 	}

@@ -87,11 +87,11 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 		})
 	}
 
-	d.OnPlayerConn(int64(ctx.UserID()), sender, true)
+	d.OnPlayerConn(int64(ctx.FromUserID()), sender, true)
 
 	ctx.Response(out, err)
 
-	h.UIDBindBattleID(int64(ctx.UserID()), in.BattleId)
+	h.UIDBindBattleID(int64(ctx.FromUserID()), in.BattleId)
 }
 
 func (h *Battle) OnPlayerDisConn(uid int64) {
@@ -111,7 +111,7 @@ func (h *Battle) OnReqQuitBattle(ctx core.Context, in *battlemsg.ReqQuitBattle) 
 	resp := &battlemsg.RespQuitBattle{
 		BattleId: in.BattleId,
 	}
-	uid := ctx.UserID()
+	uid := ctx.FromUserID()
 	h.UIDUnBindBattleID(int64(uid), in.BattleId)
 	ctx.Response(resp, nil)
 }
@@ -122,5 +122,5 @@ func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *battlemsg.BattleMsgTo
 		log.Warnf("battle %s not found", in.BattleId)
 		return
 	}
-	d.OnPlayerMessage(int64(ctx.UserID()), in.Msgid, in.Data)
+	d.OnPlayerMessage(int64(ctx.FromUserID()), in.Msgid, in.Data)
 }

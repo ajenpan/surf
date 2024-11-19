@@ -9,6 +9,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/log"
 	utilsRsa "github.com/ajenpan/surf/core/utils/rsagen"
@@ -88,7 +89,7 @@ func RealMain(c *cli.Context) error {
 	testuser := &auth.UserInfo{
 		UId:   testuid,
 		UName: fmt.Sprintf("yk%d", testuid),
-		URole: 1,
+		URole: core.ServerType_User,
 	}
 	testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)
 	if err != nil {

@@ -50,6 +50,9 @@ type RoutePacket struct {
 func (r *RoutePacket) FromHVPacket(hv *network.HVPacket) *RoutePacket {
 	r.subtype = hv.Meta.GetSubFlag()
 	r.Head = hv.GetHead()
+	if len(r.Head) != RoutePackHeadLen {
+		return nil
+	}
 	r.Body = hv.GetBody()
 	return r
 }
