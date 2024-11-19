@@ -54,7 +54,7 @@ type Surf struct {
 	opts      Options
 	PublicKey *rsa.PublicKey
 
-	Reg *registry.Registry
+	Reg *registry.EtcdRegistry
 
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
