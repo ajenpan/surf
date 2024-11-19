@@ -14,7 +14,7 @@ import (
 )
 
 type Gate struct {
-	Calltable *calltable.CallTable[uint32]
+	Calltable *calltable.CallTable
 	Marshaler marshal.Marshaler
 
 	NodeConn *core.ConnStore
@@ -25,6 +25,8 @@ type Gate struct {
 	NodePublicKey   *rsa.PublicKey
 
 	ClientConn *core.ClientGate
+
+	caller *core.PacketRouteCaller
 }
 
 func ServerType() uint16 {
@@ -244,7 +246,7 @@ func (gate *Gate) OnCall(c network.Conn, pk *core.RoutePacket) {
 	case core.RoutePackMsgType_Async:
 		fallthrough
 	case core.RoutePackMsgType_Request:
-		method := gate.Calltable.Get(pk.GetMsgId())
+		method := gate.Calltable.GetByID(pk.GetMsgId())
 		if method == nil {
 			return
 		}

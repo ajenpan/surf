@@ -54,12 +54,12 @@ func (h *Auth) ServerType() uint16 {
 	return 10
 }
 
-func (h *Auth) CTByName() *calltable.CallTable[string] {
-	ct := calltable.NewCallTable[string]()
-	ct.Add("Login", calltable.ExtractFunction(h.OnReqLogin))
-	ct.Add("AnonymousLogin", calltable.ExtractFunction(h.AnonymousLogin))
-	ct.Add("Register", calltable.ExtractFunction(h.OnReqRegister))
-	ct.Add("UserInfo", calltable.ExtractFunction(h.OnReqUserInfo))
+func (h *Auth) CTByName() *calltable.CallTable {
+	ct := calltable.NewCallTable()
+	ct.Add(calltable.ExtractFunction("Login", h.OnReqLogin))
+	ct.Add(calltable.ExtractFunction("AnonymousLogin", h.AnonymousLogin))
+	ct.Add(calltable.ExtractFunction("Register", h.OnReqRegister))
+	ct.Add(calltable.ExtractFunction("UserInfo", h.OnReqUserInfo))
 	return ct
 }
 

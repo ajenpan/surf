@@ -35,24 +35,10 @@ type Options struct {
 	WsListenAddr   string
 	TcpListenAddr  string
 
-	CTByName *calltable.CallTable[string]
-	CTById   *calltable.CallTable[uint32]
+	RouteCallTable *calltable.CallTable
 
 	Marshaler         marshal.Marshaler
 	PublicKeyFilePath string
-}
-
-func converCalltable(source *calltable.CallTable[uint32]) *calltable.CallTable[string] {
-	result := calltable.NewCallTable[string]()
-	if source == nil {
-		return result
-	}
-
-	source.Range(func(key uint32, value *calltable.Method) bool {
-		result.Add(value.Name, value)
-		return true
-	})
-	return result
 }
 
 func NewSurf(opt Options) (*Surf, error) {
@@ -82,14 +68,8 @@ func (s *Surf) Init(opt Options) error {
 	}
 	s.PublicKey = pubkey
 
-	if opt.CTById == nil {
-		opt.CTById = calltable.NewCallTable[uint32]()
-	}
-
-	if opt.CTByName == nil {
-		opt.CTByName = converCalltable(opt.CTById)
-	} else {
-		opt.CTByName.Merge(converCalltable(opt.CTById), false)
+	if opt.RouteCallTable == nil {
+		opt.RouteCallTable = calltable.NewCallTable()
 	}
 
 	if opt.Marshaler == nil {
@@ -99,8 +79,8 @@ func (s *Surf) Init(opt Options) error {
 	s.opts = opt
 
 	s.routeCaller = &PacketRouteCaller{
-		CTById:  opt.CTById,
-		Handler: opt.Server,
+		calltable: opt.RouteCallTable,
+		Handler:   opt.Server,
 	}
 	return nil
 }
@@ -135,7 +115,7 @@ func (s *Surf) Start() error {
 }
 
 func (s *Surf) Run() error {
-	s.opts.CTById.Range(func(key uint32, value *calltable.Method) bool {
+	s.opts.RouteCallTable.RangeByID(func(key uint32, value *calltable.Method) bool {
 		log.Infof("handle func,msgid:%d, funcname:%s", key, value.Name)
 		return true
 	})
@@ -170,7 +150,7 @@ func (s *Surf) startHttpSvr() {
 
 	mux := http.NewServeMux()
 
-	s.opts.CTByName.Range(func(key string, method *calltable.Method) bool {
+	s.opts.RouteCallTable.RangeByName(func(key string, method *calltable.Method) bool {
 
 		svrname := s.opts.Server.ServerName()
 
@@ -390,6 +370,8 @@ func (s *Surf) catch() {
 func (s *Surf) onNodePacket(c network.Conn, pk *network.HVPacket) {
 	npk := NewNodePacket(nil).FromHVPacket(pk)
 	switch npk.GetMsgType() {
+	case NodePackMsgType_Notify:
+
 	case NodePackMsgType_Async:
 	case NodePackMsgType_Request:
 		if npk.GetMsgId() == 0 {
@@ -423,6 +405,5 @@ func (s *Surf) onRoutePacket(c network.Conn, pk *network.HVPacket) {
 		urole:     uint32(rpk.GetFromURole()),
 		Marshal:   marshaler,
 	}
-
 	s.routeCaller.Call(ctx)
 }

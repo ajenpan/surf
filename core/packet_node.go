@@ -17,6 +17,7 @@ func NewNodePacketHead() nodePacketHead {
 const NodePackMsgType_Async = 0
 const NodePackMsgType_Request = 1
 const NodePackMsgType_Response = 2
+const NodePackMsgType_Notify = 3
 
 type nodePacketHead []uint8
 

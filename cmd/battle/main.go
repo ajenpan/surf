@@ -80,7 +80,7 @@ func RealMain(c *cli.Context) error {
 	}
 
 	h := battleHandler.New()
-	CTByID, CTByName := calltable.ExtractMethodFromDesc(battleMsg.File_battle_proto.Messages(), h)
+	CTByID := calltable.ExtractMethodFromDesc(battleMsg.File_battle_proto.Messages(), h)
 
 	uid := 10001
 
@@ -112,8 +112,7 @@ func RealMain(c *cli.Context) error {
 		Server:         h,
 		HttpListenAddr: ":13300",
 		WsListenAddr:   ":13301",
-		CTById:         CTByID,
-		CTByName:       CTByName,
+		RouteCallTable: CTByID,
 		// PublicKeyFilePath: "http://myali01:9999/publickey",
 		PublicKeyFilePath: "file://./public.pem",
 		GateAddrList: []string{

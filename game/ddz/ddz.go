@@ -39,5 +39,5 @@ type DDZ struct {
 	gameTime  time.Duration
 	stageTime time.Duration
 
-	CT *calltable.CallTable[int]
+	CT *calltable.CallTable
 }

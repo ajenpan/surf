@@ -87,11 +87,11 @@ func (s *HttpSvr) Stop() error {
 	return s.svr.Close()
 }
 
-func (s *HttpSvr) ServerCallTable(ct *calltable.CallTable[string]) {
+func (s *HttpSvr) ServerCallTable(ct *calltable.CallTable) {
 	if s.Mux == nil {
 		s.Mux = &http.ServeMux{}
 	}
-	ct.Range(func(key string, method *calltable.Method) bool {
+	ct.RangeByName(func(key string, method *calltable.Method) bool {
 		if !strings.HasPrefix(key, "/") {
 			key = "/" + key
 		}

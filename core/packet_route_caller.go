@@ -17,8 +17,8 @@ type RequestCallbackCache struct {
 }
 
 type PacketRouteCaller struct {
-	CTById  *calltable.CallTable[uint32]
-	Handler interface{}
+	calltable *calltable.CallTable
+	Handler   interface{}
 
 	respWatier sync.Map
 	synIdx     uint32
@@ -74,7 +74,7 @@ func (p *PacketRouteCaller) Call(ctx *connContext) {
 	case RoutePackMsgType_Async:
 		fallthrough
 	case RoutePackMsgType_Request:
-		method := p.CTById.Get(rpk.GetMsgId())
+		method := p.calltable.GetByID(rpk.GetMsgId())
 		if method == nil {
 			log.Error("invalid msgid:", rpk.GetMsgId())
 			//todo send error packet

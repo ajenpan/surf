@@ -78,7 +78,7 @@ var gatesvr = &gate.Gate{
 	Marshaler: &marshal.ProtoMarshaler{},
 }
 
-func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
+func startTcp(ppk *rsa.PrivateKey) (func(), error) {
 	uinfo := &auth.UserInfo{
 		UId:   10001,
 		UName: "gdclient",
@@ -118,21 +118,6 @@ func StartTcp(ppk *rsa.PrivateKey) (func(), error) {
 		tcpsvr.Stop()
 		client.Close()
 	}, nil
-}
-
-func StartWsSvr() {
-	// wssvr, err := network.NewWSServer(network.WSServerOptions{
-	// 	ListenAddr:   ":18888",
-	// 	OnConnPacket: gatesvr.OnNodePacket,
-	// 	OnConnStatus: gatesvr.OnNodeStatus,
-	// 	OnConnAuth: func(data []byte) (network.User, error) {
-	// 		return auth.VerifyToken(&ppk.PublicKey, data)
-	// 	}},
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// wssvr.Start()
 }
 
 func StartWsClient(ppk *rsa.PrivateKey) (func(), error) {

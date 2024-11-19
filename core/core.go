@@ -50,7 +50,7 @@ func SendRequestToClient[T proto.Message](uid uint32, msgid uint32, msg any, cb 
 	}
 }
 
-func OnRouteAsync(ct *calltable.CallTable[uint32], conn network.Conn, pk *network.HVPacket) {
+func OnRouteAsync(ct *calltable.CallTable, conn network.Conn, pk *network.HVPacket) {
 	// var err error
 	// rpk := network.RoutePacketRaw(pk.GetBody())
 

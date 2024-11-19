@@ -4,63 +4,72 @@ import (
 	"sync"
 )
 
-type CallTable[T comparable] struct {
+type CallTable struct {
 	sync.RWMutex
-	list map[T]*Method
+	byID   map[uint32]*Method
+	byName map[string]*Method
 }
 
-func NewCallTable[T comparable]() *CallTable[T] {
-	return &CallTable[T]{
-		list: make(map[T]*Method),
+func NewCallTable() *CallTable {
+	return &CallTable{
+		byID:   make(map[uint32]*Method),
+		byName: make(map[string]*Method),
 	}
 }
 
-func (m *CallTable[T]) Len() int {
+func (m *CallTable) Len() int {
 	m.RLock()
 	defer m.RUnlock()
-	return len(m.list)
+	return len(m.byID)
 }
 
-func (m *CallTable[T]) Get(name T) *Method {
+func (m *CallTable) GetByID(id uint32) *Method {
 	m.RLock()
 	defer m.RUnlock()
-	return m.list[name]
+	return m.byID[id]
 }
 
-func (m *CallTable[T]) Range(f func(key T, value *Method) bool) {
+func (m *CallTable) RangeByID(f func(key uint32, value *Method) bool) {
 	m.Lock()
 	defer m.Unlock()
-	for k, v := range m.list {
+	for k, v := range m.byID {
 		if !f(k, v) {
 			return
 		}
 	}
 }
 
-func (m *CallTable[T]) Merge(other *CallTable[T], overWrite bool) []T {
+func (m *CallTable) RangeByName(f func(key string, value *Method) bool) {
+	m.Lock()
+	defer m.Unlock()
+	for k, v := range m.byName {
+		if !f(k, v) {
+			return
+		}
+	}
+}
+
+func (m *CallTable) Merge(other *CallTable) {
 	other.RWMutex.RLock()
 	defer other.RWMutex.RUnlock()
 
 	m.Lock()
 	defer m.Unlock()
-	repeatlist := []T{}
-	for k, v := range other.list {
-		_, has := m.list[k]
-		if has && !overWrite {
-			continue
-		}
-		m.list[k] = v
-		repeatlist = append(repeatlist, k)
+
+	for k, v := range other.byID {
+		m.byID[k] = v
+		m.byName[v.Name] = v
 	}
-	return repeatlist
 }
 
-func (m *CallTable[T]) Add(name T, method *Method) bool {
+func (m *CallTable) Add(method *Method) bool {
 	m.Lock()
 	defer m.Unlock()
-	if _, has := m.list[name]; has {
-		return false
+	if method.ID > 0 {
+		m.byID[method.ID] = method
 	}
-	m.list[name] = method
+	if len(method.Name) > 0 {
+		m.byName[method.Name] = method
+	}
 	return true
 }

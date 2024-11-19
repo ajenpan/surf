@@ -8,8 +8,8 @@ import (
 type Method struct {
 	Handler interface{}
 
-	Name  string
-	Msgid uint32
+	Name string
+	ID   uint32
 
 	Func reflect.Value
 
