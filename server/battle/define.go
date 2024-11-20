@@ -1,9 +1,8 @@
 package battle
 
 import (
+	"log/slog"
 	"time"
-
-	log "github.com/ajenpan/surf/core/log"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -53,7 +52,7 @@ type LogicOpts struct {
 	Table   Table
 	Players []Player
 	Conf    []byte
-	Log     log.Logger
+	Log     *slog.Logger
 }
 
 type Logic interface {

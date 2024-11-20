@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/ajenpan/surf/core/log"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 	"github.com/ajenpan/surf/server/uauth"
 )
@@ -27,14 +27,14 @@ func InitConfig() {
 	}
 	err = json.Unmarshal(raw, &uauth.DefaultConf)
 	if err != nil {
-		log.Error(err)
+		slog.Error("read config err", "err", err)
 	}
 }
 
 func CmdPrintConfig() {
 	raw, err := json.Marshal(&uauth.DefaultConf)
 	if err != nil {
-		log.Error(err)
+		slog.Error("marshal config err", "err", err)
 		return
 	}
 	fmt.Println(string(raw))
@@ -74,7 +74,7 @@ func main() {
 	app.Action = RealMain
 
 	if err := app.Run(os.Args); err != nil {
-		log.Error(err)
+		slog.Error("run app err", "err", err)
 		os.Exit(-1)
 	}
 }
@@ -88,6 +88,6 @@ func RealMain(c *cli.Context) error {
 	}
 	defer closer()
 	signal := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", signal.String())
+	slog.Info("recv signal", "signal", signal.String())
 	return nil
 }

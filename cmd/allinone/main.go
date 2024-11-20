@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rsa"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -13,8 +14,6 @@ import (
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 
 	"github.com/ajenpan/surf/core/utils/rsagen"
-
-	log "github.com/ajenpan/surf/core/log"
 )
 
 var Version string = "unknown"
@@ -77,7 +76,7 @@ func main() {
 	app.Action = RealMain
 
 	if err := app.Run(os.Args); err != nil {
-		log.Error(err)
+		slog.Error(err.Error())
 		os.Exit(-1)
 	}
 }
@@ -105,6 +104,6 @@ func RealMain(c *cli.Context) error {
 	}
 
 	signal := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", signal.String())
+	slog.Info("recv signal", "signal", signal.String())
 	return nil
 }

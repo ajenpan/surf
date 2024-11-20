@@ -7,8 +7,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
-
-	log "github.com/ajenpan/surf/core/log"
 )
 
 var Version string = "unknown"
@@ -54,14 +52,12 @@ func main() {
 	app.Action = RealMain
 
 	if err := app.Run(os.Args); err != nil {
-		log.Error(err)
 		os.Exit(-1)
 	}
 }
 
 func RealMain(c *cli.Context) error {
 
-	signal := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", signal.String())
+	utilSignal.WaitShutdown()
 	return nil
 }

@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -14,9 +15,9 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/proto"
 
-	"github.com/ajenpan/surf/core/log"
+	"github.com/ajenpan/surf/core/utils/calltable"
 	msgMailbox "github.com/ajenpan/surf/msg/mailbox"
 	"github.com/ajenpan/surf/server/mailbox"
 )
@@ -64,26 +65,25 @@ func main() {
 		var err error
 
 		if mailbox.DefaultConf, err = mailbox.ConfInit(ConfigPath, PrintConf); err != nil {
-			log.Error(err)
+			slog.Error("init config error", "error", err)
 			return err
 		}
 
 		if GHandler = mailbox.NewHandler(mailbox.DefaultConf); GHandler == nil {
-			err := fmt.Errorf("create handler failed")
-			log.Panic(err)
+			slog.Error("create handler failed")
 			return err
 		}
 
 		if err := httpsvr(); err != nil {
-			log.Error(err)
+			slog.Error("httpsvr error", "error", err)
 		}
-		log.Info("on exsiting...")
+		slog.Info("on exsiting...")
 		return nil
 	}
 
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Error(err)
+		slog.Error("app run error", "error", err)
 		os.Exit(-1)
 	}
 }
@@ -138,16 +138,16 @@ func parserAdminBearer(r *http.Request) (context.Context, error) {
 }
 
 func httpsvr() error {
-	ct := mailbox.ParseRpcMethod(msgMailbox.File_mailbox_proto.Services(), GHandler)
-	ct.Range(func(key string, method *mailbox.MessageMethod) bool {
+	// ct := mailbox.ParseRpcMethod(msgMailbox.File_mailbox_proto.Services(), GHandler)
+	ct := calltable.ExtractParseGRpcMethod(msgMailbox.File_mailbox_proto.Services(), GHandler)
+	ct.RangeByName(func(key string, method *calltable.Method) bool {
 		key = "/" + key
 		fmt.Println("handle path:", key)
 
 		handleCall := func(rw http.ResponseWriter, r *http.Request) {
 			defer func() {
 				if err := recover(); err != nil {
-					log.Error(err)
-					log.Error(string(debug.Stack()))
+					slog.Error(string(debug.Stack()))
 				}
 			}()
 
@@ -156,15 +156,15 @@ func httpsvr() error {
 
 			// 这里是否要限制一下 body 太大的情况, 如果客户端直接发了一个大于内存的数据, 会发生什么
 			defer r.Body.Close()
-			raw, err := ioutil.ReadAll(r.Body)
+			raw, err := io.ReadAll(r.Body)
 			if err != nil {
 				rw.WriteHeader(http.StatusBadRequest)
 				rw.Write([]byte(err.Error()))
 				return
 			}
 
-			req := reflect.New(method.Req).Interface().(protoreflect.ProtoMessage)
-			resp := reflect.New(method.Resp).Interface().(protoreflect.ProtoMessage)
+			req := method.NewRequest().(proto.Message)
+			resp := method.NewResponse().(proto.Message)
 
 			if err = protojson.Unmarshal([]byte(raw), req); err != nil {
 				rw.WriteHeader(http.StatusBadRequest)
@@ -172,14 +172,14 @@ func httpsvr() error {
 				return
 			}
 
-			callResult := method.Method.Func.Call([]reflect.Value{reflect.ValueOf(GHandler), reflect.ValueOf(r.Context()), reflect.ValueOf(req), reflect.ValueOf(resp)})
+			callResult := method.Call([]reflect.Value{reflect.ValueOf(GHandler), reflect.ValueOf(r.Context()), reflect.ValueOf(req), reflect.ValueOf(resp)})
 
 			if !callResult[0].IsNil() {
 				err = callResult[0].Interface().(error)
 			}
 
 			if err != nil {
-				log.Error(err)
+				slog.Error(err.Error())
 				mapRaw["code"] = -1
 				mapRaw["message"] = err.Error()
 			} else {
@@ -189,7 +189,7 @@ func httpsvr() error {
 					mapRaw["code"] = 0
 					mapRaw["message"] = "ok"
 				} else {
-					log.Error(err)
+					slog.Error(err.Error())
 					mapRaw["code"] = -1
 					mapRaw["message"] = err.Error()
 				}
@@ -208,7 +208,7 @@ func httpsvr() error {
 
 			//the err after log
 			if err != nil {
-				log.Error("write resp err:", err)
+				slog.Error("write resp err:", "err", err)
 			}
 		}
 

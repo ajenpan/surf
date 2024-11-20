@@ -1,11 +1,10 @@
 package niuniu
 
 import (
+	"log/slog"
 	"time"
 
 	"google.golang.org/protobuf/proto"
-
-	log "github.com/ajenpan/surf/core/log"
 )
 
 func init() {
@@ -49,7 +48,7 @@ func (r *DefaultRobotControl) work() {
 	job := func(f func()) {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Error(r)
+				slog.Error("robot control work panic", "panic", r)
 			}
 		}()
 		f()
@@ -58,13 +57,12 @@ func (r *DefaultRobotControl) work() {
 		select {
 		case f, ok := <-r.action:
 			if !ok {
-				log.Errorf("room do action false")
 				break
 			}
 			job(f)
 		case _, ok := <-ticker.C:
 			if !ok {
-				log.Errorf("room do ticker false")
+				slog.Error("room do ticker false")
 				break
 			}
 			job(r.OnTime)

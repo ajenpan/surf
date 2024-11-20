@@ -58,14 +58,14 @@ func (ug *ClientGate) GetConnByCid(cid string) (network.Conn, bool) {
 
 func (ug *ClientGate) onConnEnable(conn network.Conn, enable bool) {
 	if enable {
-		log.Debugf("OnConnEnable: id:%v,addr:%v,uid:%v,urid:%v,enable:%v", conn.ConnID(), conn.RemoteAddr(), conn.UserID(), conn.UserRole(), enable)
+		log.Info("OnConnEnable", "id", conn.ConnID(), "addr", conn.RemoteAddr(), "uid", conn.UserID(), "urid", conn.UserRole(), "enable", enable)
 		currConn, got := ug.ClientConn.SwapByUID(conn)
 		if got {
 			ud := currConn.GetUserData()
 			currConn.SetUserData(nil)
 
 			conn.SetUserData(ud)
-			log.Infof("OnConnEnable: repeat conn, close old conn:%v,uid:%v", currConn.ConnID(), currConn.UserID())
+			log.Info("OnConnEnable: repeat conn, close old conn", "id", currConn.ConnID(), "uid", currConn.UserID())
 			currConn.Close()
 		} else {
 			ug.opts.OnConnEnable(conn, true)

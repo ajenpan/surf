@@ -5,7 +5,7 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/errors"
-	log "github.com/ajenpan/surf/core/log"
+
 	battlemsg "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle/table"
 )
@@ -22,7 +22,7 @@ func (h *Battle) reportBattleFinished(battleid string) {
 	})
 	h.tables.Delete(battleid)
 	d.Close()
-	log.Infof("battle %s finished", battleid)
+	log.Info("battle finished", "battleid", battleid)
 }
 
 func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle) {
@@ -52,6 +52,7 @@ func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle
 		FinishReporter: func() {
 			h.reportBattleFinished(battleid)
 		},
+		Logger: log.With("battleid", battleid),
 	})
 
 	err = d.Init(logic, players, in.GameConf)
@@ -94,16 +95,17 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 	h.UIDBindBattleID(int64(ctx.FromUserID()), in.BattleId)
 }
 
-func (h *Battle) OnPlayerDisConn(uid int64) {
-	log.Info("OnPlayerDisConn:", uid)
-	tableids := h.LoadBattleByUID(uid)
+func (h *Battle) OnPlayerDisConn(uid uint32, gateNodeId uint32, reason int32) {
+	log.Info("OnPlayerDisConn:", "uid", uid)
+
+	tableids := h.LoadBattleByUID(int64(uid))
 
 	for _, tableid := range tableids {
 		d := h.getBattleById(tableid)
 		if d == nil {
 			continue
 		}
-		d.OnPlayerConn(uid, nil, false)
+		d.OnPlayerConn(int64(uid), nil, false)
 	}
 }
 
@@ -119,7 +121,7 @@ func (h *Battle) OnReqQuitBattle(ctx core.Context, in *battlemsg.ReqQuitBattle) 
 func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *battlemsg.BattleMsgToServer) {
 	d := h.getBattleById(in.BattleId)
 	if d == nil {
-		log.Warnf("battle %s not found", in.BattleId)
+		log.Warn("battle not found", "battleid", in.BattleId)
 		return
 	}
 	d.OnPlayerMessage(int64(ctx.FromUserID()), in.Msgid, in.Data)

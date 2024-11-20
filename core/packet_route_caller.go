@@ -17,7 +17,7 @@ type RequestCallbackCache struct {
 }
 
 type PacketRouteCaller struct {
-	calltable *calltable.CallTable
+	Calltable *calltable.CallTable
 	Handler   interface{}
 
 	respWatier sync.Map
@@ -32,9 +32,9 @@ func (s *PacketRouteCaller) GetSYN() uint32 {
 	return ret
 }
 
-func (s *PacketRouteCaller) pushRespCallback(syn uint32, cb RequestCallbackFunc) error {
+func (s *PacketRouteCaller) PushRespCallback(syn uint32, cb RequestCallbackFunc) error {
 	timeout := time.AfterFunc(3*time.Second, func() {
-		info := s.popRespCallback(syn)
+		info := s.PopRespCallback(syn)
 		if info != nil && info.cbfun != nil {
 			info.cbfun(true, nil)
 		}
@@ -54,7 +54,7 @@ func (s *PacketRouteCaller) pushRespCallback(syn uint32, cb RequestCallbackFunc)
 	return nil
 }
 
-func (s *PacketRouteCaller) popRespCallback(syn uint32) *RequestCallbackCache {
+func (s *PacketRouteCaller) PopRespCallback(syn uint32) *RequestCallbackCache {
 	cache, ok := s.respWatier.Load(syn)
 	if !ok {
 		return nil
@@ -66,7 +66,7 @@ func (p *PacketRouteCaller) Call(ctx *ConnContext) {
 	rpk := ctx.ReqPacket
 
 	if rpk.GetSubType() != 0 {
-		log.Error("recv err packet subtype:", rpk.GetSubType())
+		log.Error("recv err packet subtype", "subtype", rpk.GetSubType())
 		return
 	}
 
@@ -74,29 +74,28 @@ func (p *PacketRouteCaller) Call(ctx *ConnContext) {
 	case RoutePackMsgType_Async:
 		fallthrough
 	case RoutePackMsgType_Request:
-		method := p.calltable.GetByID(rpk.GetMsgId())
+		method := p.Calltable.GetByID(rpk.GetMsgId())
 		if method == nil {
-			log.Errorf("not found msg handler by msgid:%v,from_uid:%v,from_svrtype:%v,to_uid:%v,to_svrtype:%v",
-				rpk.GetMsgId(), rpk.GetFromUID(), rpk.GetFromURole(), rpk.GetToUID(), rpk.GetToURole())
+			log.Error("not found msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUID(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUID(), "to_svrtype", rpk.GetToURole())
 			return
 		}
 		marshaler := marshal.NewMarshalerById(rpk.GetMarshalType())
 		if marshaler == nil {
-			log.Error("invalid marshaler type:", rpk.GetMarshalType())
+			log.Error("invalid marshaler type", "type", rpk.GetMarshalType())
 			//todo send error packet
 			return
 		}
 		req := method.NewRequest()
 		err := marshaler.Unmarshal(rpk.GetBody(), req)
 		if err != nil {
-			log.Error("unmarshal request body failed:", err)
+			log.Error("unmarshal request body failed", "err", err)
 			//todo send error packet
 			return
 		}
 
 		method.Call(p.Handler, ctx, req)
 	case RoutePackMsgType_Response:
-		cbinfo := p.popRespCallback(rpk.GetSYN())
+		cbinfo := p.PopRespCallback(rpk.GetSYN())
 		if cbinfo == nil {
 			return
 		}

@@ -42,7 +42,7 @@ message RespQuitBattle {
 
 message BattleMsgToClient {
   enum MSGID {
-    INVALID_MSGID = 0;
+    _INVALID_ = 0;
     ID = 2005;
   }
   string battle_id = 1;
@@ -52,7 +52,7 @@ message BattleMsgToClient {
 
 message BattleMsgToServer {
   enum MSGID {
-    INVALID_MSGID = 0;
+    _INVALID_ = 0;
     ID = 2006;
   }
   string battle_id = 1;
@@ -76,7 +76,7 @@ message TableConfigure {
 
 message ReqStartBattle {
   enum MSGID {
-    INVALID_MSGID = 0;
+    _INVALID_ = 0;
     ID = 1001;
   }
   // int32 game_id = 1;
@@ -89,7 +89,7 @@ message ReqStartBattle {
 
 message RespStartBattle {
   enum MSGID {
-    INVALID_MSGID = 0;
+    _INVALID_ = 0;
     ID = 1002;
   }
   string battle_id = 1;
@@ -98,7 +98,7 @@ message RespStartBattle {
 
 message ReqBattleOver {
   enum MSGID {
-    INVALID_MSGID = 0;
+    _INVALID_ = 0;
     ID = 1003;
   }
 
@@ -120,7 +120,7 @@ message ReqBattleOver {
 
 message RespBattleOver {
   enum MSGID {
-    INVALID_MSGID = 0;
+    _INVALID_ = 0;
     ID = 1004;
   }
   string battle_id = 1;

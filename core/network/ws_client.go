@@ -3,14 +3,13 @@ package network
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	ws "github.com/gorilla/websocket"
-
-	"github.com/ajenpan/surf/core/log"
 )
 
 type WSClientOptions struct {
@@ -23,6 +22,7 @@ type WSClientOptions struct {
 	AuthToken      []byte
 	UInfo          User
 	ReconnectDelay time.Duration
+	Log            *slog.Logger
 }
 
 type WSClientOption func(*WSClientOptions)
@@ -35,12 +35,16 @@ func NewWSClient(opts WSClientOptions) *WSClient {
 	if ret.opts.HeatbeatInterval < time.Duration(DefaultHeartbeatSec)*time.Second {
 		ret.opts.HeatbeatInterval = time.Duration(DefaultHeartbeatSec) * time.Second
 	}
+	if ret.opts.Log == nil {
+		ret.opts.Log = slog.Default().With("module", "wsclient")
+	}
 	return ret
 }
 
 type WSClient struct {
+	opts WSClientOptions
+
 	wconn  *WSConn
-	opts   WSClientOptions
 	mutex  sync.RWMutex
 	closed chan struct{}
 
@@ -100,7 +104,7 @@ func (c *WSClient) connect() error {
 
 	conn, err := c.handshake(connraw)
 	if err != nil {
-		log.Errorf("connect handshake err:%v", err)
+		c.opts.Log.Error("connect handshake err", "err", err)
 		return err
 	}
 
@@ -109,7 +113,7 @@ func (c *WSClient) connect() error {
 }
 
 func (c *WSClient) work(conn *WSConn) error {
-	log.Infof("WSClient work")
+	c.opts.Log.Info("WSClient work")
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -128,7 +132,7 @@ func (c *WSClient) work(conn *WSConn) error {
 		defer conn.Close()
 		err := conn.readWork()
 		if err != nil {
-			log.Errorf("readWork err: %v", err)
+			c.opts.Log.Error("readWork err", "err", err)
 		}
 	}()
 

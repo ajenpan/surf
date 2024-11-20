@@ -50,7 +50,7 @@ func (gate *Gate) OnConnEnable(conn network.Conn, enable bool) {
 }
 
 func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
-	log.Infof("OnConnPacket sid:%v,uid:%v,type:%v,datalen:%v", s.ConnID(), s.UserID(), pk.Meta.GetType(), len(pk.Body))
+	log.Info("OnConnPacket", "sid", s.ConnID(), "uid", s.UserID(), "type", pk.Meta.GetType(), "datalen", len(pk.Body))
 
 	if pk.Meta.GetType() != network.PacketType_Route || len(pk.Body) < core.RoutePackHeadLen {
 		return
@@ -58,15 +58,17 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 
 	rpk := core.NewRoutePacket(nil).FromHVPacket(pk)
 	if rpk == nil {
-		log.Warnf("OnConnPacket parse route packet failed: %v", pk)
+		log.Warn("OnConnPacket parse route packet failed", "pk", pk)
 		return
 	}
 
 	target_svrtype := rpk.GetToURole()
 	target_nodeid := rpk.GetToUID()
 
+	log.Debug("recv route pk", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(), "to", target_nodeid, "torole", target_svrtype, "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
+
 	if target_svrtype == 0 && target_nodeid == 0 {
-		log.Warnf("OnConnPacket from server type and nodeid is 0")
+		log.Warn("OnConnPacket from server type and nodeid is 0")
 		return
 	}
 
@@ -104,7 +106,10 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 
 	rpk.SetFromUID(s.UserID())
-	rpk.SetFromURole(core.ServerType_User)
+	rpk.SetFromURole(s.UserRole())
+	rpk.SetToUID(targetNode.UserID())
+	rpk.SetToURole(targetNode.UserRole())
+
 	gate.SendTo(targetNode, pk)
 }
 
@@ -131,7 +136,7 @@ func (gate *Gate) OnNodeStatus(conn network.Conn, enable bool) {
 		if loaded {
 			// 重复连接, 则直接关闭
 			conn.Close()
-			log.Errorf("repeat server conn:%v, nodeid:%d,svrtype:%d", conn.ConnID(), conn.UserID(), conn.UserRole())
+			log.Error("repeat server conn", "connid", conn.ConnID(), "nodeid", conn.UserID(), "svrtype", conn.UserRole())
 		} else {
 			gate.onServerOnline(conn)
 		}
@@ -144,33 +149,42 @@ func (gate *Gate) OnNodeStatus(conn network.Conn, enable bool) {
 }
 
 func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
-	log.Infof("OnNodePacket sid:%v,uid:%v,type:%v,datalen:%v", s.ConnID(), s.UserID(), pk.Meta.GetType(), len(pk.Body))
+	// log.Info("OnNodePacket", "sid", s.ConnID(), "uid", s.UserID(), "type", pk.Meta.GetType(), "datalen", len(pk.Body))
+
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		rpk := core.NewRoutePacket(nil).FromHVPacket(pk)
+		if rpk == nil {
+			log.Warn("OnNodePacket parse route packet failed", "type", pk.Meta.GetType())
+			return
+		}
+
+		log.Debug("OnNodePacket", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(),
+			"to", rpk.GetToUID(), "torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
 
 		clientUID := rpk.GetToUID()
 		if clientUID == 0 {
-			log.Warnf("client not found clientUID:%d", clientUID)
+			log.Warn("client not found", "clientUID", clientUID)
 			return
 		}
 
 		v, found := gate.ClientConn.GetConnByUid(clientUID)
 		if !found {
-			log.Warnf("client not found cid:%d", clientUID)
+			log.Warn("client not found", "cid", clientUID)
 			pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
 			gate.SendTo(s, pk)
 			return
 		}
 		gate.SendTo(v, pk)
-	case network.PacketType_Node:
+	default:
+		log.Warn("OnNodePacket unknown packet type", "type", pk.Meta.GetType())
 	}
 }
 
 func (gate *Gate) SendTo(c network.Conn, pk *network.HVPacket) {
 	err := c.Send(pk)
 	if err != nil {
-		log.Errorf("send packet failed: %v", err)
+		log.Error("send packet failed", "err", err)
 	}
 }
 
@@ -221,7 +235,7 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 	marshaler := &marshal.ProtoMarshaler{}
 	body, err := marshaler.Marshal(notify)
 	if err != nil {
-		log.Errorf("marshal notify failed: %v", err)
+		log.Error("marshal notify failed", "err", err)
 		return
 	}
 
@@ -247,7 +261,7 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 }
 
 func (gate *Gate) PublishEvent(ename string, event any) {
-	log.Infof("[Mock PublishEvent] name:%v,event:%v", ename, event)
+	log.Info("PublishEvent", "ename", ename, "event", event)
 }
 
 func (gate *Gate) OnCall(c network.Conn, pk *core.RoutePacket) {

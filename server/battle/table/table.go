@@ -1,6 +1,7 @@
 package table
 
 import (
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/event"
-	log "github.com/ajenpan/surf/core/log"
 
 	msgBattle "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle"
@@ -20,6 +20,7 @@ type TableOptions struct {
 	EventPublisher event.Publisher
 	Conf           *msgBattle.TableConfigure
 	FinishReporter func()
+	Logger         *slog.Logger
 }
 
 func NewTable(opts TableOptions) *Table {
@@ -28,9 +29,7 @@ func NewTable(opts TableOptions) *Table {
 	}
 
 	ret := &Table{
-		log: log.Default.WithFields(map[string]interface{}{
-			"battle": opts.ID,
-		}),
+		log:        opts.Logger,
 		opts:       opts,
 		createAt:   time.Now(),
 		quit:       make(chan bool),
@@ -55,7 +54,7 @@ const (
 
 type Table struct {
 	opts TableOptions
-	log  log.Logger
+	log  *slog.Logger
 
 	createAt time.Time
 	startAt  time.Time
@@ -108,7 +107,7 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf []byte) er
 		safecall := func(f func()) {
 			defer func() {
 				if err := recover(); err != nil {
-					d.log.Error("panic: %v", err)
+					d.log.Error("panic", "err", err)
 				}
 			}()
 			f()
@@ -199,7 +198,7 @@ func (d *Table) ReportBattleStatus(s battle.GameStatus) {
 		d.updateStatus(TableStatus_Finished)
 
 		d.AfterFunc(5*time.Second, func() {
-			d.log.Infof("report battle finished")
+			d.log.Info("report battle finished")
 			if d.opts.FinishReporter != nil {
 				d.opts.FinishReporter()
 			}
@@ -215,33 +214,32 @@ func (d *Table) SendMessageToPlayer(p battle.Player, msgid uint32, msg proto.Mes
 	rp := p.(*Player)
 	raw, err := proto.Marshal(msg)
 	if err != nil {
-		d.log.Error(err)
+		d.log.Error("sendToUser marshal msg failed", "err", err)
 		return
 	}
 
 	err = rp.Send(msgid, raw)
 
 	if err != nil {
-		d.log.Errorf("sendToUser err:%v uid:%v,msgname:%s,msgid:%d,msg:%v", err, rp.UID(), string(proto.MessageName(msg)), msgid, msg)
+		d.log.Error("sendToUser failed", "err", err, "uid", rp.UID(), "msgname", string(proto.MessageName(msg)), "msgid", msgid, "msg", msg)
 	} else {
-		d.log.Debugf("sendToUser ok uid:%v,msgname:%s,msgid:%d,msg:%v", rp.UID(), string(proto.MessageName(msg)), msgid, msg)
+		d.log.Debug("sendToUser ok", "uid", rp.UID(), "msgname", string(proto.MessageName(msg)), "msgid", msgid, "msg", msg)
 	}
 }
 
 func (d *Table) BroadcastMessage(msgid uint32, msg proto.Message) {
-
 	raw, err := proto.Marshal(msg)
 	if err != nil {
-		log.Error(err)
+		d.log.Error("broadcast marshal failed", "err", err)
 		return
 	}
 
-	d.log.Debugf("broadcast msgname:%s,msgid:%d,msg:%v", string(proto.MessageName(msg)), msgid, msg)
+	d.log.Debug("broadcast", "msgname", string(proto.MessageName(msg)), "msgid", msgid, "msg", msg)
 
 	d.Players.Range(func(p *Player) bool {
 		err := p.Send(msgid, raw)
 		if err != nil {
-			d.log.Errorf("broadcast err:%v uid:%v,msgname:%s,msgid:%d,msg:%v", err, p.UID(), string(proto.MessageName(msg)), msgid, msg)
+			d.log.Error("broadcast failed", "err", err, "uid", p.UID(), "msgname", string(proto.MessageName(msg)), "msgid", msgid, "msg", msg)
 		}
 		return true
 	})
@@ -264,11 +262,11 @@ func (d *Table) PublishEvent(eventmsg proto.Message) {
 		return
 	}
 
-	d.log.Debugf("PublishEvent msgname:%s,msg:%v", string(proto.MessageName(eventmsg)), eventmsg)
+	d.log.Debug("PublishEvent", "msgname", string(proto.MessageName(eventmsg)), "msg", eventmsg)
 
 	raw, err := proto.Marshal(eventmsg)
 	if err != nil {
-		d.log.Error(err)
+		d.log.Error("PublishEvent marshal failed", "err", err)
 		return
 	}
 	warp := &event.Event{

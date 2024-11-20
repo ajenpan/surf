@@ -17,14 +17,12 @@ func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *
 
 	ret := NewCallTable()
 
-	// ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
 	pbMsgType := reflect.TypeOf((*proto.Message)(nil)).Elem()
 	errType := reflect.TypeOf((*error)(nil)).Elem()
 
 	for i := 0; i < ms.Len(); i++ {
 		service := ms.Get(i)
 		methods := service.Methods()
-		// svrName := string(service.Name())
 
 		for j := 0; j < methods.Len(); j++ {
 			rpcMethod := methods.Get(j)
@@ -39,9 +37,7 @@ func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *
 			if methodt.NumIn() != 2 || methodt.NumOut() != 2 {
 				continue
 			}
-			// if method.In(0) != ctxType {
-			// 	continue
-			// }
+
 			if !methodt.In(1).Implements(pbMsgType) {
 				continue
 			}
@@ -51,7 +47,6 @@ func ExtractParseGRpcMethod(ms protoreflect.ServiceDescriptors, h interface{}) *
 			if methodt.Out(1) != errType {
 				continue
 			}
-			// epn := strings.Join([]string{svrName, rpcMethodName}, "/")
 			reqType := methodt.In(1).Elem()
 			respType := methodt.Out(0).Elem()
 
@@ -101,18 +96,6 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 		m.InitPool()
 		ret.Add(m)
 	}
-	return ret
-}
-
-func ExtractProtoFile(fd protoreflect.FileDescriptor, handler interface{}) *CallTable {
-	ret := NewCallTable()
-
-	rpcTable := ExtractParseGRpcMethod(fd.Services(), handler)
-	asyncTalbe := ExtractAsyncMethod(fd.Messages(), handler)
-
-	ret.Merge(rpcTable)
-	ret.Merge(asyncTalbe)
-
 	return ret
 }
 

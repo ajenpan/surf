@@ -25,13 +25,13 @@ stop_process() {
     while [ -n "$pids" ]; do
         sleep 100
         count=$((count + 100))
-        if [ $count -eq $timeout ]; then
+        if [ $count -ge $timeout ]; then
             break
         fi
     done
 
     if [ -n "$pids" ]; then
-        echo "Process still running after $timeout seconds. Sending SIGKILL signal."
+        echo "process still running after $timeout seconds. Sending SIGKILL signal."
         kill -s SIGKILL $pids
     fi
 }
@@ -41,7 +41,7 @@ stop_process
 echo "start $runcmd"
 
 # start process
-nohup $runcmd 1>cout.log 2>cerr.log &
+nohup $runcmd >output.txt 2>&1 &
 
 # sleep sceonds and check process stat
 sleep 2s

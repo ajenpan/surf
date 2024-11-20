@@ -3,6 +3,7 @@ package niuniu
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"time"
 
@@ -10,7 +11,6 @@ import (
 	protobuf "google.golang.org/protobuf/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 
-	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/server/battle"
 )
@@ -24,7 +24,7 @@ func NewNiuniu() *Niuniu {
 		players: make(map[int32]*NNPlayer),
 		info:    &GameInfo{},
 		conf:    &Config{},
-		Logger:  logger.Default.WithFields(map[string]interface{}{"game": "niuniu"}),
+		Logger:  slog.Default().With("game", "niuniu"),
 	}
 	return ret
 }
@@ -72,7 +72,7 @@ func ParseConfig(raw []byte) (*Config, error) {
 }
 
 type Niuniu struct {
-	logger.Logger
+	*slog.Logger
 
 	table battle.Table
 	conf  *Config
@@ -148,7 +148,7 @@ func (nn *Niuniu) OnCommand(topic string, data []byte) {
 }
 
 func (nn *Niuniu) OnPlayerMessage(p battle.Player, msgid uint32, raw []byte) {
-	nn.Infof("recv msgid:%d", msgid)
+	nn.Info("recv msgid", "msgid", msgid)
 }
 
 func (nn *Niuniu) OnEvent(topic string, event protobuf.Message) {
@@ -187,7 +187,7 @@ func (nn *Niuniu) OnReqPlayerBanker(nnPlayer *NNPlayer, req *ReqPlayerBanker) {
 func (nn *Niuniu) OnReqPlayerBetRate(p battle.Player, pMsg *ReqPlayerBetRate) {
 	nnPlayer := nn.playerConv(p)
 	if nnPlayer == nil {
-		nn.Infof("can't find player uid :%d", p.SeatID())
+		nn.Info("can't find player", "uid", p.UID())
 		return
 	}
 
@@ -209,7 +209,7 @@ func (nn *Niuniu) OnReqPlayerOutCard(p battle.Player, pMsg *ReqPlayerOutCard) {
 	nnPlayer := nn.playerConv(p)
 
 	if nnPlayer == nil {
-		nn.Errorf("OnPlayerOutCardRequest player is nil")
+		nn.Error("OnPlayerOutCardRequest player is nil")
 		return
 	}
 
@@ -335,15 +335,15 @@ func (nn *Niuniu) ChangeLogicStep(s GameStep) {
 
 	donwtime := nn.getStageDowntime(s).Seconds()
 
-	nn.Infof("game step changed, before:%v, now:%v", lastStatus, s)
+	nn.Info("game step changed", "before", lastStatus, "now", s)
 
 	if lastStatus == s {
-		nn.Errorf("set same step before:%v, now:%v", lastStatus, s)
+		nn.Error("set same step", "before", lastStatus, "now", s)
 	}
 
 	if lastStatus != GameStep_OVER {
 		if lastStatus > s {
-			nn.Errorf("last step is bigger than now before:%v, now:%v", lastStatus, s)
+			nn.Error("last step is bigger than now", "before", lastStatus, "now", s)
 		}
 	}
 
@@ -409,7 +409,7 @@ func (nn *Niuniu) notifyRobBanker() {
 	}
 
 	if len(seats) == 0 {
-		nn.Errorf("选庄错误 maxrob:%d", maxRob)
+		nn.Error("选庄错误", "maxrob", maxRob)
 	}
 
 	index := rand.Intn(len(seats))
@@ -417,7 +417,7 @@ func (nn *Niuniu) notifyRobBanker() {
 	banker, ok := nn.players[int32(bankSeatId)]
 
 	if !ok {
-		nn.Errorf("banker seatid error. seatid:%d,index:%d", bankSeatId, index)
+		nn.Error("banker seatid error", "seatid", bankSeatId, "index", index)
 		return
 	}
 
@@ -462,7 +462,7 @@ func (nn *Niuniu) beginTally() {
 		}
 	}
 	if banker == nil {
-		nn.Errorf("bank is nil")
+		nn.Error("bank is nil")
 		return
 	}
 

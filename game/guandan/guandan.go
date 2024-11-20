@@ -3,14 +3,13 @@ package guandan
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	gdpoker "github.com/ajenpan/poker_algorithm/guandan"
 	"github.com/ajenpan/poker_algorithm/poker"
-	"github.com/ajenpan/surf/core/log"
-	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	gutils "github.com/ajenpan/surf/game/utils"
 	"github.com/ajenpan/surf/server/battle"
@@ -27,7 +26,7 @@ func NewGuandan() *Guandan {
 			OutCardTimeSec: 15,
 			WildCardRank:   2,
 		},
-		Logger: logger.Default.WithFields(map[string]interface{}{"game": "guandan"}),
+		Logger: slog.Default().With("game", "guandan"),
 	}
 	return ret
 }
@@ -55,7 +54,7 @@ type LogicConfig struct {
 }
 
 type Guandan struct {
-	logger.Logger
+	*slog.Logger
 
 	WildCard poker.Card
 	table    battle.Table
@@ -94,7 +93,7 @@ func (g *Guandan) nextStage(curr StageType) StageType {
 	case StageType_Stage_FinalResult:
 		return StageType_Stage_None
 	default:
-		g.Errorf("unknown stage:%v", curr)
+		g.Error("unknown stage", "stage", curr)
 	}
 	return StageType_Stage_None
 }
@@ -189,7 +188,7 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 	g.currStage = g.getStageInfo(StageType_Stage_None)
 	g.currStage.OnEnter()
 
-	g.Infof("guandan logic init success, conf:%v", g.conf)
+	g.Info("guandan logic init success", "conf", g.conf)
 	return nil
 }
 
@@ -238,17 +237,17 @@ func (g *Guandan) OnReqPlayerOutCards(player *Player, msg *ReqPlayerOutCards) {
 		outcards := msg.GetOutCards()
 		cards, err := poker.BytesToCards(outcards.GetCards())
 		if err != nil {
-			g.Errorf("parse outcards error:%v", err)
+			g.Error("parse outcards error", "err", err)
 			return 201
 		}
 		result := gdpoker.GetDeckPower(g.WildCard, cards)
 		if (DeckType)(result.DeckType) != outcards.GetDeckType() {
-			g.Errorf("decktype not match, expect:%v, got:%v", result.DeckType, outcards.GetDeckType())
+			g.Error("decktype not match", "expect", result.DeckType, "got", outcards.GetDeckType())
 			return 202
 		}
 		ok := player.handCards.RemoveCards(cards)
 		if !ok {
-			g.Errorf("remove cards error")
+			g.Error("remove cards error")
 			return 203
 		}
 
@@ -409,7 +408,7 @@ func (g *Guandan) setNextOutCardPlayer(currPlayer *Player) {
 		nextseatid := (currSeatId + i + 1) % MaxSeatCnt
 		temp := g.getPlayerBySeatId(nextseatid)
 		if temp == nil {
-			log.Error("get next player error")
+			slog.Error("get next player error")
 			return
 		}
 		if temp.handCards.Size() != 0 {
@@ -436,7 +435,7 @@ func (g *Guandan) onGaming(time.Duration) {
 
 func (g *Guandan) playerActionTimeoutHelp(player *Player) {
 	if player.actionPower == nil {
-		g.Errorf("player action timeout help error, player:%v", player.raw.UID())
+		g.Error("player action timeout help error", "player", player.raw.UID())
 		return
 	}
 
@@ -461,7 +460,7 @@ func (g *Guandan) playerActionTimeoutHelp(player *Player) {
 func (g *Guandan) broadcastMsg(msg proto.Message) {
 	msgid, err := gutils.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	if err != nil {
-		g.Errorf("broadcastMsg get message:%s msgid error:%v", msg.ProtoReflect().Descriptor().Name(), err)
+		g.Error("broadcastMsg get message error", "msgname", msg.ProtoReflect().Descriptor().Name(), "err", err)
 		return
 	}
 	g.table.BroadcastMessage(msgid, msg)
@@ -470,7 +469,7 @@ func (g *Guandan) broadcastMsg(msg proto.Message) {
 func (g *Guandan) sendMsg(p *Player, msg proto.Message) {
 	msgid, err := gutils.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	if err != nil {
-		g.Errorf("sendMsg get message:%s msgid error:%v", msg.ProtoReflect().Descriptor().Name(), err)
+		g.Error("sendMsg get message error", "msgname", msg.ProtoReflect().Descriptor().Name(), "err", err)
 		return
 	}
 	g.table.SendMessageToPlayer(p.raw, msgid, msg)
@@ -482,7 +481,7 @@ func (g *Guandan) playerConv(p battle.Player) *Player {
 
 func (g *Guandan) getPlayerBySeatId(seatid int32) *Player {
 	if seatid < 0 || seatid >= int32(len(g.players)) {
-		g.Errorf("seatid out of range, seatid:%v, players len:%v", seatid, len(g.players))
+		g.Error("seatid out of range", "seatid", seatid, "players len", len(g.players))
 		return nil
 	}
 	return g.players[seatid]
@@ -490,13 +489,13 @@ func (g *Guandan) getPlayerBySeatId(seatid int32) *Player {
 
 func (g *Guandan) changeLogicStep(nextStage *StageInfo) bool {
 	if nextStage == nil {
-		g.Errorf("next stage is nil")
+		g.Error("next stage is nil")
 		return false
 	}
 
 	currStage := g.currStage
 	if currStage.StageType == nextStage.StageType {
-		g.Errorf("set same step before:%v, now:%v", currStage.StageType, nextStage.StageType)
+		g.Error("set same step", "before", currStage.StageType, "now", nextStage.StageType)
 		return false
 	}
 
@@ -507,8 +506,7 @@ func (g *Guandan) changeLogicStep(nextStage *StageInfo) bool {
 
 	donwtime := g.getStageDowntime(g.currStage.StageType).Seconds()
 
-	g.Infof("game stage changed, from:%v,to:%v,donwtime:%v",
-		g.lastStage.StageType, g.currStage.StageType, donwtime)
+	g.Info("game stage changed", "from", g.lastStage.StageType, "to", g.currStage.StageType, "donwtime", donwtime)
 
 	notice := &NotifyGameStage{
 		CurrStage: g.currStage.StageType,

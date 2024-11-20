@@ -32,9 +32,9 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 
 	respmsgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	rpk.SetMsgId(respmsgid)
-	rpk.SetToUID(ctx.ReqPacket.GetFromUID())
-	rpk.SetToURole(ctx.ReqPacket.GetFromURole())
 	rpk.SetSYN(ctx.ReqPacket.GetSYN())
+	rpk.SetToUID(ctx.FromUserID())
+	rpk.SetToURole(ctx.FromUserRole())
 	rpk.SetFromUID(ctx.Core.GetNodeId())
 	rpk.SetFromURole(ctx.Core.GetServerType())
 	rpk.SetMsgType(RoutePackMsgType_Response)
@@ -50,7 +50,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 	if msg != nil {
 		body, err = ctx.Marshal.Marshal(msg)
 		if err != nil {
-			log.Error(err)
+			log.Error("response marshal error", "err", err)
 			return
 		}
 		rpk.Body = body
@@ -58,7 +58,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 
 	err = ctx.Conn.Send(rpk.ToHVPacket())
 	if err != nil {
-		log.Error(err)
+		log.Error("response send error", "err", err)
 	}
 }
 

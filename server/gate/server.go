@@ -1,14 +1,15 @@
 package gate
 
 import (
+	"log/slog"
+
 	"github.com/ajenpan/surf/core"
-	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	utilsRsa "github.com/ajenpan/surf/core/utils/rsagen"
 )
 
-var log = logger.Default
+var log = slog.Default().With("module", "gate")
 
 func StartNodeListener(r *Gate, addr string) (func(), error) {
 	ws, err := network.NewWSServer(network.WSServerOptions{
@@ -70,7 +71,9 @@ func Start(cfg *Config) (func() error, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("gate client listen on %s start success", cfg.ClientListenAddr)
+
+	log.Info("gate client listen start success", "addr", cfg.ClientListenAddr)
+
 	ccloser = func() {
 		ug.Stop()
 	}

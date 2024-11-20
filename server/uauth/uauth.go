@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/errors"
-	log "github.com/ajenpan/surf/core/log"
 	msgUAuth "github.com/ajenpan/surf/msg/uauth"
 	"github.com/ajenpan/surf/server/uauth/database/cache"
 	"github.com/ajenpan/surf/server/uauth/database/models"
@@ -217,7 +217,7 @@ func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
 	}
 
 	if err = h.Cache.StoreUser(context.Background(), cacheInfo, time.Hour); err != nil {
-		log.Error(err)
+		slog.Error("store user err", "err", err)
 	}
 
 	out.AssessToken = assess
@@ -293,7 +293,7 @@ func (h *Auth) OnReqRegister(ctx core.Context, in *msgUAuth.ReqRegister) {
 			err = fmt.Errorf("username already exists")
 			return
 		}
-		log.Error(res.Error)
+		slog.Error("create user err", "err", res.Error)
 		err = fmt.Errorf("server internal error")
 		return
 	}

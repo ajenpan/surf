@@ -9,7 +9,6 @@ package mailbox
 
 // 	"google.golang.org/protobuf/encoding/protojson"
 
-// 	"github.com/ajenpan/surf/core/log"
 // 	proto "github.com/ajenpan/surf/msg/openproto/mailbox"
 // )
 

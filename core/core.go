@@ -1,17 +1,18 @@
 package core
 
 import (
+	"log/slog"
+
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/errors"
-	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/calltable"
 )
 
 var GSurf = &Surf{}
 
-var log = logger.Default
+var log = slog.Default().With("module", "surf")
 
 func Init(opt Options) error {
 	return GSurf.Init(opt)

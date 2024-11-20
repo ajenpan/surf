@@ -3,7 +3,6 @@ package ddz
 import (
 	"time"
 
-	logger "github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/server/battle"
 )
@@ -29,8 +28,6 @@ type Player struct {
 }
 
 type DDZ struct {
-	logger.Logger
-
 	table battle.Table
 	// conf    *Config
 	// info    *GameInfo

@@ -16,7 +16,6 @@ type Packet_MsgType uint8
 
 const (
 	PacketType_Route Packet_MsgType = 1
-	PacketType_Node  Packet_MsgType = 254
 	PacketType_Inner Packet_MsgType = 255
 )
 

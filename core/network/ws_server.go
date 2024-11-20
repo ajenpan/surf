@@ -3,14 +3,13 @@ package network
 import (
 	"encoding/binary"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	ws "github.com/gorilla/websocket"
-
-	"github.com/ajenpan/surf/core/log"
 )
 
 type WSServerOptions struct {
@@ -21,39 +20,46 @@ type WSServerOptions struct {
 	OnConnEnable  FuncOnConnEnable
 	OnConnAuth    FuncOnConnAuth
 	OnConnAccpect func(r *http.Request) bool
+	Log           *slog.Logger
 }
 
 type WSServerOption func(*WSServerOptions)
 
 func NewWSServer(opts WSServerOptions) (*WSServer, error) {
 	ret := &WSServer{
-		WSServerOptions: opts,
-		sockets:         make(map[string]*WSConn),
-		die:             make(chan bool),
+		opts:    opts,
+		sockets: make(map[string]*WSConn),
+		die:     make(chan bool),
 	}
-	if ret.HeatbeatInterval < time.Duration(DefaultHeartbeatSec)*time.Second {
-		ret.HeatbeatInterval = time.Duration(DefaultHeartbeatSec) * time.Second
+	if ret.opts.HeatbeatInterval < time.Duration(DefaultHeartbeatSec)*time.Second {
+		ret.opts.HeatbeatInterval = time.Duration(DefaultHeartbeatSec) * time.Second
 	}
 	h := &http.ServeMux{}
 	h.HandleFunc("/", ret.ServeHTTP)
-	ret.httpsvr = &http.Server{Addr: ret.ListenAddr, Handler: h}
+	ret.httpsvr = &http.Server{Addr: ret.opts.ListenAddr, Handler: h}
 
-	if ret.OnConnAccpect == nil {
+	if ret.opts.OnConnAccpect == nil {
 		ret.upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	} else {
-		ret.upgrader.CheckOrigin = ret.OnConnAccpect
+		ret.upgrader.CheckOrigin = ret.opts.OnConnAccpect
 	}
-
+	if ret.opts.Log == nil {
+		ret.opts.Log = slog.Default().With("module", "ws")
+	}
 	return ret, nil
 }
 
 type WSServer struct {
-	WSServerOptions
+	opts     WSServerOptions
 	mu       sync.RWMutex
 	sockets  map[string]*WSConn
 	die      chan bool
 	httpsvr  *http.Server
 	upgrader ws.Upgrader
+}
+
+func (s *WSServer) log() *slog.Logger {
+	return s.opts.Log
 }
 
 func (s *WSServer) Start() error {
@@ -64,7 +70,7 @@ func (s *WSServer) Start() error {
 
 	go func() {
 		if err := s.httpsvr.Serve(ln); err != nil {
-			log.Error(err)
+			s.log().Error("Serve err", "err", err)
 		}
 	}()
 
@@ -89,10 +95,10 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close()
 
-	conn := newWSConn(GenConnID(), nil, c, s.HeatbeatInterval*2)
+	conn := newWSConn(GenConnID(), nil, c, s.opts.HeatbeatInterval*2)
 	conn.status = Connectting
 
-	deadline := time.Now().Add(s.HeatbeatInterval * 2)
+	deadline := time.Now().Add(s.opts.HeatbeatInterval * 2)
 	c.SetReadDeadline(deadline)
 	c.SetWriteDeadline(deadline)
 
@@ -105,7 +111,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var us User
-	if s.OnConnAuth != nil {
+	if s.opts.OnConnAuth != nil {
 		pk := NewHVPacket()
 		pk.Meta.SetType(PacketType_Inner)
 		pk.Meta.SetSubFlag(PacketInnerSubType_Cmd)
@@ -116,7 +122,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if pk, err := conn.readPacket(); err != nil {
 			return
 		} else {
-			if us, err = s.OnConnAuth(pk.GetBody()); err != nil {
+			if us, err = s.opts.OnConnAuth(pk.GetBody()); err != nil {
 				pk.Meta.SetType(PacketType_Inner)
 				pk.SetHead([]byte("auth"))
 				pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFailed)
@@ -134,9 +140,9 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn.writePacket(pk)
 
 	// the connection is established here
-	if s.OnConnEnable != nil {
-		s.OnConnEnable(conn, true)
-		defer s.OnConnEnable(conn, false)
+	if s.opts.OnConnEnable != nil {
+		s.opts.OnConnEnable(conn, true)
+		defer s.opts.OnConnEnable(conn, false)
 	}
 
 	conn.status = Connected
@@ -145,7 +151,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer conn.Close()
 		err := conn.writeWork()
 		if err != nil {
-			log.Error(err)
+			s.log().Error("writeWork err", "err", err)
 		}
 	}()
 
@@ -154,7 +160,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err := conn.readWork()
 		if err != nil {
 			if err != io.EOF {
-				log.Error(err)
+				s.log().Error("readWork err", "err", err)
 			}
 		}
 	}()
@@ -179,8 +185,8 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					conn.Send(packet)
 				}
 			} else {
-				if s.OnConnPacket != nil {
-					s.OnConnPacket(conn, packet)
+				if s.opts.OnConnPacket != nil {
+					s.opts.OnConnPacket(conn, packet)
 				}
 			}
 		}

@@ -11,7 +11,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	pb "google.golang.org/protobuf/proto"
 
-	"github.com/ajenpan/surf/core/log"
 	msgMailbox "github.com/ajenpan/surf/msg/mailbox"
 	gamedbMod "github.com/ajenpan/surf/server/mailbox/database/models"
 )
@@ -224,13 +223,12 @@ func (c *MailCache) Add(details ...*MailDetail) error {
 	for _, detail := range details {
 		mailid := MailID(detail.DBMail.Mailid)
 		if _, has := c.infos[mailid]; has {
-			err := fmt.Errorf("mail already exist")
-			log.Error(err)
+			log.Error("mail already exist", "mailid", mailid)
 			continue
 		}
 
 		if _, has := c.infos[mailid]; has {
-			log.Warn("mail already exist,mailid:", mailid)
+			log.Warn("mail already exist", "mailid", mailid)
 			continue
 		}
 

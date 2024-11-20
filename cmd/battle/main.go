@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rsa"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"time"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	battleMsg "github.com/ajenpan/surf/msg/battle"
@@ -72,7 +72,6 @@ func RegGames() {
 }
 
 func RealMain(c *cli.Context) error {
-	log.Default.SetOutput(os.Stdout)
 
 	pk, err := LoadAuthPublicKey()
 	if err != nil {
@@ -104,7 +103,7 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Info("testjwt:", testjwt)
+	slog.Info("testjwt", "jwt", testjwt)
 
 	RegGames()
 
@@ -118,8 +117,9 @@ func RealMain(c *cli.Context) error {
 		GateAddrList: []string{
 			"ws://localhost:13000",
 		},
-		GateToken: []byte(jwt),
-		UInfo:     uinfo,
+		GateToken:          []byte(jwt),
+		UInfo:              uinfo,
+		OnClientDisconnect: h.OnPlayerDisConn,
 	}
 	surf, err := core.NewSurf(opts)
 	if err != nil {

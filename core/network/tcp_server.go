@@ -5,8 +5,6 @@ import (
 	"net"
 	"sync"
 	"time"
-
-	"github.com/ajenpan/surf/core/log"
 )
 
 type TcpServerOptions struct {
@@ -80,7 +78,6 @@ func (s *TcpServer) Start() error {
 						time.Sleep(tempDelay)
 						continue
 					}
-					log.Error(err)
 					return
 				}
 				tempDelay = 0

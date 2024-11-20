@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime"
 	"time"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/log"
 	utilsRsa "github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 	gate "github.com/ajenpan/surf/server/gate"
@@ -73,7 +73,6 @@ func ReadRSAKey() ([]byte, []byte, error) {
 }
 
 func RealMain(c *cli.Context) error {
-	log.Default.SetOutput(os.Stdout)
 
 	_, _, err := ReadRSAKey()
 	if err != nil {
@@ -89,13 +88,13 @@ func RealMain(c *cli.Context) error {
 	testuser := &auth.UserInfo{
 		UId:   testuid,
 		UName: fmt.Sprintf("yk%d", testuid),
-		URole: core.ServerType_User,
+		URole: core.ServerType_Client,
 	}
 	testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)
 	if err != nil {
 		return err
 	}
-	log.Info("testjwt:", testjwt)
+	slog.Info("testjwt", "jwt", testjwt)
 
 	cfg := &gate.Config{
 		RsaPublicKeyFile: "file://" + PublicKeyFile,
@@ -109,10 +108,10 @@ func RealMain(c *cli.Context) error {
 	}
 	defer closer()
 
-	log.Info("config:", cfg.String())
-	log.Info("gate server started")
+	slog.Info("config", "config", cfg.String())
+	slog.Info("gate server started")
 
 	s := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", s.String())
+	slog.Info("recv signal", "signal", s.String())
 	return nil
 }

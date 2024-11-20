@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"fmt"
+	"log/slog"
 	"os"
 	"runtime"
 	"time"
@@ -11,7 +12,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/log"
 	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
@@ -170,6 +170,6 @@ func RealMain(c *cli.Context) error {
 	defer wsclose()
 
 	s := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", s.String())
+	slog.Info("recv signal", "signal", s.String())
 	return nil
 }

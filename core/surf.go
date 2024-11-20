@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -45,7 +47,10 @@ type Options struct {
 }
 
 func NewSurf(opt Options) (*Surf, error) {
-	s := &Surf{}
+	s := &Surf{
+		queue:  make(chan func(), 100),
+		closed: make(chan struct{}),
+	}
 	err := s.Init(opt)
 	return s, err
 }
@@ -59,10 +64,12 @@ type Surf struct {
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
 	httpsvr *http.Server
-	nodeid  uint32
 
 	serverCaller *PacketRouteCaller
 	innerCaller  *PacketRouteCaller
+
+	queue  chan func()
+	closed chan struct{}
 }
 
 func (s *Surf) Init(opt Options) error {
@@ -79,18 +86,35 @@ func (s *Surf) Init(opt Options) error {
 	s.opts = opt
 
 	s.serverCaller = &PacketRouteCaller{
-		calltable: opt.Calltable,
+		Calltable: opt.Calltable,
 		Handler:   opt.Server,
 	}
 
 	s.innerCaller = &PacketRouteCaller{
-		calltable: calltable.ExtractProtoFile(msgCore.File_core_proto, s),
+		Calltable: calltable.ExtractMethodFromDesc(msgCore.File_core_proto.Messages(), s),
 		Handler:   s,
 	}
 	return nil
 }
 
+func (s *Surf) Do(fn func()) {
+	select {
+	case s.queue <- fn:
+	default:
+		log.Error("queue full, drop fn")
+	}
+}
+
 func (s *Surf) Close() error {
+	select {
+	case <-s.closed:
+		return nil
+	default:
+		close(s.closed)
+
+		close(s.queue)
+	}
+
 	if s.tcpsvr != nil {
 		s.tcpsvr.Stop()
 	}
@@ -103,7 +127,12 @@ func (s *Surf) Close() error {
 	return nil
 }
 
-func (s *Surf) Start() error {
+func (s *Surf) Run() error {
+	s.opts.Calltable.RangeByID(func(key uint32, value *calltable.Method) bool {
+		log.Info("handle func", "msgid", key, "funcname", value.Name)
+		return true
+	})
+
 	if len(s.opts.HttpListenAddr) > 1 {
 		s.startHttpSvr()
 	}
@@ -116,24 +145,12 @@ func (s *Surf) Start() error {
 		s.startTcpSvr()
 	}
 
-	return nil
-}
-
-func (s *Surf) Run() error {
-	s.opts.Calltable.RangeByID(func(key uint32, value *calltable.Method) bool {
-		log.Infof("handle func,msgid:%d, funcname:%s", key, value.Name)
-		return true
-	})
-
-	if err := s.Start(); err != nil {
-		return err
-	}
 	defer s.Close()
 
-	log.Infof("start gate clients:%v", s.opts.GateAddrList)
+	log.Info("start gate clients", "addrs", s.opts.GateAddrList)
 
 	for _, addr := range s.opts.GateAddrList {
-		log.Infof("start gate client, addr: %s", addr)
+		log.Info("start gate client", "addr", addr)
 		client := network.NewWSClient(network.WSClientOptions{
 			RemoteAddress:  addr,
 			OnConnPacket:   s.onGatePacket,
@@ -145,13 +162,26 @@ func (s *Surf) Run() error {
 		client.Start()
 	}
 
-	sig := utilSignal.WaitShutdown()
-	log.Infof("recv signal: %v", sig.String())
-	return nil
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, utilSignal.ShutdownSignals()...)
+
+	for {
+		select {
+		case <-signals:
+			return nil
+		case <-s.closed:
+			return nil
+		case fn, ok := <-s.queue:
+			if !ok {
+				return nil
+			}
+			fn()
+		}
+	}
 }
 
 func (s *Surf) startHttpSvr() {
-	log.Info("start http server, listenaddr ", s.opts.HttpListenAddr)
+	log.Info("start http server", "addr", s.opts.HttpListenAddr)
 
 	mux := http.NewServeMux()
 
@@ -167,7 +197,7 @@ func (s *Surf) startHttpSvr() {
 
 		cb := s.WrapMethod(key, method)
 		mux.HandleFunc(key, cb)
-		log.Info("http handle func: ", key)
+		log.Info("http handle func", "path", key)
 		return true
 	})
 
@@ -185,7 +215,7 @@ func (s *Surf) startHttpSvr() {
 }
 
 func (s *Surf) startWsSvr() {
-	log.Info("start ws server, listenaddr ", s.opts.WsListenAddr)
+	log.Info("start ws server", "addr", s.opts.WsListenAddr)
 
 	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   s.opts.WsListenAddr,
@@ -202,7 +232,7 @@ func (s *Surf) startWsSvr() {
 }
 
 func (s *Surf) startTcpSvr() {
-	log.Info("start tcp server, listenaddr ", s.opts.TcpListenAddr)
+	log.Info("start tcp server", "addr", s.opts.TcpListenAddr)
 
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
 		ListenAddr:       s.opts.TcpListenAddr,
@@ -220,7 +250,7 @@ func (s *Surf) startTcpSvr() {
 }
 
 func (s *Surf) GetNodeId() uint32 {
-	return s.nodeid
+	return s.opts.UInfo.UserID()
 }
 
 func (s *Surf) GetServerType() uint16 {
@@ -246,18 +276,18 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 	rpk.SetMsgType(RoutePackMsgType_Request)
 	rpk.SetMsgId(msgid)
 	rpk.SetToUID(uid)
-	rpk.SetToURole(ServerType_User)
+	rpk.SetToURole(ServerType_Client)
 	rpk.SetFromUID(s.GetNodeId())
 	rpk.SetFromURole(s.GetServerType())
 	rpk.SetSYN(syn)
 
-	s.serverCaller.pushRespCallback(syn, cb)
+	s.serverCaller.PushRespCallback(syn, cb)
 
 	pk := rpk.ToHVPacket()
 
 	err = conn.Send(pk)
 	if err != nil {
-		s.serverCaller.popRespCallback(syn)
+		s.serverCaller.PopRespCallback(syn)
 	}
 	return err
 }
@@ -277,6 +307,9 @@ func (s *Surf) SendAsyncToClient(conn network.Conn, to_uid uint32, to_urole uint
 	rpk.SetFromURole(s.GetServerType())
 	rpk.SetSYN(s.serverCaller.GetSYN())
 
+	log.Info("SendAsyncToClient", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(), "to", rpk.GetToUID(),
+		"torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
+
 	return conn.Send(rpk.ToHVPacket())
 }
 
@@ -285,10 +318,10 @@ func (s *Surf) SendAsyncToClientByUId(uid uint32, msgid uint32, msg any) error {
 	if conn == nil {
 		return fmt.Errorf("not found route")
 	}
-	return s.SendAsyncToClient(conn, uid, ServerType_User, msgid, msg)
+	return s.SendAsyncToClient(conn, uid, ServerType_Client, msgid, msg)
 }
 
-func (s *Surf) SendToNode(nodeid uint32, pk *network.HVPacket) error {
+func (s *Surf) SendToNode(nodeid uint32, svrtype uint16, pk *network.HVPacket) error {
 	// todo
 	return nil
 }
@@ -349,6 +382,7 @@ func (h *Surf) onGatePacket(s network.Conn, pk *network.HVPacket) {
 		rpk := NewRoutePacket(nil).FromHVPacket(pk)
 		h.onRoutePacket(s, rpk)
 	default:
+		log.Error("invalid packet type", "type", pk.Meta.GetType())
 	}
 }
 
@@ -358,27 +392,28 @@ func (h *Surf) onConnAuth(data []byte) (network.User, error) {
 
 func (h *Surf) onGateStatus(c network.Conn, enable bool) {
 	// TOOD:
-	log.Infof("connid:%v, uid:%v,utype:%v, status:%v", c.ConnID(), c.UserID(), c.UserRole(), enable)
+	log.Info("conn status", "id", c.ConnID(), "uid", c.UserID(), "utype", c.UserRole(), "status", enable)
 }
 
 func (s *Surf) catch() {
 	if err := recover(); err != nil {
-		log.Error(err)
+		log.Error("catch panic", "err", err)
 	}
 }
 
 func (s *Surf) OnNotifyClientDisconnect(ctx Context, msg *msgCore.NotifyClientDisconnect) {
-	log.Infof("recv notify client disconnect, uid:%v, gateNodeId:%v, reason:%v", msg.Uid, msg.GateNodeId, msg.Reason)
-
+	log.Info("recv notify client disconnect", "uid", msg.Uid, "gateNodeId", msg.GateNodeId, "reason", msg.Reason)
 	if s.opts.OnClientDisconnect != nil {
-		s.opts.OnClientDisconnect(msg.Uid, msg.GateNodeId, int32(msg.Reason))
+		s.Do(func() {
+			s.opts.OnClientDisconnect(msg.Uid, msg.GateNodeId, int32(msg.Reason))
+		})
 	}
 }
 
 func (s *Surf) onRoutePacket(c network.Conn, rpk *RoutePacket) {
 	marshaler := marshal.NewMarshalerById(rpk.GetMarshalType())
 	if marshaler == nil {
-		log.Error("invalid marshaler type:", rpk.GetMarshalType())
+		log.Error("invalid marshaler type", "type", rpk.GetMarshalType())
 		return
 	}
 
@@ -389,9 +424,11 @@ func (s *Surf) onRoutePacket(c network.Conn, rpk *RoutePacket) {
 		Marshal:   marshaler,
 	}
 
-	if rpk.GetToURole() == ServerType_Core {
-		s.innerCaller.Call(ctx)
-	} else {
-		s.serverCaller.Call(ctx)
-	}
+	s.Do(func() {
+		if rpk.GetToURole() == ServerType_Core {
+			s.innerCaller.Call(ctx)
+		} else {
+			s.serverCaller.Call(ctx)
+		}
+	})
 }

@@ -9,12 +9,17 @@ if [ -z "$BinFile" ]; then
     exit 1
 fi
 
+ScriptDir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 NowTime=$(date +%Y%m%d%H%M%S)
+TargetBin=$(realpath "${ScriptDir}/../bin/${BinFile}")
 
-TargetBin=../bin/${BinFile}
+echo "currdir:$(pwd), ScriptDir: ${ScriptDir}, TargetBin: ${TargetBin}"
 
-BinDir=/root/svr_run/${BinFile}/
+BinDir=/workdir/server/${BinFile}
 RemoteHost=root@myali01
+
+echo "start to upload ${TargetBin} to ${RemoteHost}:${BinDir}/${BinFile}.tmp"
 
 scp ${TargetBin} ${RemoteHost}:${BinDir}/${BinFile}.tmp
 
@@ -32,4 +37,4 @@ mv ${BinFile}.tmp ${BinFile}
 exit
 EOF
 
-echo "Deployment ${BinFile} to ${RemoteHost} done!"
+echo "deploy ${BinFile} to ${RemoteHost} done!"
