@@ -6,7 +6,8 @@ import (
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/errors"
 
-	battlemsg "github.com/ajenpan/surf/msg/battle"
+	msgBattle "github.com/ajenpan/surf/msg/battle"
+	msgGate "github.com/ajenpan/surf/msg/gate"
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
@@ -25,9 +26,9 @@ func (h *Battle) reportBattleFinished(battleid string) {
 	log.Info("battle finished", "battleid", battleid)
 }
 
-func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle) {
+func (h *Battle) OnReqStartBattle(ctx core.Context, in *msgBattle.ReqStartBattle) {
 	var err error
-	var resp = &battlemsg.RespStartBattle{}
+	var resp = &msgBattle.RespStartBattle{}
 
 	defer func() {
 		ctx.Response(resp, err)
@@ -64,10 +65,10 @@ func (h *Battle) OnReqStartBattle(ctx core.Context, in *battlemsg.ReqStartBattle
 	resp.BattleId = battleid
 }
 
-func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) {
+func (h *Battle) OnReqJoinBattle(ctx core.Context, in *msgBattle.ReqJoinBattle) {
 	var err error
 
-	out := &battlemsg.RespJoinBattle{
+	out := &msgBattle.RespJoinBattle{
 		BattleId:   in.BattleId,
 		SeatId:     in.SeatId,
 		ReadyState: in.ReadyState,
@@ -81,7 +82,7 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 	}
 
 	sender := func(msgid uint32, raw []byte) error {
-		return ctx.SendAsync(&battlemsg.BattleMsgToClient{
+		return ctx.SendAsync(&msgBattle.BattleMsgToClient{
 			BattleId: in.BattleId,
 			Msgid:    msgid,
 			Data:     raw,
@@ -93,6 +94,10 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *battlemsg.ReqJoinBattle) 
 	ctx.Response(out, err)
 
 	h.UIDBindBattleID(int64(ctx.FromUserID()), in.BattleId)
+}
+
+func (h *Battle) OnNotifyClientDisconnect(ctx core.Context, in *msgGate.NotifyClientDisconnect) {
+	h.OnPlayerDisConn(in.Uid, in.GateNodeId, int32(in.Reason))
 }
 
 func (h *Battle) OnPlayerDisConn(uid uint32, gateNodeId uint32, reason int32) {
@@ -109,8 +114,8 @@ func (h *Battle) OnPlayerDisConn(uid uint32, gateNodeId uint32, reason int32) {
 	}
 }
 
-func (h *Battle) OnReqQuitBattle(ctx core.Context, in *battlemsg.ReqQuitBattle) {
-	resp := &battlemsg.RespQuitBattle{
+func (h *Battle) OnReqQuitBattle(ctx core.Context, in *msgBattle.ReqQuitBattle) {
+	resp := &msgBattle.RespQuitBattle{
 		BattleId: in.BattleId,
 	}
 	uid := ctx.FromUserID()
@@ -118,7 +123,7 @@ func (h *Battle) OnReqQuitBattle(ctx core.Context, in *battlemsg.ReqQuitBattle) 
 	ctx.Response(resp, nil)
 }
 
-func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *battlemsg.BattleMsgToServer) {
+func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *msgBattle.BattleMsgToServer) {
 	d := h.getBattleById(in.BattleId)
 	if d == nil {
 		log.Warn("battle not found", "battleid", in.BattleId)

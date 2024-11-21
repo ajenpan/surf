@@ -4,10 +4,13 @@ package openproto.battle;
 option go_package = "msg/battle";
 option csharp_namespace = "src.msg.battle";
 
+// Battle ServerType = 102
+// msg id start from 102 * 1000
+
 message ReqJoinBattle {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 2001;
+    ID = 102001;
   }
   string battle_id = 1;
   uint32 seat_id = 2;
@@ -17,7 +20,7 @@ message ReqJoinBattle {
 message RespJoinBattle {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 2002;
+    ID = 102002;
   }
   string battle_id = 1;
   uint32 seat_id = 2;
@@ -27,7 +30,7 @@ message RespJoinBattle {
 message ReqQuitBattle {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 2003;
+    ID = 102003;
   }
   string battle_id = 1;
 }
@@ -35,7 +38,7 @@ message ReqQuitBattle {
 message RespQuitBattle {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 2004;
+    ID = 102004;
   }
   string battle_id = 1;
 }
@@ -43,21 +46,23 @@ message RespQuitBattle {
 message BattleMsgToClient {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 2005;
+    ID = 102005;
   }
   string battle_id = 1;
   uint32 msgid = 2;
   bytes data = 3;
+  uint32 syn = 4;
 }
 
 message BattleMsgToServer {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 2006;
+    ID = 102006;
   }
   string battle_id = 1;
   uint32 msgid = 2;
   bytes data = 3;
+  uint32 syn = 4;
 }
 
 // 服务内部协议
@@ -77,7 +82,7 @@ message TableConfigure {
 message ReqStartBattle {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 1001;
+    ID = 102101;
   }
   // int32 game_id = 1;
   string game_name = 2;
@@ -90,7 +95,7 @@ message ReqStartBattle {
 message RespStartBattle {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 1002;
+    ID = 102102;
   }
   string battle_id = 1;
   string playid = 2;
@@ -99,7 +104,7 @@ message RespStartBattle {
 message ReqBattleOver {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 1003;
+    ID = 102103;
   }
 
   enum State {
@@ -121,7 +126,7 @@ message ReqBattleOver {
 message RespBattleOver {
   enum MSGID {
     _INVALID_ = 0;
-    ID = 1004;
+    ID = 102104;
   }
   string battle_id = 1;
   int32 errcode = 2;

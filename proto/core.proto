@@ -4,10 +4,13 @@ package openproto.core;
 option go_package = "msg/core";
 option csharp_namespace = "src.msg.core";
 
+// Battle ServerType = 100
+// msg id start from 100 * 1000 = 100000
+
 message NotifyClientDisconnect {
   enum MSGID {
     __invilid__MSGID = 0;
-    ID = 10001;
+    ID = 100001;
   }
 
   uint32 uid = 1;

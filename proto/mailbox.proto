@@ -4,8 +4,6 @@ package openproto.route;
 option go_package = "msg/mailbox";
 option csharp_namespace = "src.msg.mailbox";
 
-// 管理员协议
-
 message MailAttachment {
   message MailAttachmentItem {
     string name = 1;

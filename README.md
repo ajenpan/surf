@@ -6,17 +6,15 @@ surf is an utils lib for my golang serivce
 
 ### version 1
 
-1. 客户端和节点收发消息
-1. 只需要支持单节点部署. 不做路由, 不染色
-1. 不做服务发现.写死
+### todolist
 
-## todolist
-
-- [x] gate conn 状态通知 (使用消息队列感觉有延迟)
+- [x] gate conn 状态通知 (使用消息队列需要引入第三方消息队列)
 - [x] 拆分 gate
 - [x] 服务注册
 - [ ] 服务发现
 - [x] 日志改进
+- [ ] 服务配置
+- [ ] 节点之间通信
 - [ ] guandan 玩法
 - [ ] lobby 模块
 - [ ] auth 改进

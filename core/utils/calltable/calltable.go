@@ -73,3 +73,13 @@ func (m *CallTable) Add(method *Method) bool {
 	}
 	return true
 }
+
+func (m *CallTable) AddFunction(f interface{}) {
+	m.Add(MustExtractFunction(f))
+}
+
+func (m *CallTable) AddFunctionWithName(name string, f interface{}) {
+	method := MustExtractFunction(f)
+	method.Name = name
+	m.Add(method)
+}

@@ -1,20 +1,28 @@
 
-$protocbin = "protoc.exe"
 
+# Get current script directory
+$scriptPath = $PSScriptRoot
+Write-Output "current script path: $scriptPath"
+
+$workDir = Convert-Path "$scriptPath/.."
+
+$protoDir = Join-Path $workDir "proto"
+Write-Output "workdir: $workDir, proto dir: $protoDir"
+
+$protocbin = "protoc.exe"
 Write-Output $protocbin
 & $protocbin --version
 
-# for golang 
-Get-ChildItem -Path ../proto -Recurse -Filter *.proto | ForEach-Object {    
-    $outputPath = $_.DirectoryName    
-    Write-Output  $_.FullName
-    & $protocbin --proto_path=$outputPath --go_out=. $_.FullName
-}
+$goOutDir = "$workDir/msg"
 
 #for csharp
-mkdir -p msg-cs
-Get-ChildItem -Path ../proto -Recurse -Filter *.proto | ForEach-Object {    
-    $outputPath = $_.DirectoryName    
+$csharpOutDir = "$workDir/msg-cs"
+mkdir $csharpOutDir -ErrorAction SilentlyContinue
+
+# for golang 
+Get-ChildItem -Path $protoDir -Recurse -Filter *.proto | ForEach-Object {    
+    $protoPath = $_.DirectoryName    
     Write-Output  $_.FullName
-    & $protocbin --proto_path=$outputPath --csharp_out=./msg-cs/ --csharp_opt=file_extension=.pb.cs $_.FullName
+    & $protocbin --proto_path=$protoPath --go_out=$goOutDir $_.FullName
+    & $protocbin --proto_path=$protoPath --csharp_out=$csharpOutDir --csharp_opt=file_extension=.pb.cs  $_.FullName
 }

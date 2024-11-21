@@ -51,15 +51,15 @@ func (h *Auth) ServerName() string {
 }
 
 func (h *Auth) ServerType() uint16 {
-	return 10
+	return core.ServerType_UAuth
 }
 
 func (h *Auth) CTByName() *calltable.CallTable {
 	ct := calltable.NewCallTable()
-	ct.Add(calltable.ExtractFunction("Login", h.OnReqLogin))
-	ct.Add(calltable.ExtractFunction("AnonymousLogin", h.AnonymousLogin))
-	ct.Add(calltable.ExtractFunction("Register", h.OnReqRegister))
-	ct.Add(calltable.ExtractFunction("UserInfo", h.OnReqUserInfo))
+	ct.AddFunctionWithName("Login", h.OnReqLogin)
+	ct.AddFunctionWithName("AnonymousLogin", h.AnonymousLogin)
+	ct.AddFunctionWithName("Register", h.OnReqRegister)
+	ct.AddFunctionWithName("UserInfo", h.OnReqUserInfo)
 	return ct
 }
 

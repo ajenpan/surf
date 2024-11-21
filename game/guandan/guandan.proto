@@ -92,14 +92,14 @@ message GameInfo {
 
 message ReqGameInfo {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3001;
   }
 }
 
 message RespGameInfo {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3002;
   }
   GameInfo game_info = 1;
@@ -107,7 +107,7 @@ message RespGameInfo {
 
 message ReqPlayerOutCards {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3005;
   }
   OutCardInfo out_cards = 1;
@@ -115,7 +115,7 @@ message ReqPlayerOutCards {
 
 message RespPlayerOutCards {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3006;
   }
   int32 flag = 1;
@@ -125,7 +125,7 @@ message RespPlayerOutCards {
 
 message NotifyPlayerOutCards {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3106;
   }
   int32 seat_id = 1;
@@ -134,7 +134,7 @@ message NotifyPlayerOutCards {
 
 message ReqPlayerDoubleBet {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3007;
   }
   int32 double_bet = 1;
@@ -142,7 +142,7 @@ message ReqPlayerDoubleBet {
 
 message RespPlayerDoubleBet {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3008;
   }
   int32 flag = 1;
@@ -151,7 +151,7 @@ message RespPlayerDoubleBet {
 
 message NotifyPlayerDoubleBet {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3105;
   }
   int32 seat_id = 1;
@@ -160,7 +160,7 @@ message NotifyPlayerDoubleBet {
 
 message NotifyGameStage {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3101;
   }
 
@@ -174,7 +174,7 @@ message NotifyGameStage {
 
 message NotifyPlayerActionPower {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3102;
   }
   int32 seat_id = 1;
@@ -185,7 +185,7 @@ message NotifyPlayerActionPower {
 
 message NotifyPlayerHandCards {
   enum MSGID {
-    unknow = 0;
+    _INVALID_ = 0;
     ID = 3107;
   }
   int32 seat_id = 1;

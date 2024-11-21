@@ -1,6 +1,7 @@
 package calltable
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -111,20 +112,33 @@ func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
 	return uint32(IDDesc.Number())
 }
 
-func ExtractFunction(name string, f interface{}) *Method {
+func MustExtractFunction(f interface{}) *Method {
+	m, err := ExtractFunction(f)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+func ExtractFunction(f interface{}) (*Method, error) {
 	refv := reflect.ValueOf(f)
 	if refv.Kind() != reflect.Func {
-		return nil
+		return nil, fmt.Errorf("not a function")
 	}
 	reqtype := refv.Type().In(1).Elem()
+	msg, ok := reflect.New(reqtype).Interface().(proto.Message)
+	if !ok {
+		return nil, fmt.Errorf("not a proto message")
+	}
 
+	id := GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	ret := &Method{
-		Name:        name,
-		ID:          0,
+		Name:        string(msg.ProtoReflect().Descriptor().Name()),
+		ID:          id,
 		Func:        refv,
 		RequestType: reqtype,
 	}
-	return ret
+	return ret, nil
 }
 
 func ExtractMethodFromDesc(ms protoreflect.MessageDescriptors, h interface{}) *CallTable {

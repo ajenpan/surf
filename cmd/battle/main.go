@@ -14,7 +14,7 @@ import (
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
-	battleMsg "github.com/ajenpan/surf/msg/battle"
+	msgBattle "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle"
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
 
@@ -72,17 +72,15 @@ func RegGames() {
 }
 
 func RealMain(c *cli.Context) error {
-
 	pk, err := LoadAuthPublicKey()
 	if err != nil {
 		panic(err)
 	}
 
 	h := battleHandler.New()
-	CTByID := calltable.ExtractMethodFromDesc(battleMsg.File_battle_proto.Messages(), h)
+	calltable := calltable.ExtractMethodFromDesc(msgBattle.File_battle_proto.Messages(), h)
 
 	uid := 10001
-
 	uinfo := &auth.UserInfo{
 		UId:   uint32(uid),
 		UName: fmt.Sprintf("%s_%d", h.ServerName(), uid),
@@ -111,7 +109,7 @@ func RealMain(c *cli.Context) error {
 		Server:         h,
 		HttpListenAddr: ":13300",
 		WsListenAddr:   ":13301",
-		Calltable:      CTByID,
+		Calltable:      calltable,
 		// PublicKeyFilePath: "http://myali01:9999/publickey",
 		PublicKeyFilePath: "file://./public.pem",
 		GateAddrList: []string{
