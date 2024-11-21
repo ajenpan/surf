@@ -121,11 +121,13 @@ func MustExtractFunction(f interface{}) *Method {
 }
 
 func ExtractFunction(f interface{}) (*Method, error) {
-	refv := reflect.ValueOf(f)
-	if refv.Kind() != reflect.Func {
+	reft := reflect.TypeOf(f)
+	if reft.Kind() != reflect.Func {
 		return nil, fmt.Errorf("not a function")
 	}
-	reqtype := refv.Type().In(1).Elem()
+
+	lastParamIndex := reft.NumIn() - 1
+	reqtype := reft.In(lastParamIndex).Elem()
 	msg, ok := reflect.New(reqtype).Interface().(proto.Message)
 	if !ok {
 		return nil, fmt.Errorf("not a proto message")
@@ -135,7 +137,7 @@ func ExtractFunction(f interface{}) (*Method, error) {
 	ret := &Method{
 		Name:        string(msg.ProtoReflect().Descriptor().Name()),
 		ID:          id,
-		Func:        refv,
+		Func:        reflect.ValueOf(f),
 		RequestType: reqtype,
 	}
 	return ret, nil

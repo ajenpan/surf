@@ -1,6 +1,7 @@
 package guandan
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -65,7 +66,7 @@ type Guandan struct {
 
 	gameTime time.Duration
 
-	CT *calltable.CallTable
+	ct *calltable.CallTable
 
 	lastStage *StageInfo
 	currStage *StageInfo
@@ -104,7 +105,7 @@ func (g *Guandan) getStageInfo(t StageType) *StageInfo {
 		return &StageInfo{
 			StageType:  StageType_Stage_None,
 			ExitCond:   g.allPlayerOnline,
-			TimeToLive: 10 * time.Second,
+			TimeToLive: 3 * time.Second,
 		}
 	case StageType_Stage_GameStart:
 		return &StageInfo{
@@ -117,7 +118,7 @@ func (g *Guandan) getStageInfo(t StageType) *StageInfo {
 	case StageType_Stage_DoubleBet:
 		return &StageInfo{
 			StageType:  StageType_Stage_DoubleBet,
-			TimeToLive: 15 * time.Second,
+			TimeToLive: 3 * time.Second,
 			ExitCond:   g.allDoubleRateSet,
 			OnExitFn:   g.fullPlayerDoubleBet,
 		}
@@ -168,7 +169,10 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 		return fmt.Errorf("player count not match, expect 4, got:%v", len(opts.Players))
 	}
 
-	g.CT = calltable.NewCallTable()
+	ct := calltable.NewCallTable()
+	ct.AddFunction(g.OnReqGameInfo)
+
+	g.ct = ct
 
 	for _, p := range opts.Players {
 		if p.SeatID() < 0 || p.SeatID() >= MaxSeatCnt {
@@ -178,8 +182,9 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 		g.players[p.SeatID()] = &Player{
 			raw: p,
 			gameInfo: &PlayerGameInfo{
-				SeatId:      p.SeatID(),
-				CurrOutCard: nil,
+				SeatId: p.SeatID(),
+				UserId: int32(p.UID()),
+				Score:  p.Score(),
 			},
 		}
 	}
@@ -194,8 +199,26 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 
 // handle message
 func (g *Guandan) OnReqGameInfo(player *Player, msg *ReqGameInfo) {
+	gameInfo := &GameInfo{
+		Stage:    g.currStage.StageType,
+		SubStage: 0,
+		Conf: &GameConf{
+			Wildcard: int32(g.WildCard.Rank()),
+		},
+		PlayerInfo: make(map[int32]*PlayerGameInfo, len(g.players)),
+	}
+
+	if g.currActionPlayer != nil {
+		gameInfo.CurrActionPowerSeatid = g.currActionPlayer.gameInfo.SeatId
+		gameInfo.CurrActionType = g.currActionPlayer.actionPower.ActionPower.ActionType
+	}
+
+	for _, p := range g.players {
+		gameInfo.PlayerInfo[p.gameInfo.SeatId] = p.gameInfo
+	}
+
 	resp := &RespGameInfo{
-		// todo:
+		GameInfo: gameInfo,
 	}
 	g.sendMsg(player, resp)
 }
@@ -292,7 +315,7 @@ func (g *Guandan) OnPlayerConnStatus(p battle.Player, enable bool) {
 }
 
 func (g *Guandan) OnPlayerMessage(p battle.Player, msgid uint32, data []byte) {
-	method := g.CT.GetByID(msgid)
+	method := g.ct.GetByID(msgid)
 	if method == nil {
 		return
 	}
@@ -306,7 +329,7 @@ func (g *Guandan) OnPlayerMessage(p battle.Player, msgid uint32, data []byte) {
 		return
 	}
 	player := g.playerConv(p)
-	method.Call(g, player, req)
+	method.Call(player, req)
 }
 
 func (g *Guandan) OnTick(delta time.Duration) {
@@ -367,6 +390,8 @@ func (g *Guandan) doDealingCards() {
 			SeatId: p.gameInfo.SeatId,
 			Cards:  p.gameInfo.HandCards,
 		}
+
+		g.Info("deal cards", "seatid", p.gameInfo.SeatId, "cards", base64.StdEncoding.EncodeToString(p.gameInfo.HandCards))
 		g.sendMsg(p, notice)
 	}
 }
@@ -446,7 +471,7 @@ func (g *Guandan) playerActionTimeoutHelp(player *Player) {
 				DeckType: DeckType_Deck_Pass,
 			}
 		} else {
-			cards := player.handCards.PopBack()
+			cards := player.handCards.Back()
 			action.OutCards = &OutCardInfo{
 				DeckType: DeckType_Deck_Single,
 				Cards:    []byte{byte(cards)},
@@ -506,6 +531,8 @@ func (g *Guandan) changeLogicStep(nextStage *StageInfo) bool {
 
 	donwtime := g.getStageDowntime(g.currStage.StageType).Seconds()
 
+	nextStage.OnEnter()
+
 	g.Info("game stage changed", "from", g.lastStage.StageType, "to", g.currStage.StageType, "donwtime", donwtime)
 
 	notice := &NotifyGameStage{
@@ -514,10 +541,7 @@ func (g *Guandan) changeLogicStep(nextStage *StageInfo) bool {
 		Downtime:  int32(donwtime),
 		Deadline:  time.Now().Add(time.Second * time.Duration(donwtime)).Unix(),
 	}
-
 	g.broadcastMsg(notice)
-
-	nextStage.OnEnter()
 	return true
 }
 
