@@ -36,7 +36,7 @@ type AfterCancelFunc func()
 type Table interface {
 	BattleID() string
 
-	SendMessageToPlayer(p Player, msgid uint32, data proto.Message)
+	SendMessageToPlayer(p Player, syn uint32, msgid uint32, data proto.Message)
 
 	BroadcastMessage(msgid uint32, data proto.Message)
 
@@ -66,7 +66,7 @@ type Logic interface {
 	OnPlayerConnStatus(p Player, enable bool)
 
 	// Called when a player sends a message.
-	OnPlayerMessage(p Player, msgid uint32, data []byte)
+	OnPlayerMessage(p Player, syn uint32, msgid uint32, data []byte)
 
 	OnReset()
 }

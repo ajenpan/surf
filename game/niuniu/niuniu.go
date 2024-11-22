@@ -90,8 +90,8 @@ func (nn *Niuniu) BroadcastMessage(msg protobuf.Message) {
 	nn.table.BroadcastMessage(GetMessageMsgID(msg.ProtoReflect().Descriptor()), msg)
 }
 
-func (nn *Niuniu) Send2Player(p battle.Player, msg protobuf.Message) {
-	nn.table.SendMessageToPlayer(p, GetMessageMsgID(msg.ProtoReflect().Descriptor()), msg)
+func (nn *Niuniu) Send2Player(p battle.Player, syn uint32, msg protobuf.Message) {
+	nn.table.SendMessageToPlayer(p, syn, GetMessageMsgID(msg.ProtoReflect().Descriptor()), msg)
 }
 
 func (nn *Niuniu) OnPlayerConnStatus(player battle.Player, enable bool) {
@@ -147,7 +147,7 @@ func (nn *Niuniu) OnCommand(topic string, data []byte) {
 
 }
 
-func (nn *Niuniu) OnPlayerMessage(p battle.Player, msgid uint32, raw []byte) {
+func (nn *Niuniu) OnPlayerMessage(p battle.Player, syn uint32, msgid uint32, raw []byte) {
 	nn.Info("recv msgid", "msgid", msgid)
 }
 
@@ -159,7 +159,7 @@ func (nn *Niuniu) OnReqGameInfo(p battle.Player, req *ReqGameInfo) {
 	resp := &RespGameInfo{
 		Info: nn.info,
 	}
-	nn.Send2Player(p, resp)
+	nn.Send2Player(p, 0, resp)
 }
 
 func (nn *Niuniu) checkStat(p *NNPlayer, expect GameStep) error {
@@ -444,7 +444,7 @@ func (nn *Niuniu) sendCardToPlayer() {
 			SeatId:    p.SeatId,
 			HandCards: p.HandCards,
 		}
-		nn.Send2Player(p.raw, notice)
+		nn.Send2Player(p.raw, 0, notice)
 	}
 
 	for _, p := range nn.players {

@@ -6,21 +6,20 @@ Write-Output "current script path: $scriptPath"
 
 $workDir = Convert-Path "$scriptPath/.."
 
-$protoDir = Join-Path $workDir "proto"
-Write-Output "workdir: $workDir, proto dir: $protoDir"
-
 $protocbin = "protoc.exe"
 Write-Output $protocbin
 & $protocbin --version
 
-$goOutDir = "$workDir/msg"
+$goOutDir = "$workDir"
 
 #for csharp
 $csharpOutDir = "$workDir/msg-cs"
 mkdir $csharpOutDir -ErrorAction SilentlyContinue
 
+$protofiles = Get-ChildItem -Path $(Join-Path $workDir "proto"), $(Join-Path $workDir "game") -Recurse -File -Filter *.proto
+ 
 # for golang 
-Get-ChildItem -Path $protoDir -Recurse -Filter *.proto | ForEach-Object {    
+$protofiles | ForEach-Object {    
     $protoPath = $_.DirectoryName    
     Write-Output  $_.FullName
     & $protocbin --proto_path=$protoPath --go_out=$goOutDir $_.FullName

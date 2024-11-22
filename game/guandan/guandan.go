@@ -1,10 +1,10 @@
 package guandan
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -24,7 +24,7 @@ func NewGuandan() *Guandan {
 	ret := &Guandan{
 		players: make(map[int32]*Player),
 		conf: &LogicConfig{
-			OutCardTimeSec: 15,
+			OutCardTimeSec: 4,
 			WildCardRank:   2,
 		},
 		Logger: slog.Default().With("game", "guandan"),
@@ -34,19 +34,9 @@ func NewGuandan() *Guandan {
 
 const MaxSeatCnt = 4
 
-type Player struct {
-	raw    battle.Player
-	online bool
-
-	handCards *gdpoker.GDCards
-	gameInfo  *PlayerGameInfo
-
-	outcards []*OutCardInfo
-
-	getPowerAt time.Time
-
-	powerDeadLine time.Time
-	actionPower   *NotifyPlayerActionPower
+type msgContext struct {
+	player *Player
+	syn    uint32
 }
 
 type LogicConfig struct {
@@ -75,6 +65,12 @@ type Guandan struct {
 	currActionPlayer *Player
 
 	rawDeck []byte
+
+	outcardHead       *OutCardInfo
+	outcardHeadPlayer *Player
+
+	currOutCardRank uint8 // 当前名次
+	gameResult      bool  // 是否结束
 }
 
 func (g *Guandan) nextStage(curr StageType) StageType {
@@ -99,7 +95,7 @@ func (g *Guandan) nextStage(curr StageType) StageType {
 	return StageType_Stage_None
 }
 
-func (g *Guandan) getStageInfo(t StageType) *StageInfo {
+func (g *Guandan) newStageInfo(t StageType) *StageInfo {
 	switch t {
 	case StageType_Stage_None:
 		return &StageInfo{
@@ -171,6 +167,8 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 
 	ct := calltable.NewCallTable()
 	ct.AddFunction(g.OnReqGameInfo)
+	ct.AddFunction(g.OnReqPlayerDoubleBet)
+	ct.AddFunction(g.OnReqPlayerOutCards)
 
 	g.ct = ct
 
@@ -190,7 +188,7 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 	}
 
 	g.WildCard = poker.NewCard(poker.HEART, (poker.CardRank)(g.conf.WildCardRank))
-	g.currStage = g.getStageInfo(StageType_Stage_None)
+	g.currStage = g.newStageInfo(StageType_Stage_None)
 	g.currStage.OnEnter()
 
 	g.Info("guandan logic init success", "conf", g.conf)
@@ -198,7 +196,7 @@ func (g *Guandan) OnInit(opts battle.LogicOpts) error {
 }
 
 // handle message
-func (g *Guandan) OnReqGameInfo(player *Player, msg *ReqGameInfo) {
+func (g *Guandan) OnReqGameInfo(ctx msgContext, msg *ReqGameInfo) {
 	gameInfo := &GameInfo{
 		Stage:    g.currStage.StageType,
 		SubStage: 0,
@@ -220,11 +218,12 @@ func (g *Guandan) OnReqGameInfo(player *Player, msg *ReqGameInfo) {
 	resp := &RespGameInfo{
 		GameInfo: gameInfo,
 	}
-	g.sendMsg(player, resp)
+	g.sendMsg(ctx.player, ctx.syn, resp)
 }
 
-func (g *Guandan) OnReqPlayerDoubleBet(player *Player, msg *ReqPlayerDoubleBet) {
+func (g *Guandan) OnReqPlayerDoubleBet(ctx *msgContext, msg *ReqPlayerDoubleBet) {
 	flag := int32(0)
+	player := ctx.player
 
 	if player.actionPower == nil {
 		flag = 101
@@ -239,7 +238,7 @@ func (g *Guandan) OnReqPlayerDoubleBet(player *Player, msg *ReqPlayerDoubleBet) 
 	resp := &RespPlayerDoubleBet{
 		Flag: flag,
 	}
-	g.sendMsg(player, resp)
+	g.sendMsg(player, ctx.syn, resp)
 
 	if flag != 0 {
 		return
@@ -252,53 +251,83 @@ func (g *Guandan) OnReqPlayerDoubleBet(player *Player, msg *ReqPlayerDoubleBet) 
 	g.broadcastMsg(notify)
 }
 
-func (g *Guandan) OnReqPlayerOutCards(player *Player, msg *ReqPlayerOutCards) {
+func (g *Guandan) OnReqPlayerOutCards(ctx *msgContext, msg *ReqPlayerOutCards) {
+	player := ctx.player
+
+	respFn := func(flag int32) {
+		resp := &RespPlayerOutCards{
+			Flag:      flag,
+			HandCards: player.gameInfo.HandCards,
+		}
+		g.sendMsg(player, ctx.syn, resp)
+	}
+
+	flag := g.playerOutCards(player, msg.OutCards, respFn)
+
+	if flag != 0 {
+		g.Warn("player out cards error", "player", player.raw.UID(), "flag", flag)
+	}
+}
+
+func (g *Guandan) checkFinish() {
+	teamAFinished := g.getPlayerBySeatId(0).handCards.IsEmpty() && g.getPlayerBySeatId(2).handCards.IsEmpty()
+	teamBFinished := g.getPlayerBySeatId(1).handCards.IsEmpty() && g.getPlayerBySeatId(3).handCards.IsEmpty()
+
+	if teamAFinished || teamBFinished {
+		g.Info("game finished", "teamAFinished", teamAFinished, "teamBFinished", teamBFinished)
+		g.gameResult = true
+	}
+}
+
+func (g *Guandan) playerOutCards(player *Player, outcards *OutCardInfo, respFunc func(int32)) int32 {
 	flag := func() int32 {
 		if player.actionPower == nil {
 			return 101
 		}
-		outcards := msg.GetOutCards()
-		cards, err := poker.BytesToCards(outcards.GetCards())
-		if err != nil {
-			g.Error("parse outcards error", "err", err)
-			return 201
-		}
-		result := gdpoker.GetDeckPower(g.WildCard, cards)
-		if (DeckType)(result.DeckType) != outcards.GetDeckType() {
-			g.Error("decktype not match", "expect", result.DeckType, "got", outcards.GetDeckType())
-			return 202
-		}
-		ok := player.handCards.RemoveCards(cards)
-		if !ok {
-			g.Error("remove cards error")
-			return 203
-		}
 
-		player.gameInfo.HandCards = player.handCards.Bytes()
-		player.outcards = append(player.outcards, outcards)
+		if outcards.GetDeckType() != DeckType_Deck_Pass {
+			cards, err := poker.BytesToCards(outcards.GetCards())
+			if err != nil {
+				g.Error("parse outcards error", "err", err)
+				return 201
+			}
+			// TODO compare deck power
+			// result := gdpoker.GetDeckPower(g.WildCard, cards)
+			// if (DeckType)(result.DeckType) != outcards.GetDeckType() {
+			// 	g.Error("decktype not match", "expect", result.DeckType, "got", outcards.GetDeckType())
+			// 	return 202
+			// }
+			ok := player.handCards.RemoveCards(cards)
+			if !ok {
+				g.Error("remove cards error")
+				return 203
+			}
+			player.gameInfo.HandCards = player.handCards.Bytes()
 
+			g.outcardHead = outcards
+			g.outcardHeadPlayer = player
+		}
 		return 0
 	}()
 
-	resp := &RespPlayerOutCards{
-		Flag:      flag,
-		HandCards: player.gameInfo.HandCards,
+	if respFunc != nil {
+		respFunc(flag)
 	}
 
-	g.sendMsg(player, resp)
-
-	if flag != 0 {
-		return
-	}
+	player.outcards = append(player.outcards, outcards)
 
 	notify := &NotifyPlayerOutCards{
-		OutCards: msg.OutCards,
+		OutCards: outcards,
 		SeatId:   player.gameInfo.SeatId,
 	}
 
 	g.broadcastMsg(notify)
-
 	g.setNextOutCardPlayer(player)
+
+	if outcards.GetDeckType() != DeckType_Deck_Pass {
+		g.checkFinish()
+	}
+	return flag
 }
 
 func (g *Guandan) OnReset() {
@@ -306,30 +335,43 @@ func (g *Guandan) OnReset() {
 }
 
 func (g *Guandan) hasGameResult() bool {
-	return false
+	return g.gameResult
 }
 
 func (g *Guandan) OnPlayerConnStatus(p battle.Player, enable bool) {
 	player := g.playerConv(p)
 	player.online = enable
+
+	// if g.getStageInfo()
 }
 
-func (g *Guandan) OnPlayerMessage(p battle.Player, msgid uint32, data []byte) {
+func (g *Guandan) OnPlayerMessage(p battle.Player, syn uint32, msgid uint32, data []byte) {
 	method := g.ct.GetByID(msgid)
 	if method == nil {
+		g.Error("method not found", "msgid", msgid)
 		return
 	}
 
 	req, ok := method.GetRequest().(proto.Message)
 	if !ok {
+		g.Error("method request type error", "msgid", msgid)
 		return
 	}
 	err := proto.Unmarshal(data, req)
 	if err != nil {
+		g.Error("method request unmarshal error", "msgid", msgid, "err", err)
 		return
 	}
 	player := g.playerConv(p)
-	method.Call(player, req)
+	if player == nil {
+		g.Error("player not found", "seatid", p.SeatID())
+		return
+	}
+	ctx := msgContext{
+		player: player,
+		syn:    syn,
+	}
+	method.Call(ctx, req)
 }
 
 func (g *Guandan) OnTick(delta time.Duration) {
@@ -338,26 +380,12 @@ func (g *Guandan) OnTick(delta time.Duration) {
 	curr := g.currStage
 	if curr.CheckExit() {
 		nextType := g.nextStage(curr.StageType)
-		nextStage := g.getStageInfo(nextType)
+		nextStage := g.newStageInfo(nextType)
 		g.changeLogicStep(nextStage)
 		return
 	}
 
 	curr.OnProcess(delta)
-}
-
-func (g *Guandan) getStageDowntime(s StageType) time.Duration {
-	switch s {
-	case StageType_Stage_None:
-		return 10 * time.Second
-	case StageType_Stage_GameStart:
-		return 1 * time.Second
-	case StageType_Stage_DoubleBet:
-		return 15 * time.Second
-	case StageType_Stage_DealingCards:
-		return 4 * time.Second
-	}
-	return 0
 }
 
 func (g *Guandan) allPlayerOnline() bool {
@@ -383,6 +411,8 @@ func (g *Guandan) doDealingCards() {
 	deck.Shuffle()
 	g.rawDeck = deck.Bytes()
 
+	g.currOutCardRank = 1
+
 	for _, p := range g.players {
 		p.handCards = deck.DealCards(27)
 		p.gameInfo.HandCards = p.handCards.Bytes()
@@ -391,16 +421,19 @@ func (g *Guandan) doDealingCards() {
 			Cards:  p.gameInfo.HandCards,
 		}
 
-		g.Info("deal cards", "seatid", p.gameInfo.SeatId, "cards", base64.StdEncoding.EncodeToString(p.gameInfo.HandCards))
-		g.sendMsg(p, notice)
+		g.Info("deal cards", "seatid", p.gameInfo.SeatId, "cards:", p.handCards.Chinese())
+		g.sendMsg(p, 0, notice)
 	}
 }
 
 func (g *Guandan) setFirstOutCardPlayer() {
-	g.setOutCardPlayer(g.getPlayerBySeatId(0), &ActionPower_OutCardConf{EnablePass: false})
+	seatid := rand.Int31n(MaxSeatCnt)
+	g.Info("set first out card player", "seatid", seatid)
+	conf := &ActionPower_OutCardConf{EnablePass: false, PowerType: ActionPower_FirstOut}
+	g.setPlayerOutCardPower(g.getPlayerBySeatId(seatid), conf)
 }
 
-func (g *Guandan) setOutCardPlayer(p *Player, conf *ActionPower_OutCardConf) {
+func (g *Guandan) setPlayerOutCardPower(p *Player, conf *ActionPower_OutCardConf) {
 	g.currActionPlayer = p
 	p.getPowerAt = time.Now()
 	p.powerDeadLine = p.getPowerAt.Add(time.Second * time.Duration(g.conf.OutCardTimeSec))
@@ -418,35 +451,56 @@ func (g *Guandan) setOutCardPlayer(p *Player, conf *ActionPower_OutCardConf) {
 	}
 
 	p.actionPower = notice
-
 	g.broadcastMsg(notice)
 }
 
 func (g *Guandan) setNextOutCardPlayer(currPlayer *Player) {
 	currPlayer.actionPower = nil
-
 	currSeatId := currPlayer.gameInfo.SeatId
 
 	var nextplayer *Player = nil
 
-	for i := int32(0); i < 4; i++ {
+	isWindflow := false
+
+	for i := int32(0); i < MaxSeatCnt; i++ {
 		nextseatid := (currSeatId + i + 1) % MaxSeatCnt
-		temp := g.getPlayerBySeatId(nextseatid)
-		if temp == nil {
-			slog.Error("get next player error")
+		target := g.getPlayerBySeatId(nextseatid)
+		if target == nil {
+			g.Error("get next player error")
 			return
 		}
-		if temp.handCards.Size() != 0 {
-			nextplayer = temp
+
+		if target.resultRank > 0 {
+			continue
+		}
+
+		if target.handCards.IsEmpty() && g.outcardHeadPlayer == target {
+			nextplayer = g.getPlayerBySeatId((target.raw.SeatID() + 2) % MaxSeatCnt)
+			isWindflow = true
 			break
 		}
+
+		if target.handCards.Size() != 0 {
+			nextplayer = target
+			break
+		}
+
+		g.Warn("no player can out card", "seatid", currSeatId)
 	}
 
 	if nextplayer == nil {
+		g.Error("no player can out card", "seatid", currSeatId)
 		return
 	}
 
-	g.setOutCardPlayer(nextplayer, &ActionPower_OutCardConf{EnablePass: true})
+	conf := &ActionPower_OutCardConf{}
+	if isWindflow {
+		conf.EnablePass = false
+		conf.PowerType = ActionPower_Windflow
+	} else {
+		conf.EnablePass = g.outcardHeadPlayer != nextplayer
+	}
+	g.setPlayerOutCardPower(nextplayer, conf)
 }
 
 func (g *Guandan) onGaming(time.Duration) {
@@ -477,7 +531,11 @@ func (g *Guandan) playerActionTimeoutHelp(player *Player) {
 				Cards:    []byte{byte(cards)},
 			}
 		}
-		g.OnReqPlayerOutCards(player, action)
+
+		flag := g.playerOutCards(player, action.OutCards, nil)
+		if flag != 0 {
+			g.Warn("player out cards error", "player", player.raw.UID(), "flag", flag)
+		}
 		return
 	}
 }
@@ -491,13 +549,13 @@ func (g *Guandan) broadcastMsg(msg proto.Message) {
 	g.table.BroadcastMessage(msgid, msg)
 }
 
-func (g *Guandan) sendMsg(p *Player, msg proto.Message) {
+func (g *Guandan) sendMsg(p *Player, syn uint32, msg proto.Message) {
 	msgid, err := gutils.GetMessageMsgID(msg.ProtoReflect().Descriptor())
 	if err != nil {
 		g.Error("sendMsg get message error", "msgname", msg.ProtoReflect().Descriptor().Name(), "err", err)
 		return
 	}
-	g.table.SendMessageToPlayer(p.raw, msgid, msg)
+	g.table.SendMessageToPlayer(p.raw, syn, msgid, msg)
 }
 
 func (g *Guandan) playerConv(p battle.Player) *Player {
@@ -529,7 +587,8 @@ func (g *Guandan) changeLogicStep(nextStage *StageInfo) bool {
 
 	currStage.OnExit()
 
-	donwtime := g.getStageDowntime(g.currStage.StageType).Seconds()
+	// donwtime := g.getStageDowntime(g.currStage.StageType).Seconds()
+	donwtime := g.currStage.TimeToLive.Seconds()
 
 	nextStage.OnEnter()
 

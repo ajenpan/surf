@@ -210,7 +210,7 @@ func (d *Table) ReportBattleEvent(topic string, event proto.Message) {
 	d.PublishEvent(event)
 }
 
-func (d *Table) SendMessageToPlayer(p battle.Player, msgid uint32, msg proto.Message) {
+func (d *Table) SendMessageToPlayer(p battle.Player, sync uint32, msgid uint32, msg proto.Message) {
 	rp := p.(*Player)
 	raw, err := proto.Marshal(msg)
 	if err != nil {
@@ -277,11 +277,11 @@ func (d *Table) PublishEvent(eventmsg proto.Message) {
 	d.opts.EventPublisher.Publish(warp)
 }
 
-func (d *Table) OnPlayerMessage(uid int64, msgid uint32, iraw []byte) {
+func (d *Table) OnPlayerMessage(uid int64, syn uint32, msgid uint32, iraw []byte) {
 	d.Do(func() {
 		p := d.Players.ByUID(uid)
 		if p != nil && d.logic != nil {
-			d.logic.OnPlayerMessage(p, msgid, iraw)
+			d.logic.OnPlayerMessage(p, syn, msgid, iraw)
 		}
 	})
 }

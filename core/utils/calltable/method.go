@@ -6,8 +6,6 @@ import (
 )
 
 type Method struct {
-	Handler interface{}
-
 	Name string
 	ID   uint32
 
@@ -31,23 +29,10 @@ func (m *Method) InitPool() {
 }
 
 func (m *Method) Call(args ...interface{}) []reflect.Value {
-	var values []reflect.Value
-
-	if m.Handler == nil {
-		argc := len(args)
-		values = make([]reflect.Value, argc)
-		for i, v := range args {
-			values[i] = reflect.ValueOf(v)
-		}
-	} else {
-		argc := len(args) + 1
-		values = make([]reflect.Value, argc)
-		values[0] = reflect.ValueOf(m.Handler)
-		for i, v := range args {
-			values[i+1] = reflect.ValueOf(v)
-		}
+	values := make([]reflect.Value, len(args))
+	for i, v := range args {
+		values[i] = reflect.ValueOf(v)
 	}
-
 	return m.Func.Call(values)
 }
 

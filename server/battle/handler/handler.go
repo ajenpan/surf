@@ -129,5 +129,5 @@ func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *msgBattle.BattleMsgTo
 		log.Warn("battle not found", "battleid", in.BattleId)
 		return
 	}
-	d.OnPlayerMessage(int64(ctx.FromUserID()), in.Msgid, in.Data)
+	d.OnPlayerMessage(int64(ctx.FromUserID()), in.Syn, in.Msgid, in.Data)
 }
