@@ -9,7 +9,7 @@ import (
 	utilsRsa "github.com/ajenpan/surf/core/utils/rsagen"
 )
 
-var log = slog.Default().With("module", "gate")
+var log = slog.Default()
 
 func StartNodeListener(r *Gate, addr string) (func(), error) {
 	ws, err := network.NewWSServer(network.WSServerOptions{

@@ -3,12 +3,13 @@ package guandan
 import "time"
 
 type StageInfo struct {
-	OnEnterFn   func()
-	OnExitFn    func()
-	OnProcessFn func(duration time.Duration)
-	ExitCond    func() bool
-	StageType   StageType
-	TimeToLive  time.Duration
+	OnBeforeEnterFn func()
+	OnEnterFn       func()
+	OnExitFn        func()
+	OnProcessFn     func(duration time.Duration)
+	ExitCond        func() bool
+	StageType       StageType
+	TimeToLive      time.Duration
 
 	subStage int32
 	enterAt  time.Time
@@ -24,11 +25,18 @@ func (stage *StageInfo) OnProcess(delta time.Duration) {
 	stage.age += delta
 }
 
+func (stage *StageInfo) OnBeforeEnter() {
+	if stage.OnBeforeEnterFn != nil {
+		stage.OnBeforeEnterFn()
+	}
+	stage.subStage = 1
+}
+
 func (stage *StageInfo) OnEnter() {
 	if stage.OnEnterFn != nil {
 		stage.OnEnterFn()
 	}
-	stage.subStage = 1
+	stage.subStage = 10
 	stage.enterAt = time.Now()
 }
 

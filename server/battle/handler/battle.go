@@ -11,7 +11,7 @@ import (
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
-var log = slog.Default().With("module", "battle")
+var log = slog.Default()
 
 type Battle struct {
 	tables        sync.Map
