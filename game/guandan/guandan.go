@@ -8,7 +8,6 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	gdpoker "github.com/ajenpan/poker_algorithm/guandan"
 	"github.com/ajenpan/poker_algorithm/poker"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	gutils "github.com/ajenpan/surf/game/utils"
@@ -23,7 +22,7 @@ func NewGuandan() *Guandan {
 	ret := &Guandan{
 		players: make(map[int32]*Player),
 		conf: &LogicConfig{
-			OutCardTimeSec: 4,
+			OutCardTimeSec: 1,
 			WildCardRank:   2,
 		},
 		Logger: slog.Default().With("game", "guandan"),
@@ -268,14 +267,17 @@ func (g *Guandan) OnReqPlayerOutCards(ctx *msgContext, msg *ReqPlayerOutCards) {
 	}
 }
 
-func (g *Guandan) checkFinish() {
+func (g *Guandan) checkFinish() bool {
 	teamAFinished := g.getPlayerBySeatId(0).handCards.IsEmpty() && g.getPlayerBySeatId(2).handCards.IsEmpty()
 	teamBFinished := g.getPlayerBySeatId(1).handCards.IsEmpty() && g.getPlayerBySeatId(3).handCards.IsEmpty()
 
 	if teamAFinished || teamBFinished {
 		g.Info("game finished", "teamAFinished", teamAFinished, "teamBFinished", teamBFinished)
 		g.gameResult = true
+		return true
 	}
+
+	return false
 }
 
 func (g *Guandan) playerOutCards(player *Player, outcards *OutCardInfo, respFunc func(int32)) int32 {
@@ -283,7 +285,9 @@ func (g *Guandan) playerOutCards(player *Player, outcards *OutCardInfo, respFunc
 		if player.actionPower == nil {
 			return 101
 		}
-
+		if g.currActionPlayer != player {
+			return 102
+		}
 		if outcards.GetDeckType() != DeckType_Deck_Pass {
 			cards, err := poker.BytesToCards(outcards.GetCards())
 			if err != nil {
@@ -296,13 +300,16 @@ func (g *Guandan) playerOutCards(player *Player, outcards *OutCardInfo, respFunc
 			// 	g.Error("decktype not match", "expect", result.DeckType, "got", outcards.GetDeckType())
 			// 	return 202
 			// }
+
 			ok := player.handCards.RemoveCards(cards)
 			if !ok {
 				g.Error("remove cards error")
 				return 203
 			}
-			player.gameInfo.HandCards = player.handCards.Bytes()
+			g.Info("player out cards", "player", player.raw.UID(), "outcards", cards.Chinese(), "outdecktype", outcards.GetDeckType(),
+				"handcards", player.handCards.Chinese())
 
+			player.gameInfo.HandCards = player.handCards.Bytes()
 			g.outcardHead = outcards
 			g.outcardHeadPlayer = player
 		}
@@ -321,16 +328,19 @@ func (g *Guandan) playerOutCards(player *Player, outcards *OutCardInfo, respFunc
 	}
 
 	g.broadcastMsg(notify)
-	g.setNextOutCardPlayer(player)
 
 	if outcards.GetDeckType() != DeckType_Deck_Pass {
-		g.checkFinish()
-
 		if player.handCards.IsEmpty() {
 			player.resultRank = g.currOutCardRank
 			g.currOutCardRank += 1
 		}
+
+		if g.checkFinish() {
+			return flag
+		}
 	}
+
+	g.setNextOutCardPlayer(player)
 	return flag
 }
 
@@ -411,14 +421,17 @@ func (g *Guandan) allDoubleRateSet() bool {
 }
 
 func (g *Guandan) doDealingCards() {
-	deck := gdpoker.NewDeck()
+	// deck := gdpoker.NewDeck()
+	deck := poker.NewDeckWithoutJoker()
 	deck.Shuffle()
 	g.rawDeck = deck.Bytes()
 
 	g.currOutCardRank = 1
 
+	cnt := deck.Size() / len(g.players)
+
 	for _, p := range g.players {
-		p.handCards = deck.DealCards(27)
+		p.handCards = deck.DealCards(cnt)
 		p.gameInfo.HandCards = p.handCards.Bytes()
 		notice := &NotifyPlayerHandCards{
 			SeatId: p.gameInfo.SeatId,
@@ -475,22 +488,17 @@ func (g *Guandan) setNextOutCardPlayer(currPlayer *Player) {
 			return
 		}
 
-		if target.resultRank > 0 {
-			continue
-		}
-
-		if target.handCards.IsEmpty() && g.outcardHeadPlayer == target {
-			nextplayer = g.getPlayerBySeatId((target.raw.SeatID() + 2) % MaxSeatCnt)
-			isWindflow = true
-			break
-		}
-
 		if target.handCards.Size() != 0 {
 			nextplayer = target
 			break
 		}
 
-		g.Warn("no player can out card", "seatid", currSeatId)
+		if g.outcardHeadPlayer == target {
+			nextplayer = g.getPlayerBySeatId((target.raw.SeatID() + 2) % MaxSeatCnt)
+			isWindflow = true
+			break
+		}
+
 	}
 
 	if nextplayer == nil {
@@ -556,6 +564,7 @@ func (g *Guandan) broadcastMsg(msg proto.Message) {
 		g.Error("broadcastMsg get message error", "msgname", msg.ProtoReflect().Descriptor().Name(), "err", err)
 		return
 	}
+	g.Info("broadcast message", "msgid", msgid, "msgname", msg.ProtoReflect().Descriptor().Name(), "msg", msg)
 	g.table.BroadcastMessage(msgid, msg)
 }
 
