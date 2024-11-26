@@ -210,7 +210,6 @@ func (g *Guandan) OnReqGameInfo(ctx *msgContext, msg *ReqGameInfo) {
 
 	if g.currActionPlayer != nil {
 		gameInfo.CurrActionPowerSeatid = g.currActionPlayer.gameInfo.SeatId
-		gameInfo.CurrActionType = g.currActionPlayer.actionPower.ActionPower.ActionType
 	}
 
 	for _, p := range g.players {
@@ -282,7 +281,7 @@ func (g *Guandan) checkFinish() bool {
 
 func (g *Guandan) playerOutCards(player *Player, outcards *OutCardInfo, respFunc func(int32)) int32 {
 	flag := func() int32 {
-		if player.actionPower == nil {
+		if player.outcardPower == nil {
 			return 101
 		}
 		if g.currActionPlayer != player {
@@ -447,33 +446,28 @@ func (g *Guandan) setFirstOutCardPlayer() {
 	// seatid := rand.Int31n(MaxSeatCnt)
 	seatid := int32(0)
 	g.Info("set first out card player", "seatid", seatid)
-	conf := &ActionPower_OutCardConf{EnablePass: false, PowerType: ActionPower_FirstOut}
+	conf := &OutCardConf{EnablePass: false, PowerType: OutCardConf_FirstOut}
 	g.setPlayerOutCardPower(g.getPlayerBySeatId(seatid), conf)
 }
 
-func (g *Guandan) setPlayerOutCardPower(p *Player, conf *ActionPower_OutCardConf) {
+func (g *Guandan) setPlayerOutCardPower(p *Player, conf *OutCardConf) {
 	g.currActionPlayer = p
 	p.getPowerAt = time.Now()
 	p.powerDeadLine = p.getPowerAt.Add(time.Second * time.Duration(g.conf.OutCardTimeSec))
 
-	notice := &NotifyPlayerActionPower{
-		SeatId: p.gameInfo.SeatId,
-		ActionPower: &ActionPower{
-			ActionType: ActionType_Action_OutCard,
-			Conf: &ActionPower_Outcard{
-				Outcard: conf,
-			},
-		},
+	notice := &NotifyPlayerOutCardPower{
+		SeatId:   p.gameInfo.SeatId,
+		Conf:     conf,
 		Deadline: p.powerDeadLine.Unix(),
 		Downtime: int32(g.conf.OutCardTimeSec),
 	}
 
-	p.actionPower = notice
+	p.outcardPower = notice
 	g.broadcastMsg(notice)
 }
 
 func (g *Guandan) setNextOutCardPlayer(currPlayer *Player) {
-	currPlayer.actionPower = nil
+	currPlayer.outcardPower = nil
 	currSeatId := currPlayer.gameInfo.SeatId
 
 	var nextplayer *Player = nil
@@ -506,10 +500,10 @@ func (g *Guandan) setNextOutCardPlayer(currPlayer *Player) {
 		return
 	}
 
-	conf := &ActionPower_OutCardConf{}
+	conf := &OutCardConf{}
 	if isWindflow {
 		conf.EnablePass = false
-		conf.PowerType = ActionPower_Windflow
+		conf.PowerType = OutCardConf_Windflow
 	} else {
 		conf.EnablePass = g.outcardHeadPlayer != nextplayer
 	}
@@ -531,31 +525,29 @@ func (g *Guandan) onGaming(delta time.Duration) {
 }
 
 func (g *Guandan) playerActionTimeoutHelp(player *Player) {
-	if player.actionPower == nil {
+	if player.outcardPower == nil {
 		g.Error("player action timeout help error", "player", player.raw.UID())
 		return
 	}
 
-	if player.actionPower.ActionPower.ActionType == ActionType_Action_OutCard {
-		action := &ReqPlayerOutCards{}
-		if player.actionPower.ActionPower.Conf.(*ActionPower_Outcard).Outcard.EnablePass {
-			action.OutCards = &OutCardInfo{
-				DeckType: DeckType_Deck_Pass,
-			}
-		} else {
-			cards := player.handCards.Back()
-			action.OutCards = &OutCardInfo{
-				DeckType: DeckType_Deck_Single,
-				Cards:    []byte{byte(cards)},
-			}
+	action := &ReqPlayerOutCards{}
+	if player.outcardPower.Conf.EnablePass {
+		action.OutCards = &OutCardInfo{
+			DeckType: DeckType_Deck_Pass,
 		}
-
-		flag := g.playerOutCards(player, action.OutCards, nil)
-		if flag != 0 {
-			g.Warn("player out cards error", "player", player.raw.UID(), "flag", flag)
+	} else {
+		cards := player.handCards.Back()
+		action.OutCards = &OutCardInfo{
+			DeckType: DeckType_Deck_Single,
+			Cards:    []byte{byte(cards)},
 		}
-		return
 	}
+
+	flag := g.playerOutCards(player, action.OutCards, nil)
+	if flag != 0 {
+		g.Warn("player out cards error", "player", player.raw.UID(), "flag", flag)
+	}
+
 }
 
 func (g *Guandan) broadcastMsg(msg proto.Message) {

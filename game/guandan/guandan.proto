@@ -35,14 +35,6 @@ enum DeckType {
   Deck_Windflow = 17;     // 接风
 }
 
-enum ActionType {
-  Action_Unknow = 0;
-  Action_DoubleBet = 10; // 加倍
-  Action_ShowCard = 20;  // 明牌
-  Action_Wildflow = 21;  // 接风
-  Action_OutCard = 30;   // 出牌
-}
-
 // 出牌信息
 message OutCardInfo {
   DeckType deck_type = 1;
@@ -61,30 +53,6 @@ message PlayerGameInfo {
   OutCardInfo curr_out_card = 8;
 }
 
-message ActionPower {
-  ActionType action_type = 1;
-
-  enum OutCardPowerType {
-    Normal = 0;
-    Windflow = 1;
-    FirstOut = 2;
-  }
-
-  message OutCardConf {
-    bool enable_pass = 1;            // 是否可以 `不出` (pass)
-    OutCardPowerType power_type = 2; // 出牌权力类型
-  }
-
-  message DoubleBetConf {
-    bool super_double = 1; // 是否可以超级加倍
-  }
-
-  oneof conf {
-    OutCardConf outcard = 2;
-    DoubleBetConf double_bet = 3;
-  }
-}
-
 message GameConf {
   int32 wildcard = 1;
 }
@@ -96,7 +64,6 @@ message GameInfo {
   map<int32, PlayerGameInfo> player_info = 5;
 
   int32 curr_action_power_seatid = 16;
-  ActionType curr_action_type = 17;
 }
 
 message ReqGameInfo {
@@ -181,17 +148,6 @@ message NotifyGameStage {
   int32 downtime = 14; // 参考倒计时,秒, 以截至时间为准
 }
 
-message NotifyPlayerActionPower {
-  enum MSGID {
-    _INVALID_ = 0;
-    ID = 3102;
-  }
-  int32 seat_id = 1;
-  ActionPower action_power = 2;
-  int64 deadline = 3; // 截止时间, unix时间戳, 秒
-  int32 downtime = 4; // 参考倒计时,秒, 以截至时间为准
-}
-
 message NotifyPlayerHandCards {
   enum MSGID {
     _INVALID_ = 0;
@@ -199,4 +155,41 @@ message NotifyPlayerHandCards {
   }
   int32 seat_id = 1;
   bytes cards = 3;
+}
+
+message DoubleBetConf {
+  bool super_double = 1; // 是否可以超级加倍
+}
+
+message NotifyPlayerDoubleBetPower {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 3108;
+  }
+  int32 seat_id = 1;
+  DoubleBetConf conf = 2;
+  int64 deadline = 3; // 截止时间, unix时间戳, 秒
+  int32 downtime = 4; // 参考倒计时,秒, 以截至时间为准
+}
+
+message OutCardConf {
+  enum OutCardPowerType {
+    Normal = 0;
+    Windflow = 1;
+    FirstOut = 2;
+  }
+
+  bool enable_pass = 1;            // 是否可以 `不出` (pass)
+  OutCardPowerType power_type = 2; // 出牌权力类型
+}
+
+message NotifyPlayerOutCardPower {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 3109;
+  }
+  int32 seat_id = 1;
+  OutCardConf conf = 2;
+  int64 deadline = 3; // 截止时间, unix时间戳, 秒
+  int32 downtime = 4; // 参考倒计时,秒, 以截至时间为准
 }

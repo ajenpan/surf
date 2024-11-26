@@ -19,7 +19,7 @@ type Player struct {
 	getPowerAt time.Time
 
 	powerDeadLine time.Time
-	actionPower   *NotifyPlayerActionPower
+	outcardPower  *NotifyPlayerOutCardPower
 
 	resultRank uint8
 }
