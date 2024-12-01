@@ -141,6 +141,15 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf []byte) er
 		}
 	}()
 
+	d.AfterFunc(3*time.Second, func() {
+		for _, p := range players {
+			if !p.online {
+				p.online = true
+				d.logic.OnPlayerEnter(p, 1, nil)
+			}
+		}
+	})
+
 	return nil
 }
 
@@ -355,6 +364,6 @@ func (d *Table) OnPlayerConn(uid int64, sender PlayerSender, enable bool) {
 
 		p.sender = sender
 		p.online = enable
-		d.logic.OnPlayerConnStatus(p, p.online)
+		d.logic.OnPlayerEnter(p, 0, nil)
 	})
 }

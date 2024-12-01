@@ -2,8 +2,16 @@ syntax = "proto3";
 
 package game.niuniu;
 
+
 option go_package = "game/niuniu;niuniu";
 option csharp_namespace = "game.niuniu";
+
+// gameid 41
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MessageOptions {
+  optional int32 msg_id = 50000; // 选择一个大于 50000 的数字作为自定义选项ID
+}
 
 // 牌型类型
 enum CardType {
@@ -26,7 +34,6 @@ enum CardType {
 enum GameStep {
   UNKNOW = 0;
   IDLE = 1;          // 空闲,等待玩家准备
-  COUNTDOWN = 2;     // 开始倒计时
   BEGIN = 3;         // 开始
   BANKER = 4;        // 抢庄
   BANKER_NOTIFY = 5; // 通知庄
@@ -59,69 +66,117 @@ message GameInfo {
 }
 
 // 游戏全量信息
-message ReqGameInfo {}
+message ReqGameInfo {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41001;
+  }
+  option (msg_id) = 41001;
+}
 
 message RespGameInfo {
-  GameInfo info = 1;
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41002;
+  }
   string game_conf = 2;
   GameInfo game_info = 3;
 }
 
 message NotifyGameStep {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41003;
+  }
   GameStep game_step = 1; // 游戏状态
   int32 time_down = 3;    // 倒计时
 }
 
 // 用户请求抢庄
 message ReqPlayerBanker {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41004;
+  }
   int32 rob = 2; // 1:不抢, 2: 抢
 }
 
 // 广播抢庄用户
 message NotifyPlayerBanker {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41005;
+  }
   int32 seat_id = 1;
   int32 rob = 2;
 }
 
 // 广播庄家位置
 message NotifyBankerSeat {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41006;
+  }
   int32 seat_id = 1;
 }
 
 // 闲家下注
 message ReqPlayerBetRate {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41007;
+  }
   int32 rate = 1;
 }
 
 // 广播闲家下注倍率信息
 message NotifyPlayerBetRate {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41008;
+  }
   int32 seat_id = 1;
   int32 rate = 2;
 }
 
 // 通知用户手牌信息
 message NotifyPlayerHandCards {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41009;
+  }
   int32 seat_id = 1;
   bytes hand_cards = 2;
 }
 
 // 请求上传出牌信息
 message ReqPlayerOutCard {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41010;
+  }
   OutCardInfo out_card = 1;
 }
 
 // 广播用户出牌结果
 message NotifyPlayerOutCard {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41011;
+  }
   int32 seat_id = 1;
   OutCardInfo out_card = 2;
 }
 
 // 游戏结算
 message NotifyGameTally {
+  enum MSGID {
+    _INVALID_ = 0;
+    ID = 41012;
+  }
   message TallyInfo {
     int32 seat_id = 1;
     int32 coins = 2;
   }
-  int32 banker_seat_id = 1;
   map<int32, TallyInfo> tall_info = 2; // 用户输户赢信息
 }

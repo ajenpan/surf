@@ -99,7 +99,7 @@ func (g *Guandan) newStageInfo(t StageType) *StageInfo {
 		return &StageInfo{
 			StageType:  StageType_Stage_None,
 			ExitCond:   g.allPlayerOnline,
-			TimeToLive: 3 * time.Second,
+			TimeToLive: 0,
 		}
 	case StageType_Stage_GameStart:
 		return &StageInfo{
@@ -351,11 +351,14 @@ func (g *Guandan) hasGameResult() bool {
 	return g.gameResult
 }
 
-func (g *Guandan) OnPlayerConnStatus(p battle.Player, enable bool) {
+func (g *Guandan) OnPlayerEnter(p battle.Player, subtype battle.PlayerEnterSubType, extra []byte) {
 	player := g.playerConv(p)
-	player.online = enable
+	player.online = true
+}
 
-	// if g.getStageInfo()
+func (g *Guandan) OnPlayerLeave(p battle.Player, subtype battle.PlayerLeaveSubType, extra []byte) {
+	player := g.playerConv(p)
+	player.online = false
 }
 
 func (g *Guandan) OnPlayerMessage(p battle.Player, syn uint32, msgid uint32, data []byte) {

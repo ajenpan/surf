@@ -55,6 +55,20 @@ type LogicOpts struct {
 	Log     *slog.Logger
 }
 
+type PlayerEnterSubType = int32
+
+const (
+	PlayerEnterSubType_join PlayerEnterSubType = iota
+	PlayerEnterSubType_timeout
+)
+
+type PlayerLeaveSubType = int32
+
+const (
+	PlayerLeaveSubType_leave PlayerLeaveSubType = iota
+	PlayerLeaveSubType_disconnect
+)
+
 type Logic interface {
 	// Called when the logic is created.
 	OnInit(opts LogicOpts) error
@@ -62,8 +76,11 @@ type Logic interface {
 	// Called every tick. 'delta' is the elapsed time since the previous tick.
 	OnTick(delta time.Duration)
 
-	// Called when a player connects or disconnects.
-	OnPlayerConnStatus(p Player, enable bool)
+	// Called when a player enters the game.
+	OnPlayerEnter(p Player, subtype PlayerEnterSubType, extra []byte)
+
+	// Called when a player leaves the game.
+	OnPlayerLeave(p Player, subtype PlayerLeaveSubType, extra []byte)
 
 	// Called when a player sends a message.
 	OnPlayerMessage(p Player, syn uint32, msgid uint32, data []byte)

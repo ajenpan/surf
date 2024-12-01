@@ -22,6 +22,6 @@ $protofiles = Get-ChildItem -Path $(Join-Path $workDir "proto"), $(Join-Path $wo
 $protofiles | ForEach-Object {    
     $protoPath = $_.DirectoryName    
     Write-Output  $_.FullName
-    & $protocbin --proto_path=$protoPath --go_out=$goOutDir $_.FullName
-    & $protocbin --proto_path=$protoPath --csharp_out=$csharpOutDir --csharp_opt=file_extension=.pb.cs  $_.FullName
+    & $protocbin --proto_path="$workDir"/tools/protoc/include/ --proto_path=$protoPath --go_out=$goOutDir $_.FullName
+    & $protocbin --proto_path="$workDir"/tools/protoc/include/ --proto_path=$protoPath --csharp_out=$csharpOutDir --csharp_opt=file_extension=.pb.cs  $_.FullName
 }

@@ -9,9 +9,9 @@ import (
 
 	nncard "github.com/ajenpan/poker_algorithm/niuniu"
 	protobuf "google.golang.org/protobuf/proto"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ajenpan/surf/core/utils/calltable"
+	"github.com/ajenpan/surf/game/utils"
 	"github.com/ajenpan/surf/server/battle"
 )
 
@@ -29,26 +29,11 @@ func NewNiuniu() *Niuniu {
 	return ret
 }
 
-func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
-	MSGIDDesc := msg.Enums().ByName("MSGID")
-	if MSGIDDesc == nil {
-		return 0
-	}
-	IDDesc := MSGIDDesc.Values().ByName("ID")
-	if IDDesc == nil {
-		return 0
-	}
-	return uint32(IDDesc.Number())
-}
-
-// func init() {
-// 	battle.RegisterGame("niuniu", NewLogic)
-// }
-
 type NNPlayer struct {
 	raw battle.Player
 	*GamePlayerInfo
 	rawHandCards *nncard.NNHandCards
+	online       bool
 }
 
 type Config struct {
@@ -87,20 +72,39 @@ type Niuniu struct {
 }
 
 func (nn *Niuniu) BroadcastMessage(msg protobuf.Message) {
-	nn.table.BroadcastMessage(GetMessageMsgID(msg.ProtoReflect().Descriptor()), msg)
+	msgid, err := utils.GetMessageMsgID(msg.ProtoReflect().Descriptor())
+	if err != nil {
+		nn.Error("get msgid error", "err", err)
+		return
+	}
+	nn.table.BroadcastMessage(msgid, msg)
 }
 
 func (nn *Niuniu) Send2Player(p battle.Player, syn uint32, msg protobuf.Message) {
-	nn.table.SendMessageToPlayer(p, syn, GetMessageMsgID(msg.ProtoReflect().Descriptor()), msg)
+	msgid, err := utils.GetMessageMsgID(msg.ProtoReflect().Descriptor())
+	if err != nil {
+		nn.Error("get msgid error", "err", err)
+		return
+	}
+	nn.table.SendMessageToPlayer(p, syn, msgid, msg)
 }
 
 func (nn *Niuniu) OnPlayerConnStatus(player battle.Player, enable bool) {
-	switch nn.getLogicStep() {
-	case GameStep_COUNTDOWN:
-		if enable {
 
-		}
+}
+
+func (nn *Niuniu) OnPlayerEnter(p battle.Player, subtype battle.PlayerEnterSubType, extra []byte) {
+	player := nn.playerConv(p)
+	player.online = true
+
+	if player.GameStep < GameStep_BEGIN {
+		nn.ChangeLogicStep(GameStep_BEGIN)
 	}
+}
+
+func (nn *Niuniu) OnPlayerLeave(p battle.Player, subtype battle.PlayerLeaveSubType, extra []byte) {
+	player := nn.playerConv(p)
+	player.online = false
 }
 
 func (nn *Niuniu) OnInit(opts battle.LogicOpts) error {
@@ -126,7 +130,7 @@ func (nn *Niuniu) OnInit(opts battle.LogicOpts) error {
 
 	nn.table = opts.Table
 	nn.info = &GameInfo{
-		GameStep: GameStep_COUNTDOWN,
+		GameStep: GameStep_IDLE,
 	}
 	nn.gameTime = 0
 
@@ -157,7 +161,8 @@ func (nn *Niuniu) OnEvent(topic string, event protobuf.Message) {
 
 func (nn *Niuniu) OnReqGameInfo(p battle.Player, req *ReqGameInfo) {
 	resp := &RespGameInfo{
-		Info: nn.info,
+		// GameConf: nn.conf.String(),
+		GameInfo: nn.info,
 	}
 	nn.Send2Player(p, 0, resp)
 }
@@ -236,6 +241,7 @@ func (nn *Niuniu) addPlayer(p battle.Player) (*NNPlayer, error) {
 	ret.GamePlayerInfo = &GamePlayerInfo{}
 	ret.GamePlayerInfo.SeatId = int32(p.SeatID())
 	ret.raw = p
+	ret.online = false
 	if _, has := nn.players[int32(p.SeatID())]; has {
 		return nil, fmt.Errorf("seat repeat")
 	}
@@ -249,16 +255,13 @@ func (nn *Niuniu) OnTick(duration time.Duration) {
 
 	switch nn.getLogicStep() {
 	case GameStep_UNKNOW:
-		fallthrough
+		// do nothing
 	case GameStep_IDLE:
-		//do nothing, when the game create but not start
-	case GameStep_COUNTDOWN:
-		if nn.StepTimeover() || nn.checkPlayerStep(GameStep_COUNTDOWN) {
-			nn.ChangeLogicStep(GameStep_BEGIN)
+		if nn.checkPlayerStep(GameStep_BEGIN) {
+			nn.ChangeLogicStep(GameStep_BANKER)
 		}
 	case GameStep_BEGIN:
 		nn.ChangeLogicStep(GameStep_BANKER)
-
 	case GameStep_BANKER:
 		if nn.StepTimeover() || nn.checkPlayerStep(GameStep_BANKER) {
 			nn.ChangeLogicStep(GameStep_BANKER_NOTIFY)
@@ -307,7 +310,7 @@ func (nn *Niuniu) getStageDowntime(s GameStep) time.Duration {
 func nextStep(status GameStep) GameStep {
 	nextStep := status + 1
 	if nextStep > GameStep_OVER {
-		nextStep = GameStep_IDLE
+		nextStep = GameStep_UNKNOW
 	}
 	return nextStep
 }
