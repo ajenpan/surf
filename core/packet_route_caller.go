@@ -2,7 +2,6 @@ package core
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ajenpan/surf/core/marshal"
@@ -21,20 +20,16 @@ type PacketRouteCaller struct {
 	Handler   interface{}
 
 	respWatier sync.Map
-	synIdx     uint32
 }
 
-func (s *PacketRouteCaller) GetSYN() uint32 {
-	ret := atomic.AddUint32(&s.synIdx, 1)
-	if ret == 0 {
-		return atomic.AddUint32(&s.synIdx, 1)
-	}
-	return ret
+type storeKey struct {
+	nodeid uint32
+	syn    uint32
 }
 
-func (s *PacketRouteCaller) PushRespCallback(syn uint32, cb RequestCallbackFunc) error {
-	timeout := time.AfterFunc(3*time.Second, func() {
-		info := s.PopRespCallback(syn)
+func (s *PacketRouteCaller) PushRespCallback(nodeid uint32, syn uint32, timeoutsec uint32, cb RequestCallbackFunc) error {
+	timeout := time.AfterFunc(time.Duration(timeoutsec)*time.Second, func() {
+		info := s.PopRespCallback(nodeid, syn)
 		if info != nil && info.cbfun != nil {
 			info.cbfun(true, nil)
 		}
@@ -50,12 +45,12 @@ func (s *PacketRouteCaller) PushRespCallback(syn uint32, cb RequestCallbackFunc)
 		timeout: timeout,
 	}
 
-	s.respWatier.Store(syn, cache)
+	s.respWatier.Store(storeKey{nodeid, syn}, cache)
 	return nil
 }
 
-func (s *PacketRouteCaller) PopRespCallback(syn uint32) *RequestCallbackCache {
-	cache, ok := s.respWatier.Load(syn)
+func (s *PacketRouteCaller) PopRespCallback(nodeid uint32, syn uint32) *RequestCallbackCache {
+	cache, ok := s.respWatier.Load(storeKey{nodeid, syn})
 	if !ok {
 		return nil
 	}
@@ -95,7 +90,7 @@ func (p *PacketRouteCaller) Call(ctx *ConnContext) {
 
 		method.Call(p.Handler, ctx, req)
 	case RoutePackMsgType_Response:
-		cbinfo := p.PopRespCallback(rpk.GetSYN())
+		cbinfo := p.PopRespCallback(ctx.Conn.UserID(), rpk.GetSYN())
 		if cbinfo == nil {
 			return
 		}

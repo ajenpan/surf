@@ -53,6 +53,18 @@ func (u *userInfo) fromUser(user User) {
 	u.URole = user.UserRole()
 }
 
+type SYNGenerator struct {
+	synIdx uint32
+}
+
+func (s *SYNGenerator) NextSYN() uint32 {
+	ret := atomic.AddUint32(&s.synIdx, 1)
+	if ret == 0 {
+		return atomic.AddUint32(&s.synIdx, 1)
+	}
+	return ret
+}
+
 type FuncOnConnAuth func(data []byte) (User, error)
 type FuncOnConnEnable func(Conn, bool)
 type FuncOnConnPacket func(Conn, *HVPacket)
@@ -70,6 +82,8 @@ type Conn interface {
 
 	SetUserData(any)
 	GetUserData() any
+
+	NextSYN() uint32
 
 	Send(*HVPacket) error
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ajenpan/surf/core/auth"
@@ -22,11 +23,6 @@ import (
 	msgCore "github.com/ajenpan/surf/msg/core"
 )
 
-type Server interface {
-	ServerType() uint16
-	ServerName() string
-}
-
 type Options struct {
 	Server Server
 
@@ -37,6 +33,7 @@ type Options struct {
 	HttpListenAddr string
 	WsListenAddr   string
 	TcpListenAddr  string
+	CmdListenAddr  string
 
 	Calltable *calltable.CallTable
 
@@ -44,6 +41,14 @@ type Options struct {
 	PublicKeyFilePath string
 
 	OnClientDisconnect func(uid uint32, gateNodeId uint32, reason int32)
+
+	EtcdConf *registry.EtcdConfig
+}
+
+type nodeRegistryData struct {
+	NodeStatus int             `json:"node_status"`
+	SurfData   map[string]any  `json:"surf_data"`
+	ServerData json.RawMessage `json:"server_data"`
 }
 
 func NewSurf(opt Options) (*Surf, error) {
@@ -56,10 +61,10 @@ func NewSurf(opt Options) (*Surf, error) {
 }
 
 type Surf struct {
-	opts      Options
-	PublicKey *rsa.PublicKey
+	opts         Options
+	rasPublicKey *rsa.PublicKey
 
-	Reg *registry.EtcdRegistry
+	reg *registry.EtcdRegistry
 
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
@@ -70,6 +75,10 @@ type Surf struct {
 
 	queue  chan func()
 	closed chan struct{}
+
+	mux sync.Mutex
+
+	regData nodeRegistryData
 }
 
 func (s *Surf) Init(opt Options) error {
@@ -77,7 +86,7 @@ func (s *Surf) Init(opt Options) error {
 	if err != nil {
 		return err
 	}
-	s.PublicKey = pubkey
+	s.rasPublicKey = pubkey
 
 	if opt.Marshaler == nil {
 		opt.Marshaler = &marshal.ProtoMarshaler{}
@@ -94,18 +103,44 @@ func (s *Surf) Init(opt Options) error {
 		Calltable: calltable.ExtractMethodFromDesc(msgCore.File_core_proto.Messages(), s),
 		Handler:   s,
 	}
+
+	if opt.EtcdConf != nil {
+		regopts := registry.EtcdRegistryOpts{
+			EtcdConf:   *opt.EtcdConf,
+			NodeId:     fmt.Sprintf("%d", opt.UInfo.UserID()),
+			ServerType: uint16(opt.Server.ServerType()),
+			ServerName: opt.Server.ServerName(),
+			TimeoutSec: 5,
+		}
+		reg, err := registry.NewEtcdRegistry(regopts)
+		if err != nil {
+			return err
+		}
+		s.reg = reg
+
+		s.regData.NodeStatus = 1
+	}
+
 	return nil
 }
 
 func (s *Surf) Do(fn func()) {
 	select {
-	case s.queue <- fn:
+	case <-s.closed:
+		return
 	default:
-		log.Error("queue full, drop fn")
+		select {
+		case s.queue <- fn:
+		default:
+			log.Error("queue full, drop fn")
+		}
 	}
 }
 
 func (s *Surf) Close() error {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
 	select {
 	case <-s.closed:
 		return nil
@@ -113,6 +148,10 @@ func (s *Surf) Close() error {
 		close(s.closed)
 
 		close(s.queue)
+	}
+
+	if s.reg != nil {
+		s.reg.Close()
 	}
 
 	if s.tcpsvr != nil {
@@ -125,6 +164,20 @@ func (s *Surf) Close() error {
 		s.httpsvr.Close()
 	}
 	return nil
+}
+
+func (s *Surf) UpdateNodeData(status int, newdata json.RawMessage) error {
+	s.mux.Lock()
+	s.regData.ServerData = newdata
+	s.regData.NodeStatus = status
+	s.mux.Unlock()
+
+	raw, err := json.Marshal(s.regData)
+	if err != nil {
+		return err
+	}
+
+	return s.reg.UpdateNodeData(string(raw))
 }
 
 func (s *Surf) Run() error {
@@ -162,17 +215,24 @@ func (s *Surf) Run() error {
 		client.Start()
 	}
 
+	if s.reg != nil {
+		s.UpdateNodeData(1, nil)
+	}
+
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, utilSignal.ShutdownSignals()...)
 
 	for {
 		select {
-		case <-signals:
+		case s := <-signals:
+			log.Info("recv close signal", "signal", s)
 			return nil
 		case <-s.closed:
+			log.Info("surf closed")
 			return nil
 		case fn, ok := <-s.queue:
 			if !ok {
+				log.Error("queue closed")
 				return nil
 			}
 			fn()
@@ -249,11 +309,11 @@ func (s *Surf) startTcpSvr() {
 	s.tcpsvr.Start()
 }
 
-func (s *Surf) GetNodeId() uint32 {
+func (s *Surf) getNodeId() uint32 {
 	return s.opts.UInfo.UserID()
 }
 
-func (s *Surf) GetServerType() uint16 {
+func (s *Surf) getServerType() uint16 {
 	return uint16(s.opts.Server.ServerType())
 }
 
@@ -270,24 +330,25 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 	if err != nil {
 		return err
 	}
-	syn := s.serverCaller.GetSYN()
+
+	syn := conn.NextSYN()
 
 	rpk := NewRoutePacket(body)
 	rpk.SetMsgType(RoutePackMsgType_Request)
 	rpk.SetMsgId(msgid)
 	rpk.SetToUID(uid)
 	rpk.SetToURole(ServerType_Client)
-	rpk.SetFromUID(s.GetNodeId())
-	rpk.SetFromURole(s.GetServerType())
+	rpk.SetFromUID(s.getNodeId())
+	rpk.SetFromURole(s.getServerType())
 	rpk.SetSYN(syn)
 
-	s.serverCaller.PushRespCallback(syn, cb)
+	s.serverCaller.PushRespCallback(conn.UserID(), syn, 3, cb)
 
 	pk := rpk.ToHVPacket()
 
 	err = conn.Send(pk)
 	if err != nil {
-		s.serverCaller.PopRespCallback(syn)
+		s.serverCaller.PopRespCallback(conn.UserID(), syn)
 	}
 	return err
 }
@@ -303,9 +364,8 @@ func (s *Surf) SendAsyncToClient(conn network.Conn, to_uid uint32, to_urole uint
 	rpk.SetToUID(to_uid)
 	rpk.SetToURole(to_urole)
 	rpk.SetMsgId(msgid)
-	rpk.SetFromUID(s.GetNodeId())
-	rpk.SetFromURole(s.GetServerType())
-	rpk.SetSYN(s.serverCaller.GetSYN())
+	rpk.SetFromUID(s.getNodeId())
+	rpk.SetFromURole(s.getServerType())
 
 	log.Info("SendAsyncToClient", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(), "to", rpk.GetToUID(),
 		"torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
@@ -345,7 +405,7 @@ func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc
 			return
 		}
 		authdata = strings.TrimPrefix(authdata, "Bearer ")
-		uinfo, err := auth.VerifyToken(s.PublicKey, []byte(authdata))
+		uinfo, err := auth.VerifyToken(s.rasPublicKey, []byte(authdata))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -387,7 +447,7 @@ func (h *Surf) onGatePacket(s network.Conn, pk *network.HVPacket) {
 }
 
 func (h *Surf) onConnAuth(data []byte) (network.User, error) {
-	return auth.VerifyToken(h.PublicKey, data)
+	return auth.VerifyToken(h.rasPublicKey, data)
 }
 
 func (h *Surf) onGateStatus(c network.Conn, enable bool) {

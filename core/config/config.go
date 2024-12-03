@@ -1,6 +1,6 @@
 package config
 
 type Config struct {
-	CoreConfig   map[string]any `json:"core" yaml:"core"`
+	SurfConfig   map[string]any `json:"surf" yaml:"surf"`
 	ServerConfig map[string]any `json:"server" yaml:"server"`
 }

@@ -113,7 +113,6 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 			Nickname: "游客",
 			Gender:   0,
 		}
-
 		res := h.DB.Create(user)
 		if res.Error != nil {
 			err = errors.New(int32(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
@@ -122,14 +121,15 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 			err = errors.New(int32(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
 			return
 		}
-	}
-
-	if user.Passwd != in.Passwd {
-		return
-	}
-
-	if user.Stat != 0 {
-		return
+	} else {
+		if user.Passwd != in.Passwd {
+			err = errors.New(int32(msgUAuth.ResponseFlag_PasswdWrong), "error")
+			return
+		}
+		if user.Stat != 0 {
+			err = errors.New(int32(msgUAuth.ResponseFlag_StatErr), "error")
+			return
+		}
 	}
 
 	assess, err := coreauth.GenerateToken(h.PK, &coreauth.UserInfo{

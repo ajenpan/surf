@@ -17,11 +17,11 @@ type Matcher interface {
 
 type StaticMatcher struct {
 	rwlock sync.RWMutex
-	users  []*UserInfo
+	users  []*User
 }
 
 // TODO:
-func (sm *StaticMatcher) Add(u *UserInfo) {
+func (sm *StaticMatcher) Add(u *User) {
 	sm.rwlock.Lock()
 	defer sm.rwlock.Unlock()
 

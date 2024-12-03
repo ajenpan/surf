@@ -6,6 +6,11 @@ import (
 	"runtime"
 )
 
+type Server interface {
+	ServerType() uint16
+	ServerName() string
+}
+
 type ServerInfo struct {
 	Name       string
 	Version    string

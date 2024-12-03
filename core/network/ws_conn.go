@@ -50,6 +50,7 @@ func wsconnReadPacket(conn *ws.Conn) (*HVPacket, error) {
 
 type WSConn struct {
 	userInfo
+	SYNGenerator
 
 	imp       *ws.Conn
 	status    ConnStatus

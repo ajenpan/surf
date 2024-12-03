@@ -10,13 +10,14 @@ import (
 	etcclientv3 "go.etcd.io/etcd/client/v3"
 )
 
+type EtcdConfig = etcclientv3.Config
+
 type EtcdRegistryOpts struct {
-	NodeId     string             `json:"node_id"`
-	ServerType uint16             `json:"server_type"`
-	ServerName string             `json:"server_name"`
-	NodeData   string             `json:"node_data"`
-	TimeoutSec int64              `json:"timeout_sec"`
-	EtcdConf   etcclientv3.Config `json:"etcd_conf"`
+	NodeId     string     `json:"node_id"`
+	ServerType uint16     `json:"server_type"`
+	ServerName string     `json:"server_name"`
+	TimeoutSec int64      `json:"timeout_sec"`
+	EtcdConf   EtcdConfig `json:"etcd_conf"`
 }
 
 type EtcdRegistry struct {
@@ -60,12 +61,6 @@ func NewEtcdRegistry(opts EtcdRegistryOpts) (*EtcdRegistry, error) {
 		closeCh: make(chan struct{}),
 		opts:    opts,
 		leaseID: grantResp.ID,
-	}
-
-	err = ret.UpdateNodeData(opts.NodeData)
-
-	if err != nil {
-		return nil, err
 	}
 
 	go ret.keepAlive()

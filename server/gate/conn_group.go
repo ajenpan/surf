@@ -13,12 +13,6 @@ type NodeConnGroup struct {
 	lock sync.RWMutex
 }
 
-// func NewGroup() *Group {
-// 	return &Group{
-// 		imp: treemap.NewWithIntComparator(),
-// 	}
-// }
-
 func (g *NodeConnGroup) Add(uid uint64, s network.Conn) {
 	g.lock.Lock()
 	defer g.lock.Unlock()

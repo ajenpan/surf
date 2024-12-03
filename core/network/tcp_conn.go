@@ -27,6 +27,7 @@ func newTcpConn(id string, uinfo User, imp net.Conn, rwtimeout time.Duration) *T
 
 type TcpConn struct {
 	userInfo
+	SYNGenerator
 
 	imp net.Conn
 	id  string

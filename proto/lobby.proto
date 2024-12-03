@@ -4,37 +4,6 @@ package openproto.lobby;
 option go_package = "msg/lobby";
 option csharp_namespace = "src.msg.lobby";
 
-message UserBaseInfo {
-  string nickname = 1;
-  string avatar = 2;
-  int64 reg_time = 3;
-  int64 reg_channel_id = 4;
-}
-
-message PropItem {
-  int32 prop_id = 1;
-  int32 prop_group = 2;
-  int64 count = 3;
-}
-
-message NumberMeta {
-  int32 meta_id = 1;
-  int32 meta_group = 2;
-  int64 value = 3;
-}
-
-message StringMeta {
-  int32 meta_id = 1;
-  int32 meta_group = 2;
-  bytes value = 3;
-}
-
-message PlayerInfo {
-  int32 seat_id = 2;
-}
-
-message GameInfo {}
-
 enum PlayerStatus {
   PlayerNone = 0;
   PlayerInQueue = 10;
@@ -49,21 +18,50 @@ enum TableStatus {
   TableInInGaming = 31;
 }
 
-message PlayingInfo {
+message UserBaseInfo {
+  string nickname = 1;
+  string avatar = 2;
+  int64 reg_time = 3;
+  int64 reg_channel_id = 4;
+}
+
+// 用户道具数据
+message UserPropInfo {
+  map<uint32, int64> props = 1;
+}
+
+// 游戏数据
+message UserGameBaseInfo {
+  int32 game_id = 1;
+  int64 win_cnt = 2;
+  int64 fail_cnt = 3;
+  int64 draw_cnt = 4;
+  int64 exp = 5;
+  int64 play_score = 6;
+}
+
+message UserPlayingInfo {
   PlayerStatus player_status = 1;
-  int32 seat_id = 4;
+  int32 battle_node_id = 5;
+  string battle_id = 6;
+  int32 seat_id = 7;
+}
+
+message UserMetaInfo {
+  map<string, int64> int_meta = 1;
+  map<string, string> str_meta = 2;
 }
 
 message TableInfo {
   string table_id = 1;
   int32 seat_count = 2;
   TableStatus table_status = 3;
-  repeated PlayerInfo players = 4;
+  // repeated TablePlayerInfo players = 4;
 }
 
 message ReqLoginLobby {
   enum MSGID {
-    __inval_msgid = 0;
+    __INVALID__ = 0;
     ID = 12001;
   }
   int64 uid = 1; // 可空
@@ -73,21 +71,19 @@ message ReqLoginLobby {
 
 message RespLoginLobby {
   enum MSGID {
-    __inval_msgid = 0;
+    __INVALID__ = 0;
     ID = 12002;
   }
   int32 flag = 1;
 
   UserBaseInfo base_info = 11;
-  repeated PropItem props = 12;
-  repeated NumberMeta num_meta = 13;
-  repeated StringMeta str_meta = 14;
-  PlayingInfo playing_info = 15;
+  UserPropInfo props = 12;
+  UserMetaInfo meta_info = 13;
 }
 
 message ReqDispatchQue {
   enum MSGID {
-    __inval_msgid = 0;
+    __INVALID__ = 0;
     ID = 12003;
   }
   int32 join_type = 1;
@@ -95,17 +91,32 @@ message ReqDispatchQue {
 
 message RespDispatchQue {
   enum MSGID {
-    __inval_msgid = 0;
+    __INVALID__ = 0;
     ID = 12004;
   }
   int32 flag = 1;
+  int32 dispatch_id = 2;
 }
 
 message NotifyDispatchResult {
   enum MSGID {
-    __inval_msgid = 0;
+    __INVALID__ = 0;
     ID = 12005;
   }
+
+  enum FLAG {
+    OK = 0;
+    LogicNodeEmpty = 1;
+    MaxDispatchCnt = 2;          // 超过最大匹配次数
+    CreateRemoteTableFailed = 3; // 创建桌子失败
+    TableFeeErr = 4;             // 扣手续费失败
+  }
+
+  FLAG flag = 1;
+  int32 battle_node_id = 2; // logic_process appid
+  string battle_id = 3;
+  int32 seat_id = 4;
+  int32 game_id = 5;
 }
 
 message NotifyBattleInfo {

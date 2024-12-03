@@ -35,8 +35,8 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 	rpk.SetSYN(ctx.ReqPacket.GetSYN())
 	rpk.SetToUID(ctx.FromUserID())
 	rpk.SetToURole(ctx.FromUserRole())
-	rpk.SetFromUID(ctx.Core.GetNodeId())
-	rpk.SetFromURole(ctx.Core.GetServerType())
+	rpk.SetFromUID(ctx.Core.getNodeId())
+	rpk.SetFromURole(ctx.Core.getServerType())
 	rpk.SetMsgType(RoutePackMsgType_Response)
 
 	if herr != nil {

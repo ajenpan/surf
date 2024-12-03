@@ -26,40 +26,40 @@ type ClientGate struct {
 	wssvr *network.WSServer
 }
 
-func (ug *ClientGate) Start() error {
+func (cli *ClientGate) Start() error {
 	ws, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   ug.opts.WsListenAddr,
-		OnConnPacket: ug.opts.OnConnPacket,
-		OnConnEnable: ug.onConnEnable,
-		OnConnAuth:   ug.opts.OnConnAuth,
+		ListenAddr:   cli.opts.WsListenAddr,
+		OnConnPacket: cli.opts.OnConnPacket,
+		OnConnEnable: cli.onConnEnable,
+		OnConnAuth:   cli.opts.OnConnAuth,
 	})
 	if err != nil {
 		return err
 	}
-	ug.wssvr = ws
+	cli.wssvr = ws
 	err = ws.Start()
 	return err
 }
 
-func (ug *ClientGate) Stop() error {
-	if ug.wssvr != nil {
-		return ug.wssvr.Stop()
+func (cli *ClientGate) Stop() error {
+	if cli.wssvr != nil {
+		return cli.wssvr.Stop()
 	}
 	return nil
 }
 
-func (ug *ClientGate) GetConnByUid(uid uint32) (network.Conn, bool) {
-	return ug.ClientConn.LoadByUID(uid)
+func (cli *ClientGate) GetConnByUid(uid uint32) (network.Conn, bool) {
+	return cli.ClientConn.LoadByUID(uid)
 }
 
-func (ug *ClientGate) GetConnByCid(cid string) (network.Conn, bool) {
-	return ug.ClientConn.LoadByCID(cid)
+func (cli *ClientGate) GetConnByCid(cid string) (network.Conn, bool) {
+	return cli.ClientConn.LoadByCID(cid)
 }
 
-func (ug *ClientGate) onConnEnable(conn network.Conn, enable bool) {
+func (cli *ClientGate) onConnEnable(conn network.Conn, enable bool) {
 	if enable {
 		log.Info("OnConnEnable", "id", conn.ConnID(), "addr", conn.RemoteAddr(), "uid", conn.UserID(), "urid", conn.UserRole(), "enable", enable)
-		currConn, got := ug.ClientConn.SwapByUID(conn)
+		currConn, got := cli.ClientConn.SwapByUID(conn)
 		if got {
 			ud := currConn.GetUserData()
 			currConn.SetUserData(nil)
@@ -68,12 +68,12 @@ func (ug *ClientGate) onConnEnable(conn network.Conn, enable bool) {
 			log.Info("OnConnEnable: repeat conn, close old conn", "id", currConn.ConnID(), "uid", currConn.UserID())
 			currConn.Close()
 		} else {
-			ug.opts.OnConnEnable(conn, true)
+			cli.opts.OnConnEnable(conn, true)
 		}
 	} else {
-		currConn, got := ug.ClientConn.Delete(conn.ConnID())
+		currConn, got := cli.ClientConn.Delete(conn.ConnID())
 		if got {
-			ug.opts.OnConnEnable(currConn, false)
+			cli.opts.OnConnEnable(currConn, false)
 		}
 	}
 }

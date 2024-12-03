@@ -149,8 +149,6 @@ func (gate *Gate) OnNodeStatus(conn network.Conn, enable bool) {
 }
 
 func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
-	// log.Info("OnNodePacket", "sid", s.ConnID(), "uid", s.UserID(), "type", pk.Meta.GetType(), "datalen", len(pk.Body))
-
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		rpk := core.NewRoutePacket(nil).FromHVPacket(pk)
