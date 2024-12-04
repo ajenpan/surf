@@ -5,11 +5,16 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/ajenpan/surf/core"
 	lobbymsg "github.com/ajenpan/surf/msg/lobby"
 	"github.com/redis/go-redis/v9"
 )
 
 var log = slog.Default()
+
+func NewLobby() *Lobby {
+	return &Lobby{}
+}
 
 type Lobby struct {
 	GameDB *gorm.DB
@@ -25,6 +30,16 @@ func (h *Lobby) ServerType() uint16 {
 
 func (h *Lobby) ServerName() string {
 	return "lobby"
+}
+
+func (h *Lobby) OnInit(surf *core.Surf) (err error) {
+	return nil
+}
+
+func (h *Lobby) OnReady()
+
+func (h *Lobby) OnStop() error {
+	return nil
 }
 
 func (h *Lobby) GetUserGameInfo(uid uint32) (*lobbymsg.UserBaseInfo, error) {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
+	"google.golang.org/protobuf/proto"
 )
 
 type UserGameInfo = msgLobby.UserGameBaseInfo
@@ -19,21 +20,21 @@ type UserPlayInfo struct {
 }
 
 type UserConnInfo struct {
-	ConnId    uint32
+	ConnID    string
 	ChannelId int32
 	OSType    string
 	IP        string
 	LoginAt   time.Time
+	Sender    func(msg proto.Message) error
 }
 
 type User struct {
 	UserId uint32
 
 	BaseInfo UserBaseInfo
-
 	GameInfo UserGameInfo
+	PlayInfo UserPlayInfo
 	PropInfo UserPropInfo
-
 	MetaInfo UserMetaInfo
 	ConnInfo UserConnInfo
 }

@@ -12,9 +12,7 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/utils/calltable"
 	"github.com/ajenpan/surf/core/utils/rsagen"
-	msgBattle "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle"
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
 
@@ -38,16 +36,6 @@ func main() {
 }
 
 func Run() error {
-	info := core.NewServerInfo()
-	info.Name = Name
-	info.Version = Version
-	info.GitCommit = GitCommit
-	info.BuildAt = BuildAt
-
-	cli.VersionPrinter = func(c *cli.Context) {
-		fmt.Println(info.LongVersion())
-	}
-
 	app := cli.NewApp()
 	app.Version = Version
 	app.Name = Name
@@ -78,7 +66,7 @@ func RealMain(c *cli.Context) error {
 	}
 
 	h := battleHandler.New()
-	calltable := calltable.ExtractMethodFromDesc(msgBattle.File_battle_proto.Messages(), h)
+	// calltable := calltable.ExtractMethodFromDesc(msgBattle.File_battle_proto.Messages(), h)
 
 	uid := 10001
 	uinfo := &auth.UserInfo{
@@ -106,23 +94,21 @@ func RealMain(c *cli.Context) error {
 	RegGames()
 
 	opts := core.Options{
-		Server:         h,
 		HttpListenAddr: ":13300",
 		WsListenAddr:   ":13301",
-		Calltable:      calltable,
 		// PublicKeyFilePath: "http://myali01:9999/publickey",
 		PublicKeyFilePath: "file://./public.pem",
 		GateAddrList: []string{
 			"ws://localhost:13000",
 		},
 		GateToken:          []byte(jwt),
-		UInfo:              uinfo,
 		OnClientDisconnect: h.OnPlayerDisConn,
 	}
-	surf, err := core.NewSurf(opts)
+	surf, err := core.NewSurf2(opts)
 	if err != nil {
 		return err
 	}
+
 	err = surf.Run()
 	return err
 }

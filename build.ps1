@@ -13,13 +13,13 @@ $svrlist = @("gate", "battle", "uauth", "gateclient")
 
 go env -w GOOS="linux"
 foreach ($svr in $svrlist) {
-    go build -o "$release_dir/$svr" "./cmd/$svr"
+    go build -trimpath -o "$release_dir/$svr" "./cmd/$svr"
 }
 
 # Build for Windows
 go env -w GOOS="windows"
 foreach ($svr in $svrlist) {
-    go build -o "$release_dir/$svr.exe" "./cmd/$svr"
+    go build -trimpath -o "$release_dir/$svr.exe" "./cmd/$svr"
 }
 
 go env -w GOOS=$current_os

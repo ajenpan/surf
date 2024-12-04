@@ -6,8 +6,11 @@ import (
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
 )
 
+type TableUIDT uint32
+
 type Table struct {
 	idx          uint64
+	tuid         TableUIDT
 	status       msgLobby.TableStatus
 	battleNodeId uint32
 	BattleId     string

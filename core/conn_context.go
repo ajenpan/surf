@@ -15,6 +15,8 @@ type Context interface {
 
 	FromUserID() uint32
 	FromUserRole() uint16
+
+	ConnID() string
 }
 
 type ConnContext struct {
@@ -35,7 +37,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 	rpk.SetSYN(ctx.ReqPacket.GetSYN())
 	rpk.SetToUID(ctx.FromUserID())
 	rpk.SetToURole(ctx.FromUserRole())
-	rpk.SetFromUID(ctx.Core.getNodeId())
+	rpk.SetFromUID(ctx.Core.NodeID())
 	rpk.SetFromURole(ctx.Core.getServerType())
 	rpk.SetMsgType(RoutePackMsgType_Response)
 
@@ -73,4 +75,8 @@ func (ctx *ConnContext) FromUserID() uint32 {
 
 func (ctx *ConnContext) FromUserRole() uint16 {
 	return ctx.ReqPacket.GetFromURole()
+}
+
+func (ctx *ConnContext) ConnID() string {
+	return ctx.Conn.ConnID()
 }

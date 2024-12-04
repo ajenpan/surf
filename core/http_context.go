@@ -59,3 +59,7 @@ func (ctx *HttpContext) FromUserID() uint32 {
 func (ctx *HttpContext) FromUserRole() uint16 {
 	return ctx.UInfo.URole
 }
+
+func (ctx *HttpContext) ConnID() string {
+	return "HttpContext"
+}
