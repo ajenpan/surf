@@ -43,9 +43,6 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 	if svrinfo.Marshaler == nil {
 		svrinfo.Marshaler = &marshal.ProtoMarshaler{}
 	}
-	if svrinfo.CallTable == nil {
-		svrinfo.CallTable = calltable.NewCallTable()
-	}
 
 	surf := &Surf{
 		serverInfo: svrinfo,
@@ -99,10 +96,7 @@ func (s *Surf) init() error {
 	}
 	s.rasPublicKey = pubkey
 
-	s.innerCaller = &PacketRouteCaller{
-		Calltable: calltable.ExtractMethodFromDesc(msgCore.File_core_proto.Messages(), s),
-		Handler:   s,
-	}
+	s.innerCaller = NewPacketRouteCaller()
 
 	s.serverInfo.CallTable.RangeByID(func(key uint32, value *calltable.Method) bool {
 		log.Info("handle func", "msgid", key, "funcname", value.Name)
@@ -357,13 +351,17 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 	rpk.SetFromURole(s.getServerType())
 	rpk.SetSYN(syn)
 
-	s.serverCaller.PushRespCallback(conn.UserID(), syn, 3, cb)
+	const timeoutsec = 3
+
+	cbkey := ResponseRouteKey{conn.UserID(), syn}
+
+	s.serverCaller.PushRespCallback(cbkey, timeoutsec, cb)
 
 	pk := rpk.ToHVPacket()
-
 	err = conn.Send(pk)
+
 	if err != nil {
-		s.serverCaller.PopRespCallback(conn.UserID(), syn)
+		s.serverCaller.PopRespCallback(cbkey)
 	}
 	return err
 }
@@ -404,6 +402,10 @@ func (s *Surf) SendToNode(nodeid uint32, svrtype uint16, pk *network.HVPacket) e
 func (s *Surf) GetClientConn(id uint32) network.Conn {
 	// todo
 	return nil
+}
+
+func (s *Surf) AddRequestHandleByMsgId(msgid uint32, h HandlerFunc) {
+
 }
 
 func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc {
