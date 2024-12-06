@@ -115,8 +115,14 @@ message NotifyDispatchResult {
   FLAG flag = 1;
   int32 battle_node_id = 2; // logic_process appid
   string battle_id = 3;
-  int32 seat_id = 4;
-  int32 game_id = 5;
+
+  message TablePlayer {
+    int64 uid = 1;
+    int32 seat_id = 2;
+    string nickname = 3;
+    int64 score = 4;
+  }
+  repeated TablePlayer players = 4;
 }
 
 message NotifyBattleInfo {
@@ -149,4 +155,20 @@ message NotifyTableStatus {
 
   TableStatus status = 1;
   int64 status_deadline = 3; // 状态截至时间戳, 0表示没有
+}
+
+message ReqUserDetailInfo {
+  enum MSGID {
+    __invalid = 0;
+    ID = 12030;
+  }
+  repeated int64 uid = 1;
+}
+
+message RespUserDetailInfo {
+  enum MSGID {
+    __invalid = 0;
+    ID = 12031;
+  }
+  map<int64, UserBaseInfo> users = 1;
 }

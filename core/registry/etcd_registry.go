@@ -14,7 +14,7 @@ type EtcdConfig = etcclientv3.Config
 
 type EtcdRegistryOpts struct {
 	NodeId     string     `json:"node_id"`
-	ServerName string     `json:"server_name"`
+	NodeType   string     `json:"node_type"`
 	TimeoutSec int64      `json:"timeout_sec"`
 	EtcdConf   EtcdConfig `json:"etcd_conf"`
 }
@@ -39,7 +39,7 @@ func NewEtcdRegistry(opts EtcdRegistryOpts) (*EtcdRegistry, error) {
 		opts.TimeoutSec = 5
 	}
 
-	nodekey := strings.Join([]string{"/nodes", opts.ServerName, opts.NodeId}, "/")
+	nodekey := strings.Join([]string{"/nodes", opts.NodeType, opts.NodeId}, "/")
 	resp, err := etcdcli.Get(context.Background(), nodekey, etcclientv3.WithLimit(1))
 	if err != nil {
 		return nil, err

@@ -56,7 +56,7 @@ func (s *TcpConn) GetUserData() any {
 	return s.userdata
 }
 
-func (s *TcpConn) ConnID() string {
+func (s *TcpConn) ConnId() string {
 	return s.id
 }
 
@@ -93,11 +93,11 @@ func (s *TcpConn) RemoteAddr() string {
 	return s.imp.RemoteAddr().String()
 }
 
-func (s *TcpConn) LocalAddr() net.Addr {
+func (s *TcpConn) LocalAddr() string {
 	if !s.Enable() {
-		return nil
+		return ""
 	}
-	return s.imp.LocalAddr()
+	return s.imp.LocalAddr().String()
 }
 
 func (s *TcpConn) Enable() bool {

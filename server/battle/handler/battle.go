@@ -11,6 +11,8 @@ import (
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
+const ServerType_Battle core.ServerType = 102
+
 var log = slog.Default()
 
 type Battle struct {
@@ -18,6 +20,8 @@ type Battle struct {
 	LogicCreator  *battle.GameLogicCreator
 	Publisher     event.Publisher
 	userBattleMap sync.Map
+
+	surf *core.Surf
 }
 
 func New() *Battle {
@@ -27,8 +31,23 @@ func New() *Battle {
 	return h
 }
 
+func (h *Battle) OnInit(surf *core.Surf) error {
+	h.surf = surf
+	confstr := surf.ServerConf()
+	log.Info("battle server conf", "conf", confstr)
+	return nil
+}
+
+func (h *Battle) OnReady() {
+	h.surf.UpdateNodeData(core.NodeState_Running, nil)
+}
+
+func (h *Battle) OnStop() error {
+	return nil
+}
+
 func (h *Battle) ServerType() uint16 {
-	return core.ServerType_Battle
+	return ServerType_Battle
 }
 
 func (h *Battle) ServerName() string {

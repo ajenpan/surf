@@ -17,14 +17,13 @@ type Gate struct {
 	Calltable *calltable.CallTable
 	Marshaler marshal.Marshaler
 
-	NodeConn *core.ConnStore
-
 	NodeID uint32
 
 	ClientPublicKey *rsa.PublicKey
 	NodePublicKey   *rsa.PublicKey
 
-	ClientConn *core.ClientGate
+	clientConnStore *core.ClientConnStore
+	nodeConnStore   *core.NodeConnStore
 
 	caller *core.PacketRouteCaller
 }
@@ -50,9 +49,9 @@ func (gate *Gate) OnConnEnable(conn network.Conn, enable bool) {
 }
 
 func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
-	log.Info("OnConnPacket", "sid", s.ConnID(), "uid", s.UserID(), "type", pk.Meta.GetType(), "datalen", len(pk.Body))
+	log.Info("OnConnPacket", "sid", s.ConnId(), "uid", s.UserID(), "type", pk.Meta.GetType(), "datalen", len(pk.Body))
 
-	if pk.Meta.GetType() != network.PacketType_Route || len(pk.Body) < core.RoutePackHeadLen {
+	if pk.Meta.GetType() != network.PacketType_Route || len(pk.Body) < core.RoutePackHeadBytesLen {
 		return
 	}
 
@@ -82,12 +81,12 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	var targetNode network.Conn
 
 	if target_nodeid != 0 {
-		targetNode, _ = gate.NodeConn.LoadByUID(target_nodeid)
+		targetNode, _ = gate.nodeConnStore.LoadByUId(target_nodeid)
 	} else {
 		// get nodeid by servertype
 		nodeid, has := ud.serverType2NodeID[target_svrtype]
 		if has {
-			targetNode, _ = gate.NodeConn.LoadByUID(nodeid)
+			targetNode, _ = gate.nodeConnStore.LoadByUId(nodeid)
 		}
 		if !has || targetNode == nil {
 			targetNode = gate.FindIdleNode(target_svrtype)
@@ -114,9 +113,9 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 }
 
 func (gate *Gate) FindIdleNode(servertype uint16) network.Conn {
-	// TODO:
+	// TODO: the battle node
 	var ret network.Conn
-	gate.NodeConn.Range(func(conn network.Conn) bool {
+	gate.nodeConnStore.Range(func(conn network.Conn) bool {
 		if uint16(conn.UserRole()) == servertype {
 			ret = conn
 			return false
@@ -127,25 +126,16 @@ func (gate *Gate) FindIdleNode(servertype uint16) network.Conn {
 }
 
 func (gate *Gate) OnNodeAuth(data []byte) (network.User, error) {
-	return auth.VerifyToken(gate.NodePublicKey, data)
+	info := &auth.NodeInfo{}
+	err := info.Unmarshal(data)
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
 }
 
 func (gate *Gate) OnNodeStatus(conn network.Conn, enable bool) {
-	if enable {
-		_, loaded := gate.NodeConn.LoadOrStoreByUID(conn)
-		if loaded {
-			// 重复连接, 则直接关闭
-			conn.Close()
-			log.Error("repeat server conn", "connid", conn.ConnID(), "nodeid", conn.UserID(), "svrtype", conn.UserRole())
-		} else {
-			gate.onServerOnline(conn)
-		}
-	} else {
-		currConn, got := gate.NodeConn.Delete(conn.ConnID())
-		if got {
-			gate.onServerOffline(currConn)
-		}
-	}
+	log.Info("OnNodeStatus", "connid", conn.ConnId(), "nodeid", conn.UserID(), "svrtype", conn.UserRole(), "enable", enable)
 }
 
 func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
@@ -166,7 +156,7 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 			return
 		}
 
-		v, found := gate.ClientConn.GetConnByUid(clientUID)
+		v, found := gate.clientConnStore.LoadByUId(clientUID)
 		if !found {
 			log.Warn("client not found", "cid", clientUID)
 			pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
@@ -188,7 +178,7 @@ func (gate *Gate) SendTo(c network.Conn, pk *network.HVPacket) {
 
 func (gate *Gate) onServerOnline(s network.Conn) {
 	gate.PublishEvent("NodeOnline", map[string]any{
-		"conn_id":  s.ConnID(),
+		"conn_id":  s.ConnId(),
 		"node_id":  s.UserID(),
 		"svr_type": s.UserRole(),
 		"enable":   true,
@@ -197,7 +187,7 @@ func (gate *Gate) onServerOnline(s network.Conn) {
 
 func (gate *Gate) onServerOffline(s network.Conn) {
 	gate.PublishEvent("NodeOffline", map[string]any{
-		"conn_id":  s.ConnID(),
+		"conn_id":  s.ConnId(),
 		"node_id":  s.UserID(),
 		"svr_type": s.UserRole(),
 		"enable":   false,
@@ -208,7 +198,7 @@ func (gate *Gate) onUserOnline(conn network.Conn) {
 	conn.SetUserData(NewConnUserData(conn))
 
 	gate.PublishEvent("UserOnline", map[string]any{
-		"sid":      conn.ConnID(),
+		"sid":      conn.ConnId(),
 		"uid":      conn.UserID(),
 		"node_id":  0,
 		"svr_type": gate.ServerType(),
@@ -218,7 +208,7 @@ func (gate *Gate) onUserOnline(conn network.Conn) {
 
 func (gate *Gate) onUserOffline(conn network.Conn) {
 	gate.PublishEvent("UserOffline", map[string]any{
-		"sid":    conn.ConnID(),
+		"sid":    conn.ConnId(),
 		"uid":    conn.UserID(),
 		"enable": false,
 	})
@@ -240,7 +230,7 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 	msgid := calltable.GetMessageMsgID(notify.ProtoReflect().Descriptor())
 
 	for nodeid := range ud.nodeids {
-		node, _ := gate.NodeConn.LoadByUID(nodeid)
+		node, _ := gate.nodeConnStore.LoadByUId(nodeid)
 		if node == nil {
 			continue
 		}

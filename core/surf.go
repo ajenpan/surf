@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -21,88 +22,60 @@ import (
 	utilRsa "github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 	msgCore "github.com/ajenpan/surf/msg/core"
+	"github.com/google/uuid"
 )
 
-type NodeState = int32
+var log = slog.Default().With("module", "surf")
 
-const (
-	NodeState_Closed   NodeState = 0
-	NodeState_Init     NodeState = 1
-	NodeState_Draining NodeState = 10 // maintaining existing connections but not accepting new ones
-	NodeState_Running  NodeState = 100
-)
-
-type Options struct {
-	GateToken    []byte
-	GateAddrList []string
-
-	HttpListenAddr string
-	WsListenAddr   string
-	TcpListenAddr  string
-	CmdListenAddr  string
-
-	Marshaler         marshal.Marshaler
-	PublicKeyFilePath string
+type ServerInfo struct {
+	Svr       Server
+	Marshaler marshal.Marshaler
+	CallTable *calltable.CallTable
 
 	OnClientDisconnect func(uid uint32, gateNodeId uint32, reason int32)
-
-	EtcdConf *registry.EtcdConfig
+	OnClientConnect    func(uid uint32, gateNodeId uint32, ip string)
 }
 
-type nodeRegistryData struct {
-	NodeStatus int             `json:"status"`
-	Meta       map[string]any  `json:"meta"`
-	ServerData json.RawMessage `json:"server_data"`
-}
-
-type NodeAuthConfig struct {
-	RemoteUrl string
-	NodeId    uint32
-	Passwd    string
-}
-
-type NodeAuthResult struct {
-	UInfo  *auth.UserInfo
-	Config []byte
-}
-
-func NewSurf(uinfo auth.User, conf *Config, svr Server) (*Surf, error) {
-	surf := &Surf{
-		serverInfo: ServerInfo{
-			Server: svr,
-		},
-		uinfo:  uinfo,
-		queue:  make(chan func(), 100),
-		closed: make(chan struct{}),
+func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, error) {
+	if svrinfo.Svr == nil {
+		return nil, fmt.Errorf("calltable is nil")
+	}
+	if svrinfo.Marshaler == nil {
+		svrinfo.Marshaler = &marshal.ProtoMarshaler{}
+	}
+	if svrinfo.CallTable == nil {
+		svrinfo.CallTable = calltable.NewCallTable()
 	}
 
-	// config
-
-	err := surf.Init(Options{})
+	surf := &Surf{
+		serverInfo: svrinfo,
+		ninfo:      ninfo,
+		queue:      make(chan func(), 100),
+		closed:     make(chan struct{}),
+		conf:       conf.SurfConf,
+		svrconf:    conf.ServerConf,
+		regData: nodeRegistryData{
+			Status: 1,
+			Node:   ninfo,
+			Meta:   registryMeta{},
+		},
+	}
+	err := surf.init()
 	if err != nil {
 		return nil, err
 	}
-
 	return surf, nil
 }
 
-func NewSurf2(opt Options) (*Surf, error) {
-	s := &Surf{
-		queue:  make(chan func(), 100),
-		closed: make(chan struct{}),
-	}
-	err := s.Init(opt)
-	return s, err
-}
-
 type Surf struct {
-	opts       Options
-	serverInfo ServerInfo
-	uinfo      auth.User
+	conf       SurfConfig
+	svrconf    []byte
+	serverInfo *ServerInfo
+	ninfo      *auth.NodeInfo
 
 	rasPublicKey *rsa.PublicKey
-
-	reg *registry.EtcdRegistry
+	registry     *registry.EtcdRegistry
+	watcher      *registry.EtcdWatch
 
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
@@ -119,36 +92,26 @@ type Surf struct {
 	regData nodeRegistryData
 }
 
-func (s *Surf) Init(opt Options) error {
-	pubkey, err := utilRsa.LoadRsaPublicKeyFromUrl(opt.PublicKeyFilePath)
+func (s *Surf) init() error {
+	pubkey, err := utilRsa.LoadRsaPublicKeyFromUrl(s.conf.PublicKeyFilePath)
 	if err != nil {
 		return err
 	}
 	s.rasPublicKey = pubkey
-
-	if opt.Marshaler == nil {
-		opt.Marshaler = &marshal.ProtoMarshaler{}
-	}
-
-	s.opts = opt
 
 	s.innerCaller = &PacketRouteCaller{
 		Calltable: calltable.ExtractMethodFromDesc(msgCore.File_core_proto.Messages(), s),
 		Handler:   s,
 	}
 
-	return nil
-}
+	s.serverInfo.CallTable.RangeByID(func(key uint32, value *calltable.Method) bool {
+		log.Info("handle func", "msgid", key, "funcname", value.Name)
+		return true
+	})
 
-func (s *Surf) ParseConf(out any) error {
-	// return json.Unmarshal(s.opts.NodeAuthResult.Config, out)
-	return nil
-}
-
-func (s *Surf) SetServerInfo(info *ServerInfo) error {
-	s.serverCaller = &PacketRouteCaller{
-		Calltable: info.Calltable,
-		Handler:   info.Server,
+	err = s.serverInfo.Svr.OnInit(s)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -167,6 +130,10 @@ func (s *Surf) Do(fn func()) {
 	}
 }
 
+func (s *Surf) ServerConf() []byte {
+	return s.svrconf
+}
+
 func (s *Surf) Close() error {
 	s.mux.Lock()
 	defer s.mux.Unlock()
@@ -180,10 +147,9 @@ func (s *Surf) Close() error {
 		close(s.queue)
 	}
 
-	if s.reg != nil {
-		s.reg.Close()
+	if s.registry != nil {
+		s.registry.Close()
 	}
-
 	if s.tcpsvr != nil {
 		s.tcpsvr.Stop()
 	}
@@ -193,13 +159,20 @@ func (s *Surf) Close() error {
 	if s.httpsvr != nil {
 		s.httpsvr.Close()
 	}
+	if s.serverInfo.Svr != nil {
+		s.serverInfo.Svr.OnStop()
+	}
 	return nil
 }
 
-func (s *Surf) UpdateNodeData(status int, newdata json.RawMessage) error {
+func (s *Surf) UpdateNodeData(status NodeState, data json.RawMessage) error {
+	if s.registry == nil {
+		return fmt.Errorf("registry not init")
+	}
+
 	s.mux.Lock()
-	s.regData.ServerData = newdata
-	s.regData.NodeStatus = status
+	s.regData.Data = data
+	s.regData.Status = status
 	s.mux.Unlock()
 
 	raw, err := json.Marshal(s.regData)
@@ -207,58 +180,54 @@ func (s *Surf) UpdateNodeData(status int, newdata json.RawMessage) error {
 		return err
 	}
 
-	return s.reg.UpdateNodeData(string(raw))
+	return s.registry.UpdateNodeData(string(raw))
 }
 
 func (s *Surf) Run() error {
-	s.serverInfo.Calltable.RangeByID(func(key uint32, value *calltable.Method) bool {
-		log.Info("handle func", "msgid", key, "funcname", value.Name)
-		return true
-	})
-
-	if len(s.opts.HttpListenAddr) > 1 {
+	if len(s.conf.HttpListenAddr) > 1 {
 		s.startHttpSvr()
 	}
 
-	if len(s.opts.WsListenAddr) > 1 {
+	if len(s.conf.WsListenAddr) > 1 {
 		s.startWsSvr()
 	}
 
-	if len(s.opts.TcpListenAddr) > 1 {
+	if len(s.conf.TcpListenAddr) > 1 {
 		s.startTcpSvr()
 	}
 
 	defer s.Close()
 
-	log.Info("start gate clients", "addrs", s.opts.GateAddrList)
+	log.Info("start gate clients", "addrs", s.conf.GateAddrList)
 
-	for _, addr := range s.opts.GateAddrList {
+	for _, addr := range s.conf.GateAddrList {
 		log.Info("start gate client", "addr", addr)
 		client := network.NewWSClient(network.WSClientOptions{
 			RemoteAddress:  addr,
 			OnConnPacket:   s.onGatePacket,
 			OnConnEnable:   s.onGateStatus,
-			AuthToken:      []byte(s.opts.GateToken),
-			UInfo:          s.uinfo,
+			AuthToken:      s.ninfo.Marshal(),
+			UInfo:          s.ninfo,
 			ReconnectDelay: 3 * time.Second,
 		})
 		client.Start()
 	}
 
-	if s.opts.EtcdConf != nil {
+	if s.conf.EtcdConf != nil {
 		regopts := registry.EtcdRegistryOpts{
-			EtcdConf:   *s.opts.EtcdConf,
-			NodeId:     fmt.Sprintf("%d", s.uinfo.UserID()),
-			ServerName: s.serverInfo.Server.ServerName(),
+			EtcdConf:   *s.conf.EtcdConf,
+			NodeId:     fmt.Sprintf("%d", s.ninfo.NodeID()),
+			NodeType:   s.ninfo.NodeName(),
 			TimeoutSec: 5,
 		}
 		reg, err := registry.NewEtcdRegistry(regopts)
 		if err != nil {
 			return err
 		}
-		s.reg = reg
-		s.UpdateNodeData(1, nil)
+		s.registry = reg
 	}
+
+	s.serverInfo.Svr.OnReady()
 
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, utilSignal.ShutdownSignals()...)
@@ -282,13 +251,13 @@ func (s *Surf) Run() error {
 }
 
 func (s *Surf) startHttpSvr() {
-	log.Info("start http server", "addr", s.opts.HttpListenAddr)
+	log.Info("start http server", "addr", s.conf.HttpListenAddr)
 
 	mux := http.NewServeMux()
 
-	s.serverInfo.Calltable.RangeByName(func(key string, method *calltable.Method) bool {
+	s.serverInfo.CallTable.RangeByName(func(key string, method *calltable.Method) bool {
 
-		svrname := s.serverInfo.Server.ServerName()
+		svrname := s.ninfo.NodeName()
 
 		if len(svrname) > 0 {
 			key = "/" + svrname + "/" + key
@@ -303,7 +272,7 @@ func (s *Surf) startHttpSvr() {
 	})
 
 	svr := &http.Server{
-		Addr:    s.opts.HttpListenAddr,
+		Addr:    s.conf.HttpListenAddr,
 		Handler: mux,
 	}
 	ln, err := net.Listen("tcp", svr.Addr)
@@ -311,15 +280,17 @@ func (s *Surf) startHttpSvr() {
 		panic(err)
 	}
 
+	s.regData.Meta.HttpListenAddr = ln.Addr().String()
 	s.httpsvr = svr
+
 	go svr.Serve(ln)
 }
 
 func (s *Surf) startWsSvr() {
-	log.Info("start ws server", "addr", s.opts.WsListenAddr)
+	log.Info("start ws server", "addr", s.conf.WsListenAddr)
 
 	ws, err := network.NewWSServer(network.WSServerOptions{
-		ListenAddr:   s.opts.WsListenAddr,
+		ListenAddr:   s.conf.WsListenAddr,
 		OnConnPacket: s.onGatePacket,
 		OnConnEnable: s.onGateStatus,
 		OnConnAuth:   s.onConnAuth,
@@ -328,15 +299,17 @@ func (s *Surf) startWsSvr() {
 		panic(err)
 	}
 
+	s.regData.Meta.WsListenAddr = ws.Address()
+
 	s.wssvr = ws
 	s.wssvr.Start()
 }
 
 func (s *Surf) startTcpSvr() {
-	log.Info("start tcp server", "addr", s.opts.TcpListenAddr)
+	log.Info("start tcp server", "addr", s.conf.TcpListenAddr)
 
 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
-		ListenAddr:       s.opts.TcpListenAddr,
+		ListenAddr:       s.conf.TcpListenAddr,
 		HeatbeatInterval: 30 * time.Second,
 		OnConnPacket:     s.onGatePacket,
 		OnConnStatus:     s.onGateStatus,
@@ -346,16 +319,17 @@ func (s *Surf) startTcpSvr() {
 		panic(err)
 	}
 
+	s.regData.Meta.TcpListenAddr = tcpsvr.Address().String()
 	s.tcpsvr = tcpsvr
 	s.tcpsvr.Start()
 }
 
 func (s *Surf) NodeID() uint32 {
-	return s.uinfo.UserID()
+	return s.ninfo.NodeID()
 }
 
 func (s *Surf) getServerType() uint16 {
-	return uint16(s.serverInfo.Server.ServerType())
+	return s.ninfo.NodeType()
 }
 
 func (s *Surf) SendRequestToClientByUId(uid uint32, msgid uint32, msg any, cb RequestCallbackFunc) error {
@@ -367,7 +341,7 @@ func (s *Surf) SendRequestToClientByUId(uid uint32, msgid uint32, msg any, cb Re
 }
 
 func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any, cb RequestCallbackFunc) error {
-	body, err := s.opts.Marshaler.Marshal(msg)
+	body, err := s.serverInfo.Marshaler.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -395,7 +369,7 @@ func (s *Surf) SendRequestToClient(conn network.Conn, uid, msgid uint32, msg any
 }
 
 func (s *Surf) SendAsyncToClient(conn network.Conn, to_uid uint32, to_urole uint16, msgid uint32, msg any) error {
-	body, err := s.opts.Marshaler.Marshal(msg)
+	body, err := s.serverInfo.Marshaler.Marshal(msg)
 	if err != nil {
 		return err
 	}
@@ -432,11 +406,6 @@ func (s *Surf) GetClientConn(id uint32) network.Conn {
 	return nil
 }
 
-func (s *Surf) GetNodeConn(id uint32) network.Conn {
-	// todo
-	return nil
-}
-
 func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc {
 	// method.Func
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -446,7 +415,7 @@ func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc
 			return
 		}
 		authdata = strings.TrimPrefix(authdata, "Bearer ")
-		uinfo, err := auth.VerifyToken(s.rasPublicKey, []byte(authdata))
+		uinfo, err := s.onConnAuth([]byte(authdata))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -468,12 +437,13 @@ func (s *Surf) WrapMethod(url string, method *calltable.Method) http.HandlerFunc
 		}
 
 		var ctx Context = &HttpContext{
-			W:     w,
-			R:     r,
-			UInfo: uinfo,
+			W:      w,
+			R:      r,
+			UInfo:  uinfo,
+			ConnId: uuid.NewString(),
 		}
 
-		method.Call(s.serverInfo.Server, ctx, req)
+		method.Call(s.serverInfo.Svr, ctx, req)
 	}
 }
 
@@ -492,8 +462,16 @@ func (h *Surf) onConnAuth(data []byte) (network.User, error) {
 }
 
 func (h *Surf) onGateStatus(c network.Conn, enable bool) {
-	// TOOD:
-	log.Info("conn status", "id", c.ConnID(), "uid", c.UserID(), "utype", c.UserRole(), "status", enable)
+	log.Info("conn status", "id", c.ConnId(), "uid", c.UserID(), "utype", c.UserRole(), "status", enable)
+	if c.UserRole() == ServerType_Client {
+		if enable {
+			h.notifyClientConnect(c.UserID(), h.ninfo.NodeID(), c.RemoteAddr())
+		} else {
+			h.notifyClientDisconnect(c.UserID(), h.ninfo.NodeID(), msgCore.NotifyClientDisconnect_Disconnect)
+		}
+	} else {
+		// node:
+	}
 }
 
 func (s *Surf) catch() {
@@ -502,13 +480,26 @@ func (s *Surf) catch() {
 	}
 }
 
-func (s *Surf) OnNotifyClientDisconnect(ctx Context, msg *msgCore.NotifyClientDisconnect) {
-	log.Info("recv notify client disconnect", "uid", msg.Uid, "gateNodeId", msg.GateNodeId, "reason", msg.Reason)
-	if s.opts.OnClientDisconnect != nil {
+func (s *Surf) notifyClientConnect(uid uint32, gateNodeId uint32, ip string) {
+	log.Info("recv notify client connect", "uid", uid, "gateNodeId", gateNodeId, "ip", ip)
+	if s.serverInfo.OnClientConnect != nil {
 		s.Do(func() {
-			s.opts.OnClientDisconnect(msg.Uid, msg.GateNodeId, int32(msg.Reason))
+			s.serverInfo.OnClientConnect(uid, gateNodeId, ip)
 		})
 	}
+}
+
+func (s *Surf) notifyClientDisconnect(uid uint32, gateNodeId uint32, reason msgCore.NotifyClientDisconnect_Reason) {
+	log.Info("recv notify client disconnect", "uid", uid, "gateNodeId", gateNodeId, "reason", reason)
+	if s.serverInfo.OnClientDisconnect != nil {
+		s.Do(func() {
+			s.serverInfo.OnClientDisconnect(uid, gateNodeId, int32(reason))
+		})
+	}
+}
+
+func (s *Surf) OnNotifyClientDisconnect(ctx Context, msg *msgCore.NotifyClientDisconnect) {
+	s.notifyClientDisconnect(msg.Uid, msg.GateNodeId, msg.Reason)
 }
 
 func (s *Surf) onRoutePacket(c network.Conn, rpk *RoutePacket) {

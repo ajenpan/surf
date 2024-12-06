@@ -95,7 +95,7 @@ func Test_Speed(t *testing.T) {
 }
 
 func compareFileContent(t *testing.T, filename string, str string) {
-	content, err := ioutil.ReadFile(filename)
+	content, err := os.ReadFile(filename)
 	t.Log(string(content))
 	if assert.Empty(t, err) {
 		assert.Equal(t, str, string(content))

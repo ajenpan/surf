@@ -78,7 +78,7 @@ func GenConnID() string {
 type Conn interface {
 	User
 
-	ConnID() string
+	ConnId() string
 
 	SetUserData(any)
 	GetUserData() any
@@ -89,5 +89,6 @@ type Conn interface {
 
 	Close() error
 	Enable() bool
+
 	RemoteAddr() string
 }

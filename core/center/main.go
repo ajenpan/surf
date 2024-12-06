@@ -62,11 +62,9 @@ type IDInfo struct {
 	Ip          string `json:"remote_ip,omitempty"`
 	Localip     string `json:"local_ip,omitempty"`
 	ContainerId string `json:"container_id,omitempty"`
-	// AllocAt     string `json:"alloc_at,omitempty"`
-	// OnlineAt    string `json:"online_at,omitempty"`
-	AllocAt  string `json:"-"`
-	OnlineAt string `json:"-"`
-	rwlock   sync.RWMutex
+	AllocAt     string `json:"-"`
+	OnlineAt    string `json:"-"`
+	rwlock      sync.RWMutex
 }
 
 func (info *IDInfo) Clone() *IDInfo {
@@ -314,7 +312,7 @@ func OnLogin(w http.ResponseWriter, r *http.Request) {
 		info = GetIDInfoByAppid(nodeid)
 
 		info.rwlock.Lock()
-		stat := atomic.LoadInt32(&info.Stat) // 需要检查状态不??
+		stat := atomic.LoadInt32(&info.Stat)
 
 		log.Debug("GetIDInfoByAppid", "nodeid", nodeid, "stat", stat, "infocontainerid", info.ContainerId, "containerid", passwd)
 

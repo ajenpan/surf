@@ -86,7 +86,7 @@ func (c *WSConn) Send(p *HVPacket) error {
 	return nil
 }
 
-func (c *WSConn) ConnID() string {
+func (c *WSConn) ConnId() string {
 	return c.id
 }
 

@@ -36,8 +36,13 @@ func NewWSServer(opts WSServerOptions) (*WSServer, error) {
 	}
 	h := &http.ServeMux{}
 	h.HandleFunc("/", ret.ServeHTTP)
-	ret.httpsvr = &http.Server{Addr: ret.opts.ListenAddr, Handler: h}
-
+	ln, err := net.Listen("tcp", ret.opts.ListenAddr)
+	if err != nil {
+		return nil, err
+	}
+	ret.listener = ln
+	ret.addr = ln.Addr()
+	ret.httpsvr = &http.Server{Addr: ret.addr.String(), Handler: h}
 	if ret.opts.OnConnAccpect == nil {
 		ret.upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	} else {
@@ -56,6 +61,9 @@ type WSServer struct {
 	die      chan bool
 	httpsvr  *http.Server
 	upgrader ws.Upgrader
+
+	listener net.Listener
+	addr     net.Addr
 }
 
 func (s *WSServer) log() *slog.Logger {
@@ -63,17 +71,11 @@ func (s *WSServer) log() *slog.Logger {
 }
 
 func (s *WSServer) Start() error {
-	ln, err := net.Listen("tcp", s.httpsvr.Addr)
-	if err != nil {
-		return err
-	}
-
 	go func() {
-		if err := s.httpsvr.Serve(ln); err != nil {
+		if err := s.httpsvr.Serve(s.listener); err != nil {
 			s.log().Error("Serve err", "err", err)
 		}
 	}()
-
 	return nil
 }
 
@@ -136,7 +138,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	pk.Meta.SetType(PacketType_Inner)
 	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFinish)
-	pk.SetBody([]byte(conn.ConnID()))
+	pk.SetBody([]byte(conn.ConnId()))
 	conn.writePacket(pk)
 
 	// the connection is established here
@@ -194,7 +196,7 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *WSServer) Address() string {
-	return s.httpsvr.Addr
+	return s.addr.String()
 }
 
 func (s *WSServer) SocketCount() int {

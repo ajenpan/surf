@@ -109,7 +109,7 @@ func startTcp(ppk *rsa.PrivateKey) (func(), error) {
 			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
 		},
 		OnConnStatus: func(c network.Conn, b bool) {
-			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
+			fmt.Printf("conn:%v status:%v\n", c.ConnId(), b)
 		},
 	})
 	client.Start()
@@ -139,7 +139,7 @@ func StartWsClient(ppk *rsa.PrivateKey) (func(), error) {
 			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
 		},
 		OnConnEnable: func(c network.Conn, b bool) {
-			fmt.Printf("conn:%v status:%v\n", c.ConnID(), b)
+			fmt.Printf("conn:%v status:%v\n", c.ConnId(), b)
 		},
 	})
 

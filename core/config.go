@@ -1,16 +1,20 @@
 package core
 
-import "encoding/json"
+import (
+	"github.com/ajenpan/surf/core/registry"
+)
 
-type Config struct {
-	SurfConf   SurfConfig      `json:"surf"`
-	ServerConf json.RawMessage `json:"server_conf"`
-	NodeConf   json.RawMessage `json:"node_conf"`
+type NodeConf struct {
+	SurfConf   SurfConfig `json:"SurfConf"`
+	ServerConf []byte     `json:"ServerConf"`
 }
 
 type SurfConfig struct {
-	HttpListenAddr string   `yaml:"HttpListenAddr"`
-	WsListenAddr   string   `yaml:"WsListenAddr"`
-	TcpListenAddr  string   `yaml:"TcpListenAddr"`
-	GateAddrList   []string `yaml:"GateAddrList"`
+	HttpListenAddr    string               `json:"HttpListenAddr"`
+	WsListenAddr      string               `yaml:"WsListenAddr"`
+	TcpListenAddr     string               `json:"TcpListenAddr"`
+	GateAddrList      []string             `json:"GateAddrList"`
+	LogLevel          string               `json:"LogLevel"`
+	EtcdConf          *registry.EtcdConfig `json:"EtcdConf"`
+	PublicKeyFilePath string               `json:"PublicKeyFilePath"`
 }

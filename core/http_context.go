@@ -12,9 +12,10 @@ import (
 )
 
 type HttpContext struct {
-	W     http.ResponseWriter
-	R     *http.Request
-	UInfo *auth.UserInfo
+	W      http.ResponseWriter
+	R      *http.Request
+	UInfo  auth.User
+	ConnId string
 }
 
 type httpResponeWrap struct {
@@ -53,13 +54,13 @@ func (ctx *HttpContext) SendAsync(msg proto.Message) error {
 }
 
 func (ctx *HttpContext) FromUserID() uint32 {
-	return ctx.UInfo.UId
+	return ctx.UInfo.UserID()
 }
 
 func (ctx *HttpContext) FromUserRole() uint16 {
-	return ctx.UInfo.URole
+	return ctx.UInfo.UserRole()
 }
 
 func (ctx *HttpContext) ConnID() string {
-	return "HttpContext"
+	return ctx.ConnId
 }

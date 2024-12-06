@@ -2,13 +2,16 @@ package core
 
 import (
 	"encoding/binary"
+	"errors"
 
 	"github.com/ajenpan/surf/core/network"
 )
 
 // | msgid | syn | from_uid | to_uid | from_urole | to_urole | errcode | msgtyp | marshal |
 // | 4     | 4   | 4        | 4      | 2          | 2        | 2       | 1      | 1       |
-const RoutePackHeadLen = 4 + 4 + 4 + 4 + 2 + 2 + 2 + 1 + 1 // 24
+const RoutePackHeadBytesLen = 4 + 4 + 4 + 4 + 2 + 2 + 2 + 1 + 1 // 24
+
+var ErrInvalidRoutePacketHeadBytesLen = errors.New("invalid route packet head bytes length")
 
 const (
 	RoutePackType_SubFlag_RouteFail uint8 = 1
@@ -20,11 +23,11 @@ const (
 	RoutePackMsgType_Response = 2
 )
 
-type routePacketHead []uint8
+type routePacketHeadBytes []uint8
 
 func NewRoutePacket(body []byte) *RoutePacket {
 	return &RoutePacket{
-		Head: make(routePacketHead, RoutePackHeadLen),
+		Head: make(routePacketHeadBytes, RoutePackHeadBytesLen),
 		Body: body,
 	}
 }
@@ -32,25 +35,67 @@ func NewRoutePacket(body []byte) *RoutePacket {
 func NewRouteFailedPacket(subtype uint8) *RoutePacket {
 	return &RoutePacket{
 		subtype: RoutePackType_SubFlag_RouteFail,
-		Head:    make(routePacketHead, RoutePackHeadLen),
+		Head:    make(routePacketHeadBytes, RoutePackHeadBytesLen),
 	}
 }
 
-func (dst routePacketHead) CopyFrom(src routePacketHead) {
+func (dst routePacketHeadBytes) CopyFrom(src routePacketHeadBytes) {
 	copy(dst, src)
+}
+
+type RoutePacketHead struct {
+	MsgId       uint32 `json:"msgid"`
+	SYN         uint32 `json:"syn"`
+	FromUID     uint32 `json:"from_uid"`
+	ToUID       uint32 `json:"to_uid"`
+	FromURole   uint16 `json:"from_urole"`
+	ToURole     uint16 `json:"to_urole"`
+	ErrCode     int16  `json:"errcode"`
+	MsgType     uint8  `json:"msg_type"`
+	MarshalType uint8  `json:"marshal"`
+}
+
+func (r *RoutePacketHead) FromBytes(b []byte) error {
+	if len(b) != RoutePackHeadBytesLen {
+		return ErrInvalidRoutePacketHeadBytesLen
+	}
+	r.MsgId = binary.LittleEndian.Uint32(b[0:4])
+	r.SYN = binary.LittleEndian.Uint32(b[4:8])
+	r.FromUID = binary.LittleEndian.Uint32(b[8:12])
+	r.ToUID = binary.LittleEndian.Uint32(b[12:16])
+	r.FromURole = binary.LittleEndian.Uint16(b[16:18])
+	r.ToURole = binary.LittleEndian.Uint16(b[18:20])
+	r.ErrCode = (int16)(binary.LittleEndian.Uint16(b[20:22]))
+	r.MsgType = b[22]
+	r.MarshalType = b[23]
+	return nil
+}
+
+func (r *RoutePacketHead) ToBytes() []byte {
+	buf := make([]byte, RoutePackHeadBytesLen)
+	binary.LittleEndian.PutUint32(buf[0:4], r.MsgId)
+	binary.LittleEndian.PutUint32(buf[4:8], r.SYN)
+	binary.LittleEndian.PutUint32(buf[8:12], r.FromUID)
+	binary.LittleEndian.PutUint32(buf[12:16], r.ToUID)
+	binary.LittleEndian.PutUint16(buf[16:18], r.FromURole)
+	binary.LittleEndian.PutUint16(buf[18:20], r.ToURole)
+	binary.LittleEndian.PutUint16(buf[20:22], uint16(r.ErrCode))
+	buf[22] = r.MsgType
+	buf[23] = r.MarshalType
+	return buf
 }
 
 type RoutePacket struct {
 	subtype uint8
 
-	Head routePacketHead
+	Head routePacketHeadBytes
 	Body []byte
 }
 
 func (r *RoutePacket) FromHVPacket(hv *network.HVPacket) *RoutePacket {
 	r.subtype = hv.Meta.GetSubFlag()
 	r.Head = hv.GetHead()
-	if len(r.Head) != RoutePackHeadLen {
+	if len(r.Head) != RoutePackHeadBytesLen {
 		return nil
 	}
 	r.Body = hv.GetBody()

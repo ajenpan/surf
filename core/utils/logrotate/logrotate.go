@@ -54,23 +54,26 @@ func (r *RotateLog) Write(b []byte) (int, error) {
 	defer r.mutex.Unlock()
 	n, err := r.file.Write(b)
 	r.file.Write([]byte("\n"))
-	return n, err
+	return n + 1, err
 }
 
 func (r *RotateLog) WriteJson(v any) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	err := json.NewEncoder(r.file).Encode(v)
+	r.file.Write([]byte("\n"))
 	return err
 }
 
 func (r *RotateLog) Close() error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
 	select {
 	case r.close <- struct{}{}:
 	case <-r.close:
 		return nil
 	}
-
 	return r.file.Close()
 }
 

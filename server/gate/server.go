@@ -15,16 +15,14 @@ func StartNodeListener(r *Gate, addr string) (func(), error) {
 	ws, err := network.NewWSServer(network.WSServerOptions{
 		ListenAddr:   addr,
 		OnConnPacket: r.OnNodePacket,
-		OnConnEnable: r.OnNodeStatus,
+		OnConnEnable: r.nodeConnStore.OnConnEnable,
 		OnConnAuth:   r.OnNodeAuth,
 	})
 	if err != nil {
 		return nil, err
 	}
 	err = ws.Start()
-	return func() {
-		ws.Stop()
-	}, err
+	return func() { ws.Stop() }, err
 }
 
 func Start(cfg *Config) (func() error, error) {
@@ -54,19 +52,26 @@ func Start(cfg *Config) (func() error, error) {
 	}()
 
 	r := &Gate{
-		NodeConn:        core.NewConnStore(),
 		NodeID:          cfg.NodeID,
 		Marshaler:       &marshal.ProtoMarshaler{},
 		ClientPublicKey: ppk,
 		NodePublicKey:   ppk,
 	}
 
-	ug := core.NewClientGate(core.ClientGateOptions{
-		WsListenAddr: cfg.ClientListenAddr,
+	r.clientConnStore = core.NewClientConnStore(r.OnConnEnable)
+	r.nodeConnStore = core.NewNodeConnStore(r.OnNodeStatus)
+
+	ug, err := network.NewWSServer(network.WSServerOptions{
+		ListenAddr:   cfg.ClientListenAddr,
 		OnConnPacket: r.OnConnPacket,
-		OnConnEnable: r.OnConnEnable,
+		OnConnEnable: r.clientConnStore.OnConnEnable,
 		OnConnAuth:   r.OnConnAuth,
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
 	err = ug.Start()
 	if err != nil {
 		return nil, err
@@ -83,7 +88,6 @@ func Start(cfg *Config) (func() error, error) {
 		return nil, err
 	}
 
-	r.ClientConn = ug
 	initok = true
 	return closer, nil
 }
