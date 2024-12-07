@@ -6,7 +6,6 @@ import (
 	"github.com/ajenpan/surf/core/errors"
 	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
-	"github.com/ajenpan/surf/core/utils/calltable"
 )
 
 type Context interface {
@@ -22,7 +21,6 @@ type ConnContext struct {
 	Conn      network.Conn
 	Core      *Surf
 	ReqPacket *RoutePacket
-	Marshal   marshal.Marshaler
 }
 
 func (ctx *ConnContext) Response(msg proto.Message, herr error) {
@@ -31,7 +29,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 
 	rpk := NewRoutePacket(nil)
 
-	respmsgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
+	respmsgid := GetMsgId(msg)
 	rpk.SetMsgId(respmsgid)
 	rpk.SetSYN(ctx.ReqPacket.GetSYN())
 	rpk.SetToUID(ctx.FromUserID())
@@ -39,6 +37,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 	rpk.SetFromUID(ctx.Core.NodeID())
 	rpk.SetFromURole(ctx.Core.getServerType())
 	rpk.SetMsgType(RoutePackMsgType_Response)
+	rpk.SetMarshalType(ctx.ReqPacket.GetMarshalType())
 
 	if herr != nil {
 		if err, ok := herr.(*errors.Error); ok {
@@ -48,8 +47,10 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 		}
 	}
 
-	if msg != nil {
-		body, err = ctx.Marshal.Marshal(msg)
+	marshal := marshal.NewMarshaler(ctx.ReqPacket.GetMarshalType())
+
+	if msg != nil && marshal == nil {
+		body, err = marshal.Marshal(msg)
 		if err != nil {
 			log.Error("response marshal error", "err", err)
 			return
@@ -64,7 +65,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 }
 
 func (ctx *ConnContext) SendAsync(msg proto.Message) error {
-	msgid := calltable.GetMessageMsgID(msg.ProtoReflect().Descriptor())
+	msgid := GetMsgId(msg)
 	return ctx.Core.SendAsyncToClient(ctx.Conn, ctx.FromUserID(), ctx.FromUserRole(), msgid, msg)
 }
 

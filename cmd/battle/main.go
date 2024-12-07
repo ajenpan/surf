@@ -8,8 +8,6 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/utils/calltable"
-	msgBattle "github.com/ajenpan/surf/msg/battle"
 	"github.com/ajenpan/surf/server/battle"
 	battleHandler "github.com/ajenpan/surf/server/battle/handler"
 
@@ -26,24 +24,19 @@ var (
 )
 
 func main() {
-	err := Run()
-	if err != nil {
-		fmt.Println(err)
-	}
-}
-
-func Run() error {
 	app := cli.NewApp()
 	app.Version = Version
 	app.Name = Name
 	app.Action = RealMain
 	err := app.Run(os.Args)
-	return err
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func RealMain(c *cli.Context) error {
 	h := battleHandler.New()
-	calltable := calltable.ExtractMethodFromDesc(msgBattle.File_battle_proto.Messages(), h)
+	// calltable := calltable.ExtractMethodFromDesc(msgBattle.File_battle_proto.Messages(), h)
 
 	// RegGames
 	battle.RegisterGame("guandan", guandan.NewLogic)
@@ -52,7 +45,6 @@ func RealMain(c *cli.Context) error {
 	opts := &core.ServerInfo{
 		Svr:                h,
 		OnClientDisconnect: h.OnPlayerDisConn,
-		CallTable:          calltable,
 	}
 
 	conf := &core.NodeConf{
@@ -65,7 +57,7 @@ func RealMain(c *cli.Context) error {
 	ninfo := &auth.NodeInfo{
 		NId:   10001,
 		NName: Name,
-		NType: battleHandler.ServerType_Battle,
+		NType: battleHandler.NodeType_Battle,
 	}
 	surf, err := core.NewSurf(ninfo, conf, opts)
 	if err != nil {

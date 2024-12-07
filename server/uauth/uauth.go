@@ -46,14 +46,6 @@ type Auth struct {
 	AuthOptions
 }
 
-func (h *Auth) ServerName() string {
-	return "uauth"
-}
-
-func (h *Auth) ServerType() uint16 {
-	return core.ServerType_UAuth
-}
-
 func (h *Auth) CTByName() *calltable.CallTable {
 	ct := calltable.NewCallTable()
 	ct.AddFunctionWithName("Login", h.OnReqLogin)

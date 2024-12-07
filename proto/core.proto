@@ -13,10 +13,23 @@ message NotifyClientDisconnect {
     ID = 100001;
   }
 
-  uint32 uid = 1;
   enum Reason {
     Disconnect = 0;
+    BeKicked = 1;
   }
-  Reason reason = 2;
-  uint32 gate_node_id = 3;
+
+  uint32 uid = 1;
+  uint32 gate_node_id = 2;
+  Reason reason = 3;
+}
+
+message NotifyClientConnect {
+  enum MSGID {
+    __invilid__MSGID = 0;
+    ID = 100002;
+  }
+
+  uint32 uid = 1;
+  uint32 gate_node_id = 2;
+  string ip_addr = 3;
 }

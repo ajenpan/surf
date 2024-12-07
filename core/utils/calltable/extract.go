@@ -100,16 +100,21 @@ func ExtractAsyncMethod(ms protoreflect.MessageDescriptors, h interface{}) *Call
 	return ret
 }
 
-func GetMessageMsgID(msg protoreflect.MessageDescriptor) uint32 {
-	MSGIDDesc := msg.Enums().ByName("MSGID")
-	if MSGIDDesc == nil {
+func GetMsgId(msg proto.Message) uint32 {
+	md := msg.ProtoReflect().Descriptor()
+	return GetMsgIDFromDesc(md)
+}
+
+func GetMsgIDFromDesc(md protoreflect.MessageDescriptor) uint32 {
+	msgDesc := md.Enums().ByName("MSGID")
+	if msgDesc == nil {
 		return 0
 	}
-	IDDesc := MSGIDDesc.Values().ByName("ID")
-	if IDDesc == nil {
+	idDesc := msgDesc.Values().ByName("ID")
+	if idDesc == nil {
 		return 0
 	}
-	return uint32(IDDesc.Number())
+	return uint32(idDesc.Number())
 }
 
 func MustExtractFunction(f interface{}) *Method {
@@ -134,7 +139,7 @@ func ExtractFunction(f interface{}) (*Method, error) {
 		return nil, fmt.Errorf("not a proto message")
 	}
 
-	id := GetMessageMsgID(msg.ProtoReflect().Descriptor())
+	id := GetMsgId(msg)
 	ret := &Method{
 		Name:        string(msg.ProtoReflect().Descriptor().Name()),
 		ID:          id,
@@ -152,7 +157,7 @@ func ExtractMethodFromDesc(ms protoreflect.MessageDescriptors, h interface{}) *C
 
 	for i := 0; i < ms.Len(); i++ {
 		msg := ms.Get(i)
-		msgid := GetMessageMsgID(msg)
+		msgid := GetMsgIDFromDesc(msg)
 		msgName := string(msg.Name())
 
 		method, has := hvalue.MethodByName(MethodPrefix + msgName)

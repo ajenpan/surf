@@ -14,10 +14,10 @@ import (
 )
 
 type Gate struct {
+	surf *core.Surf
+
 	Calltable *calltable.CallTable
 	Marshaler marshal.Marshaler
-
-	NodeID uint32
 
 	ClientPublicKey *rsa.PublicKey
 	NodePublicKey   *rsa.PublicKey
@@ -26,14 +26,6 @@ type Gate struct {
 	nodeConnStore   *core.NodeConnStore
 
 	caller *core.PacketRouteCaller
-}
-
-func (gate *Gate) ServerType() uint16 {
-	return core.ServerType_Gate
-}
-
-func (gate *Gate) ServerName() string {
-	return "gate"
 }
 
 func (gate *Gate) OnConnAuth(data []byte) (network.User, error) {
@@ -61,17 +53,17 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		return
 	}
 
-	target_svrtype := rpk.GetToURole()
-	target_nodeid := rpk.GetToUID()
+	target_ntype := rpk.GetToURole()
+	target_nid := rpk.GetToUID()
 
-	log.Debug("recv route pk", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(), "to", target_nodeid, "torole", target_svrtype, "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
+	log.Debug("recv route pk", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(), "to", target_nid, "torole", target_ntype, "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
 
-	if target_svrtype == 0 && target_nodeid == 0 {
+	if target_ntype == 0 && target_nid == 0 {
 		log.Warn("OnConnPacket from server type and nodeid is 0")
 		return
 	}
 
-	if target_nodeid == gate.NodeID || target_svrtype == gate.ServerType() {
+	if target_nid == gate.surf.NodeID() || target_ntype == gate.surf.NodeType() {
 		gate.OnCall(s, rpk)
 		return
 	}
@@ -80,17 +72,17 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 
 	var targetNode network.Conn
 
-	if target_nodeid != 0 {
-		targetNode, _ = gate.nodeConnStore.LoadByUId(target_nodeid)
+	if target_nid != 0 {
+		targetNode, _ = gate.nodeConnStore.LoadByUId(target_nid)
 	} else {
 		// get nodeid by servertype
-		nodeid, has := ud.serverType2NodeID[target_svrtype]
+		nodeid, has := ud.serverType2NodeID[target_ntype]
 		if has {
 			targetNode, _ = gate.nodeConnStore.LoadByUId(nodeid)
 		}
 		if !has || targetNode == nil {
-			targetNode = gate.FindIdleNode(target_svrtype)
-			ud.serverType2NodeID[target_svrtype] = targetNode.UserID()
+			targetNode = gate.FindIdleNode(target_ntype)
+			ud.serverType2NodeID[target_ntype] = targetNode.UserID()
 		}
 	}
 
@@ -187,10 +179,10 @@ func (gate *Gate) onServerOnline(s network.Conn) {
 
 func (gate *Gate) onServerOffline(s network.Conn) {
 	gate.PublishEvent("NodeOffline", map[string]any{
-		"conn_id":  s.ConnId(),
-		"node_id":  s.UserID(),
-		"svr_type": s.UserRole(),
-		"enable":   false,
+		"conn_id":   s.ConnId(),
+		"node_id":   s.UserID(),
+		"node_type": s.UserRole(),
+		"enable":    false,
 	})
 }
 
@@ -198,11 +190,10 @@ func (gate *Gate) onUserOnline(conn network.Conn) {
 	conn.SetUserData(NewConnUserData(conn))
 
 	gate.PublishEvent("UserOnline", map[string]any{
-		"sid":      conn.ConnId(),
-		"uid":      conn.UserID(),
-		"node_id":  0,
-		"svr_type": gate.ServerType(),
-		"enable":   true,
+		"sid":          conn.ConnId(),
+		"uid":          conn.UserID(),
+		"gate_node_id": 0,
+		"enable":       true,
 	})
 }
 
@@ -214,7 +205,7 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 	})
 	notify := &msgCore.NotifyClientDisconnect{
 		Uid:        conn.UserID(),
-		GateNodeId: gate.NodeID,
+		GateNodeId: gate.surf.NodeID(),
 		Reason:     msgCore.NotifyClientDisconnect_Disconnect,
 	}
 	ud := conn.GetUserData().(*ConnUserData)
@@ -227,7 +218,7 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 		return
 	}
 
-	msgid := calltable.GetMessageMsgID(notify.ProtoReflect().Descriptor())
+	msgid := core.GetMsgId(notify)
 
 	for nodeid := range ud.nodeids {
 		node, _ := gate.nodeConnStore.LoadByUId(nodeid)
@@ -237,12 +228,12 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 
 		npk := core.NewRoutePacket(body)
 		npk.SetMsgId(msgid)
-		npk.SetFromUID(gate.NodeID)
-		npk.SetFromURole(gate.ServerType())
+		npk.SetFromUID(gate.surf.NodeID())
+		npk.SetFromURole(gate.surf.NodeType())
 
 		npk.SetToUID(nodeid)
 		// this msg is from gate to core
-		npk.SetToURole(core.ServerType_Core)
+		npk.SetToURole(core.NodeType_Core)
 
 		gate.SendTo(node, npk.ToHVPacket())
 	}

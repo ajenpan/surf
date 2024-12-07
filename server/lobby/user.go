@@ -60,11 +60,13 @@ func NewUser(uid uint32) *User {
 		},
 	}
 }
+
 func (u *User) MutableRespLoginLobby(out *msgLobby.RespLoginLobby) {
 	out.BaseInfo = &u.BaseInfo
 	out.Props = &u.PropInfo
 	out.MetaInfo = &u.MetaInfo
 }
+
 func (u *User) Send(msg proto.Message) {
 	if u.ConnInfo.Sender != nil {
 		err := u.ConnInfo.Sender(msg)

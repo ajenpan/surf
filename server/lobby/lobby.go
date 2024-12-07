@@ -42,9 +42,9 @@ func (h *Lobby) OnInit(surf *core.Surf) (err error) {
 	h.uLoign.NodeType = surf.NodeType()
 	h.uLoign.Rds = h.WRds
 
-	surf.AddRequestHandleByMsgId(1, core.FuncToHandle(h.OnReqLoginLobby))
-	surf.AddRequestHandleByMsgId(1, core.FuncToHandle(h.OnReqLoginLobby))
-	surf.AddRequestHandleByMsgId(1, core.FuncToHandle(h.OnReqLoginLobby))
+	surf.HandleRequest(1, core.FuncToHandle(h.OnReqLoginLobby))
+	surf.HandleRequest(1, core.FuncToHandle(h.OnReqLoginLobby))
+	surf.HandleRequest(1, core.FuncToHandle(h.OnReqLoginLobby))
 
 	return nil
 }

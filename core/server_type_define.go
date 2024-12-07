@@ -1,11 +1,14 @@
 package core
 
-type ServerType = uint16
+type NodeType = uint16
 
 const (
-	ServerType_Client ServerType = 0
-	ServerType_Core   ServerType = 100
-	ServerType_Gate   ServerType = 101
-	ServerType_Lobby  ServerType = 103
-	ServerType_UAuth  ServerType = 104
+	NodeType_Client NodeType = 0
+
+	NodeType_Core  NodeType = 100
+	NodeType_Gate  NodeType = 101
+	NodeType_UAuth NodeType = 102
+
+	NodeType_Lobby  NodeType = 103
+	NodeType_Battle NodeType = 104
 )

@@ -52,7 +52,6 @@ func Start(cfg *Config) (func() error, error) {
 	}()
 
 	r := &Gate{
-		NodeID:          cfg.NodeID,
 		Marshaler:       &marshal.ProtoMarshaler{},
 		ClientPublicKey: ppk,
 		NodePublicKey:   ppk,

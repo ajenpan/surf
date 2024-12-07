@@ -12,7 +12,10 @@ type RequestCallbackCache struct {
 	timeout *time.Timer
 }
 
-type RequestRouteKey = uint32
+type RequestRouteKey struct {
+	NType uint16
+	MsgId uint32
+}
 
 type AyncRouteKey struct {
 	NType uint16
@@ -71,8 +74,8 @@ func (s *PacketRouteCaller) PopRespCallback(key ResponseRouteKey) *RequestCallba
 	return ret
 }
 
-func (p *PacketRouteCaller) Call(ctx *ConnContext) {
-	rpk := ctx.ReqPacket
+func (p *PacketRouteCaller) Call(ctx Context) {
+	rpk := ctx.Packet()
 
 	if rpk.GetSubType() != 0 {
 		log.Error("recv err packet subtype", "subtype", rpk.GetSubType())
@@ -81,35 +84,25 @@ func (p *PacketRouteCaller) Call(ctx *ConnContext) {
 
 	switch rpk.GetMsgType() {
 	case RoutePackMsgType_Async:
-		h := p.ayncRoute.Get(AyncRouteKey{ctx.Conn.UserRole(), rpk.GetMsgId()})
-		if h == nil {
+		handles := p.ayncRoute.Get(AyncRouteKey{ctx.FromUserRole(), rpk.GetMsgId()})
+		if handles == nil {
 			log.Error("not found msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUID(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUID(), "to_svrtype", rpk.GetToURole())
 			return
 		}
-		h(ctx)
+		for _, h := range handles {
+			h(ctx)
+		}
 	case RoutePackMsgType_Request:
-		h := p.requestRoute.Get(rpk.GetMsgId())
-		if h == nil {
+		handles := p.requestRoute.Get(RequestRouteKey{rpk.GetFromURole(), rpk.GetMsgId()})
+		if handles == nil {
 			log.Error("not found msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUID(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUID(), "to_svrtype", rpk.GetToURole())
 			return
 		}
-		h(ctx)
-		// marshaler := marshal.NewMarshalerById(rpk.GetMarshalType())
-		// if marshaler == nil {
-		// 	log.Error("invalid marshaler type", "type", rpk.GetMarshalType())
-		// 	//todo send error packet
-		// 	return
-		// }
-		// req := method.NewRequest()
-		// err := marshaler.Unmarshal(rpk.GetBody(), req)
-		// if err != nil {
-		// 	log.Error("unmarshal request body failed", "err", err)
-		// 	//todo send error packet
-		// 	return
-		// }
-		// method.Call(p.Handler, ctx, req)
+		for _, h := range handles {
+			h(ctx)
+		}
 	case RoutePackMsgType_Response:
-		cbinfo := p.PopRespCallback(ResponseRouteKey{ctx.Conn.UserID(), rpk.GetSYN()})
+		cbinfo := p.PopRespCallback(ResponseRouteKey{ctx.FromUserID(), rpk.GetSYN()})
 		if cbinfo == nil {
 			return
 		}

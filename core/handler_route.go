@@ -18,12 +18,12 @@ func (c HandlersChain) Last() HandlerFunc {
 
 type HandlerRoute[T comparable] struct {
 	sync.RWMutex
-	methods map[T]HandlerFunc
+	methods map[T]HandlersChain
 }
 
 func NewHandlerRoute[T comparable]() *HandlerRoute[T] {
 	return &HandlerRoute[T]{
-		methods: make(map[T]HandlerFunc),
+		methods: make(map[T]HandlersChain),
 	}
 }
 
@@ -33,13 +33,13 @@ func (m *HandlerRoute[T]) Len() int {
 	return len(m.methods)
 }
 
-func (m *HandlerRoute[T]) Get(id T) HandlerFunc {
+func (m *HandlerRoute[T]) Get(id T) HandlersChain {
 	m.RLock()
 	defer m.RUnlock()
 	return m.methods[id]
 }
 
-func (m *HandlerRoute[T]) Range(f func(key T, value HandlerFunc) bool) {
+func (m *HandlerRoute[T]) Range(f func(key T, value HandlersChain) bool) {
 	m.RLock()
 	defer m.RUnlock()
 	for k, v := range m.methods {
@@ -61,9 +61,13 @@ func (m *HandlerRoute[T]) Merge(other *HandlerRoute[T]) {
 	}
 }
 
-func (m *HandlerRoute[T]) Add(key T, method HandlerFunc) bool {
+func (m *HandlerRoute[T]) Add(key T, method HandlersChain) bool {
 	m.Lock()
 	defer m.Unlock()
+	// _, has := m.methods[key]
+	// if has {
+	// 	return false
+	// }
 	m.methods[key] = method
 	return true
 }
@@ -74,7 +78,7 @@ func (m *HandlerRoute[T]) Delete(key T) {
 	delete(m.methods, key)
 }
 
-func (m *HandlerRoute[T]) LoadAndDelete(key T) (HandlerFunc, bool) {
+func (m *HandlerRoute[T]) LoadAndDelete(key T) (HandlersChain, bool) {
 	m.Lock()
 	defer m.Unlock()
 	v, has := m.methods[key]

@@ -11,9 +11,9 @@ import (
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
-const ServerType_Battle core.ServerType = 102
+const NodeType_Battle core.NodeType = 102
 
-var log = slog.Default()
+var log = slog.Default().With("ntype", "battle")
 
 type Battle struct {
 	tables        sync.Map
@@ -35,6 +35,11 @@ func (h *Battle) OnInit(surf *core.Surf) error {
 	h.surf = surf
 	confstr := surf.ServerConf()
 	log.Info("battle server conf", "conf", confstr)
+
+	core.HandleRequestFunc(surf, h.OnReqStartBattle)
+	core.HandleRequestFunc(surf, h.OnReqJoinBattle)
+	core.HandleRequestFunc(surf, h.OnReqQuitBattle)
+	core.HandleAyncFunc(surf, surf.NodeType(), h.OnBattleMsgToServer)
 	return nil
 }
 
@@ -47,7 +52,7 @@ func (h *Battle) OnStop() error {
 }
 
 func (h *Battle) ServerType() uint16 {
-	return ServerType_Battle
+	return NodeType_Battle
 }
 
 func (h *Battle) ServerName() string {

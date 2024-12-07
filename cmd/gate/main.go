@@ -88,7 +88,7 @@ func RealMain(c *cli.Context) error {
 	testuser := &auth.UserInfo{
 		UId:   testuid,
 		UName: fmt.Sprintf("yk%d", testuid),
-		URole: core.ServerType_Client,
+		URole: core.NodeType_Client,
 	}
 	testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)
 	if err != nil {

@@ -28,6 +28,7 @@ const (
 	PacketInnerSubType_HandShakeFailed PacketInnerSubType = 8
 	PacketInnerSubType_HandShakeFinish PacketInnerSubType = 9
 	PacketInnerSubType_Heartbeat       PacketInnerSubType = 10
+	PacketInnerSubType_Kick            PacketInnerSubType = 11
 )
 
 type PacketMeta []uint8
