@@ -33,10 +33,10 @@ func (*ProtoMarshaler) String() string {
 	return "proto"
 }
 
-func (*ProtoMarshaler) ContentType(_ interface{}) string {
+func (*ProtoMarshaler) ContentType() string {
 	return "application/protobuf"
 }
 
-func (*ProtoMarshaler) ContentTypeID() uint8 {
+func (*ProtoMarshaler) Id() uint8 {
 	return 0
 }

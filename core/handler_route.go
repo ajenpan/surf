@@ -4,6 +4,18 @@ import (
 	"sync"
 )
 
+type HandlerFunc func(Context)
+
+type HandlersChain []HandlerFunc
+
+// Last returns the last handler in the chain. ie. the last handler is the main one.
+func (c HandlersChain) Last() HandlerFunc {
+	if length := len(c); length > 0 {
+		return c[length-1]
+	}
+	return nil
+}
+
 type HandlerRoute[T comparable] struct {
 	sync.RWMutex
 	methods map[T]HandlerFunc

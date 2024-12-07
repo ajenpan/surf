@@ -1,34 +1,45 @@
 package marshal
 
 type Marshaler interface {
+	Id() uint8
+	ContentType() string
 	// Marshal marshals "v" into byte sequence.
 	Marshal(v interface{}) ([]byte, error)
 	// Unmarshal unmarshals "data" into "v".
 	// "v" must be a pointer value.
 	Unmarshal(data []byte, v interface{}) error
-	// ContentType returns the Content-Type which this marshaler is responsible for.
-	// The parameter describes the type which is being marshalled, which can sometimes
-	// affect the content type returned.
-	ContentType(interface{}) string
-	ContentTypeID() uint8
 }
 
-func NewMarshalerById(typ uint8) Marshaler {
+type MarshalerId = uint8
+
+const MarshalerId_protobuf MarshalerId = 0
+const MarshalerId_json MarshalerId = 1
+const MarshalerId_invalid MarshalerId = 255
+
+func NewMarshaler(typ MarshalerId) Marshaler {
 	switch typ {
-	case 0:
+	case MarshalerId_protobuf:
 		return &ProtoMarshaler{}
-	case 1:
+	case MarshalerId_json:
 		return &JSONPb{}
 	}
 	return nil
 }
 
-func NewMarshalerByName(typ string) Marshaler {
+func NameToId(typ string) MarshalerId {
 	switch typ {
 	case "application/json":
-		return &JSONPb{}
+		return MarshalerId_json
 	case "application/protobuf":
-		return &ProtoMarshaler{}
+		return MarshalerId_protobuf
 	}
-	return nil
+	return MarshalerId_invalid
+}
+
+func IdToName(id MarshalerId) string {
+	marshal := NewMarshaler(id)
+	if marshal == nil {
+		return "invalid_marshale_name"
+	}
+	return marshal.ContentType()
 }

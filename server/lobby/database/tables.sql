@@ -1,5 +1,5 @@
 
-CREATE TABLE `user_detail`  (  
+CREATE TABLE `prop_detail`  (  
   `prop_id` int NOT NULL COMMENT '道具',
   `prop_type` int NOT NULL COMMENT '道具类型', 
   `prop_group` int NOT NULL COMMENT '道具组',
@@ -9,7 +9,7 @@ CREATE TABLE `user_detail`  (
   PRIMARY KEY (`prop_id`) USING BTREE
 ) ENGINE = InnoDB  CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci ROW_FORMAT = DYNAMIC;
 
-CREATE TABLE `user_props`  (
+CREATE TABLE `user_prop`  (
   `uid` int UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户id',
   `prop_id` int NOT NULL COMMENT '道具',
   `prop_cnt` bigint NOT NULL COMMENT '道具数量',

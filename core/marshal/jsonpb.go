@@ -30,10 +30,10 @@ func (j *JSONPb) String() string {
 	return "jsonpb"
 }
 
-func (*JSONPb) ContentType(_ interface{}) string {
+func (*JSONPb) ContentType() string {
 	return "application/json"
 }
 
-func (*JSONPb) ContentTypeID() uint8 {
+func (*JSONPb) Id() uint8 {
 	return 1
 }

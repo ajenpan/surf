@@ -27,7 +27,7 @@ message UserBaseInfo {
 
 // 用户道具数据
 message UserPropInfo {
-  map<uint32, int64> props = 1;
+  map<int32, int64> props = 1;
 }
 
 // 游戏数据
@@ -64,9 +64,9 @@ message ReqLoginLobby {
     __INVALID__ = 0;
     ID = 12001;
   }
-  int64 uid = 1; // 可空
+  uint32 uid = 1; // 可空
   int32 game_id = 2;
-  int32 game_subid = 3;
+  int32 game_room_id = 3;
 }
 
 message RespLoginLobby {
@@ -74,7 +74,26 @@ message RespLoginLobby {
     __INVALID__ = 0;
     ID = 12002;
   }
-  int32 flag = 1;
+
+  enum FLAG {
+    // dbp returns
+    kSuccess = 0;
+    // process returns
+    kOtherErr = 99;
+    kInloining = 103; // 正在登录
+
+    kDBPError = 105;  // 可能是dbp超时, 或者脚本catch导致的.
+    kRoomidErr = 106; // 场次id 错误
+
+    kMinSrLimit = 107;    // 金币低于房间限制
+    kMaxSrLimit = 108;    // 金币超过房间限制
+    kMaxTodayWin = 109;   // 输赢超过当日上限
+    kRoomNotFound = 111;  // 场次没有找到
+    kNotMasterNode = 112; // 不是主节点
+    kInOtherRoom = 113;   // 已经在别的房间
+  }
+
+  FLAG flag = 1;
 
   UserBaseInfo base_info = 11;
   UserPropInfo props = 12;
@@ -123,13 +142,6 @@ message NotifyDispatchResult {
     int64 score = 4;
   }
   repeated TablePlayer players = 4;
-}
-
-message NotifyBattleInfo {
-  enum MSGID {
-    __invalid = 0;
-    ID = 12006;
-  }
 }
 
 message ReqLogoutLobby {

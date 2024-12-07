@@ -322,6 +322,18 @@ func (s *Surf) NodeID() uint32 {
 	return s.ninfo.NodeID()
 }
 
+func (s *Surf) NodeType() uint16 {
+	return s.ninfo.NodeType()
+}
+
+func (s *Surf) NodeName() string {
+	return s.ninfo.NName
+}
+
+func (s *Surf) NodeInfo() auth.NodeInfo {
+	return *s.ninfo
+}
+
 func (s *Surf) getServerType() uint16 {
 	return s.ninfo.NodeType()
 }
@@ -505,7 +517,7 @@ func (s *Surf) OnNotifyClientDisconnect(ctx Context, msg *msgCore.NotifyClientDi
 }
 
 func (s *Surf) onRoutePacket(c network.Conn, rpk *RoutePacket) {
-	marshaler := marshal.NewMarshalerById(rpk.GetMarshalType())
+	marshaler := marshal.NewMarshaler(rpk.GetMarshalType())
 	if marshaler == nil {
 		log.Error("invalid marshaler type", "type", rpk.GetMarshalType())
 		return

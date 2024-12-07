@@ -9,24 +9,13 @@ import (
 	"github.com/ajenpan/surf/core/utils/calltable"
 )
 
-type HandlerFunc func(Context)
-
-type HandlersChain []HandlerFunc
-
-// Last returns the last handler in the chain. ie. the last handler is the main one.
-func (c HandlersChain) Last() HandlerFunc {
-	if length := len(c); length > 0 {
-		return c[length-1]
-	}
-	return nil
-}
-
 type Context interface {
 	SendAsync(msg proto.Message) error
 	Response(msg proto.Message, err error)
 	FromUserID() uint32
 	FromUserRole() uint16
 	ConnID() string
+	Packet() *RoutePacket
 }
 
 type ConnContext struct {
@@ -89,4 +78,7 @@ func (ctx *ConnContext) FromUserRole() uint16 {
 
 func (ctx *ConnContext) ConnID() string {
 	return ctx.Conn.ConnId()
+}
+func (ctx *ConnContext) Packet() *RoutePacket {
+	return ctx.ReqPacket
 }

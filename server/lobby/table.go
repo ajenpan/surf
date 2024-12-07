@@ -30,3 +30,7 @@ func (t *Table) getUser(uid uint32) *User {
 	}
 	return ret
 }
+
+func (t *Table) MutableNotifyDispatchResult() *msgLobby.NotifyDispatchResult {
+	return &msgLobby.NotifyDispatchResult{}
+}

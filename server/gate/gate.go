@@ -263,7 +263,7 @@ func (gate *Gate) OnCall(c network.Conn, pk *core.RoutePacket) {
 			return
 		}
 		req := method.NewRequest()
-		marshaler := marshal.NewMarshalerById((uint8)(pk.GetMarshalType()))
+		marshaler := marshal.NewMarshaler((uint8)(pk.GetMarshalType()))
 		if marshaler == nil {
 			return
 		}

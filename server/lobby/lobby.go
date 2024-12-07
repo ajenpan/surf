@@ -13,30 +13,45 @@ import (
 var log = slog.Default()
 
 func NewLobby() *Lobby {
-	return &Lobby{}
+	return &Lobby{
+		loginUsers:   make(map[uint32]*User),
+		inTableUsers: make(map[uint32]*User),
+	}
 }
 
 type Lobby struct {
-	GameDB *gorm.DB
-	Rds    *redis.Client
+	WGameDB *gorm.DB
+	WRds    *redis.Client
 
 	loginUsers   map[uint32]*User
 	inTableUsers map[uint32]*User
-}
 
-func (h *Lobby) ServerType() uint16 {
-	return 2
-}
-
-func (h *Lobby) ServerName() string {
-	return "lobby"
+	uLoign UserUniqueLogin
 }
 
 func (h *Lobby) OnInit(surf *core.Surf) (err error) {
+	cfg, err := ConfigFromJson(surf.ServerConf())
+	if err != nil {
+		return err
+	}
+
+	h.WRds = core.NewRdsClient(cfg.WRedisDSN)
+	h.WGameDB = core.NewMysqlClient(cfg.WGameDBDSN)
+
+	h.uLoign.NodeId = surf.NodeID()
+	h.uLoign.NodeType = surf.NodeType()
+	h.uLoign.Rds = h.WRds
+
+	surf.AddRequestHandleByMsgId(1, core.FuncToHandle(h.OnReqLoginLobby))
+	surf.AddRequestHandleByMsgId(1, core.FuncToHandle(h.OnReqLoginLobby))
+	surf.AddRequestHandleByMsgId(1, core.FuncToHandle(h.OnReqLoginLobby))
+
 	return nil
 }
 
-func (h *Lobby) OnReady()
+func (h *Lobby) OnReady() {
+
+}
 
 func (h *Lobby) OnStop() error {
 	return nil
@@ -71,4 +86,11 @@ func (h *Lobby) getUser(uid uint32) *User {
 	}
 
 	return nil
+}
+func (h *Lobby) playerLeavel(user *User) {
+
+}
+
+func (h *Lobby) LeaveDispatchQue(user *User) {
+
 }

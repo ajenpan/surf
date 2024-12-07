@@ -17,6 +17,10 @@ type UserPlayInfo struct {
 
 	DispatchTimeSec uint32
 	DispatchCnt     uint32
+
+	tidx       uint64
+	tuid       TableUIDT
+	gameRoomId int32
 }
 
 type UserConnInfo struct {
@@ -48,11 +52,35 @@ func NewUser(uid uint32) *User {
 		BaseInfo: UserBaseInfo{},
 		GameInfo: UserGameInfo{},
 		PropInfo: UserPropInfo{
-			Props: make(map[uint32]int64),
+			Props: make(map[int32]int64),
 		},
 		MetaInfo: UserMetaInfo{
 			StrMeta: make(map[string]string),
 			IntMeta: make(map[string]int64),
 		},
 	}
+}
+func (u *User) MutableRespLoginLobby(out *msgLobby.RespLoginLobby) {
+	out.BaseInfo = &u.BaseInfo
+	out.Props = &u.PropInfo
+	out.MetaInfo = &u.MetaInfo
+}
+func (u *User) Send(msg proto.Message) {
+	if u.ConnInfo.Sender != nil {
+		err := u.ConnInfo.Sender(msg)
+		if err != nil {
+			log.Error("user send", "err", err)
+		}
+	} else {
+		log.Debug("mock user send", "msg", msg, "uid", u.UserId)
+	}
+}
+
+func (u *User) Init() error {
+	// type UserGameInfo = msgLobby.UserGameBaseInfo
+	// type UserPropInfo = msgLobby.UserPropInfo
+	// type UserBaseInfo = msgLobby.UserBaseInfo
+	// type UserMetaInfo = msgLobby.UserMetaInfo
+
+	return nil
 }

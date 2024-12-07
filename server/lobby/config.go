@@ -3,10 +3,11 @@ package lobby
 import "encoding/json"
 
 type Config struct {
-	GameDBDSN string `json:"gamedb_dsn"`
+	WGameDBDSN string `json:"w_gamedb_dsn"`
+	WRedisDSN  string `json:"w_redis_dsn"`
 }
 
-func FromJsonConf(cfg []byte) (*Config, error) {
+func ConfigFromJson(cfg []byte) (*Config, error) {
 	conf := &Config{}
 	err := json.Unmarshal(cfg, conf)
 	if err != nil {

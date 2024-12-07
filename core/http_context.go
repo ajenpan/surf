@@ -64,3 +64,7 @@ func (ctx *HttpContext) FromUserRole() uint16 {
 func (ctx *HttpContext) ConnID() string {
 	return ctx.ConnId
 }
+
+func (ctx *HttpContext) Packet() *RoutePacket {
+	return nil
+}
