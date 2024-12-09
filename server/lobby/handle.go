@@ -1,13 +1,14 @@
 package lobby
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/ajenpan/surf/core"
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
 )
 
-func (h *Lobby) OnClientConnect() {
-
-}
+func (h *Lobby) OnClientConnect() {}
 
 func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 	resp := &msgLobby.RespLoginLobby{}
@@ -15,12 +16,10 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 
 	uid := ctx.FromUserID()
 	if ctx.FromUserRole() != 0 {
-		uid = uint32(req.Uid)
+		uid = req.Uid
 	}
 
 	user := h.getUser(uid)
-	isReconnect := false
-
 	var table *Table = nil
 
 	if user == nil {
@@ -37,9 +36,9 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 			fallthrough
 		case msgLobby.PlayerStatus_PlayerInTableReady:
 			if table != nil {
-
+				h.DismissTable(table)
 			} else {
-
+				user.PlayInfo.PlayerStatus = msgLobby.PlayerStatus_PlayerNone
 			}
 		case msgLobby.PlayerStatus_PlayerInGaming:
 			if req.GameRoomId != int32(user.PlayInfo.gameRoomId) {
@@ -57,7 +56,7 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 	user.GameInfo.GameId = req.GameId
 	user.PlayInfo.gameRoomId = req.GameRoomId
 
-	isReconnect = table != nil && user.PlayInfo.PlayerStatus == msgLobby.PlayerStatus_PlayerInGaming
+	isReconnect := table != nil && user.PlayInfo.PlayerStatus == msgLobby.PlayerStatus_PlayerInGaming
 
 	log.Info("on user login")
 
@@ -72,6 +71,12 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 		return
 	}
 
+	err = user.Init()
+	if err != nil {
+		ctx.Response(resp, err)
+		return
+	}
+
 	err = h.uLoign.loadOrStore(uid)
 	if err != nil {
 		resp.Flag = msgLobby.RespLoginLobby_kInOtherRoom
@@ -79,11 +84,7 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 		return
 	}
 
-	err = user.Init()
-	if err != nil {
-		ctx.Response(resp, err)
-		return
-	}
+	h.addLoginUser(user)
 
 	// baseinfo, err := h.GetUserGameInfo(uid)
 	// if err != nil {
@@ -92,13 +93,95 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 	// 	return
 	// }
 	// resp.BaseInfo = baseinfo
+	user.MutableRespLoginLobby(resp)
 	ctx.Response(resp, nil)
 }
 
-func (h *Lobby) OnReqDispatchQue(ctx core.Context, in *msgLobby.ReqDispatchQue) {
+func (h *Lobby) OnReqDispatchQue(ctx core.Context, req *msgLobby.ReqDispatchQue) {
+	uid := ctx.FromUserID()
+	user := h.getLoginUser(uid)
+	resp := &msgLobby.RespDispatchQue{}
+	var herr error
 
+	defer func() { ctx.Response(resp, herr) }()
+
+	if user == nil {
+		herr = fmt.Errorf("user not found %d", uid)
+		return
+	}
+
+	que := h.getQue(user.PlayInfo.gameRoomId)
+
+	if que == nil {
+		herr = fmt.Errorf("que not found roomid:%d", user.PlayInfo.gameRoomId)
+		return
+	}
+
+	currState := user.PlayInfo.PlayerStatus
+	if currState == msgLobby.PlayerStatus_PlayerInGaming ||
+		currState == msgLobby.PlayerStatus_PlayerInQueue {
+		herr = fmt.Errorf("player state err %d", currState)
+		return
+	}
+	needJoinQue := true
+
+	if user.PlayInfo.tidx != 0 {
+		table := h.FindContiTable(user.PlayInfo.tidx)
+		if req.JoinType != 0 && table != nil {
+			needJoinQue = false
+
+			if herr = table.AddContinuePlayer(user); herr != nil {
+				return
+			}
+
+			ok := table.checkStartCondi()
+			if ok {
+				// DoTableStart()
+
+				h.surf.Do(func() {
+
+					h.RemoveContiTable(table.idx)
+					table.keepOnUsers = make(map[uint32]*User)
+					h.DoTableStart(table)
+				})
+				return
+			}
+
+			if table.keepOnTimer != nil {
+				table.keepOnTimer.Stop()
+			}
+
+			table.keepOnTimer = time.AfterFunc(10*time.Second, func() {
+				h.surf.Do(func() {
+					h.DismissTable(table)
+				})
+			})
+
+		} else {
+			if table != nil {
+				h.DismissTable(table)
+			}
+		}
+	}
+
+	if needJoinQue {
+		err := que.Add(user)
+		if err != nil {
+			herr = err
+			return
+		}
+	}
 }
 
-func (h *Lobby) OnReqLogoutLobby(ctx core.Context, in *msgLobby.ReqLogoutLobby) {
+func (h *Lobby) OnReqLogoutLobby(ctx core.Context, req *msgLobby.ReqLogoutLobby) {
+	uid := ctx.FromUserID()
+	if ctx.FromUserRole() != 0 {
+		uid = req.Uid
+	}
+	h.delLoginUser(uid)
+	ctx.Response(&msgLobby.RespLogoutLobby{}, nil)
+}
 
+func (h *Lobby) DoTableStart(t *Table) error {
+	return nil
 }

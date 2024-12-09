@@ -72,7 +72,6 @@ func (h *UserUniqueLogin) loadOrStore(uid uint32) error {
 	if result.Err() != nil {
 		return result.Err()
 	}
-
 	info := h.Load(uid)
 	if info != nil {
 		if info.NodeId == h.NodeId {

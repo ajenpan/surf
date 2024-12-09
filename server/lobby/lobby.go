@@ -7,6 +7,7 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	lobbymsg "github.com/ajenpan/surf/msg/lobby"
+	msgLobby "github.com/ajenpan/surf/msg/lobby"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -20,13 +21,14 @@ func NewLobby() *Lobby {
 }
 
 type Lobby struct {
-	WGameDB *gorm.DB
-	WRds    *redis.Client
-
+	WGameDB      *gorm.DB
+	WRds         *redis.Client
+	surf         *core.Surf
 	loginUsers   map[uint32]*User
 	inTableUsers map[uint32]*User
-
-	uLoign UserUniqueLogin
+	uLoign       UserUniqueLogin
+	contiTable   map[TableIdxT]*Table
+	matchQues    map[int32]MatchQue
 }
 
 func (h *Lobby) OnInit(surf *core.Surf) (err error) {
@@ -42,10 +44,11 @@ func (h *Lobby) OnInit(surf *core.Surf) (err error) {
 	h.uLoign.NodeType = surf.NodeType()
 	h.uLoign.Rds = h.WRds
 
-	surf.HandleRequest(1, core.FuncToHandle(h.OnReqLoginLobby))
-	surf.HandleRequest(1, core.FuncToHandle(h.OnReqLoginLobby))
-	surf.HandleRequest(1, core.FuncToHandle(h.OnReqLoginLobby))
+	core.HandleRequestFunc(surf, h.OnReqDispatchQue)
+	core.HandleRequestFunc(surf, h.OnReqLoginLobby)
+	core.HandleRequestFunc(surf, h.OnReqLogoutLobby)
 
+	h.surf = surf
 	return nil
 }
 
@@ -75,22 +78,66 @@ func (h *Lobby) addLoginUser(u *User) {
 }
 
 func (h *Lobby) getUser(uid uint32) *User {
-	u, has := h.loginUsers[uid]
-	if has {
+	u := h.getLoginUser(uid)
+	if u != nil {
 		return u
 	}
-
-	u, has = h.inTableUsers[uid]
-	if has {
-		return u
-	}
-
-	return nil
+	return h.inTableUsers[uid]
 }
-func (h *Lobby) playerLeavel(user *User) {
 
+func (h *Lobby) delLoginUser(uid uint32) {
+	user, has := h.loginUsers[uid]
+	if !has {
+		return
+	}
+
+	delPlace := true
+
+	switch user.PlayInfo.PlayerStatus {
+	case msgLobby.PlayerStatus_PlayerNone:
+		// do nothing
+	case msgLobby.PlayerStatus_PlayerInQueue:
+		h.LeaveDispatchQue(user)
+	case msgLobby.PlayerStatus_PlayerInTable:
+		fallthrough
+	case msgLobby.PlayerStatus_PlayerInTableReady:
+		table := TableStoreInstance.FindTable(user.PlayInfo.tuid)
+		if table != nil {
+			h.DismissTable(table)
+		}
+	case msgLobby.PlayerStatus_PlayerInGaming:
+		delPlace = false
+		user.ConnInfo.GateNodeId = 0
+	default:
+		log.Error("uknown status")
+	}
+
+	if delPlace {
+		h.uLoign.Del(uid)
+		// user.PlayInfo.PlayerStatus = msgLobby.PlayerStatus_PlayerNone
+	}
 }
 
 func (h *Lobby) LeaveDispatchQue(user *User) {
 
+}
+
+func (h *Lobby) DismissTable(table *Table) {
+
+}
+
+func (h *Lobby) getQue(roomid int32) *MatchQue {
+	return nil
+}
+
+func (h *Lobby) StoreContiTable(table *Table) {
+	h.contiTable[table.idx] = table
+}
+
+func (h *Lobby) FindContiTable(tidx TableIdxT) *Table {
+	return h.contiTable[tidx]
+}
+
+func (h *Lobby) RemoveContiTable(tidx TableIdxT) {
+	delete(h.contiTable, tidx)
 }

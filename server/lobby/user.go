@@ -18,18 +18,19 @@ type UserPlayInfo struct {
 	DispatchTimeSec uint32
 	DispatchCnt     uint32
 
-	tidx       uint64
+	tidx       TableIdxT
 	tuid       TableUIDT
 	gameRoomId int32
 }
 
 type UserConnInfo struct {
-	ConnID    string
-	ChannelId int32
-	OSType    string
-	IP        string
-	LoginAt   time.Time
-	Sender    func(msg proto.Message) error
+	ConnID     string
+	GateNodeId uint32
+	ChannelId  int32
+	OSType     string
+	IP         string
+	LoginAt    time.Time
+	Sender     func(msg proto.Message) error
 }
 
 type User struct {

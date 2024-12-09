@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package errors;
 
-option go_package = "./errors;errors";
+option go_package = "./core/errors;errors";
 
 message Error {
   int32 code = 2; // max int16

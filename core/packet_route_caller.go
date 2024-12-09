@@ -84,18 +84,18 @@ func (p *PacketRouteCaller) Call(ctx Context) {
 
 	switch rpk.GetMsgType() {
 	case RoutePackMsgType_Async:
-		handles := p.ayncRoute.Get(AyncRouteKey{ctx.FromUserRole(), rpk.GetMsgId()})
+		handles := p.ayncRoute.Get(AyncRouteKey{rpk.GetFromURole(), rpk.GetMsgId()})
 		if handles == nil {
-			log.Error("not found msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUID(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUID(), "to_svrtype", rpk.GetToURole())
+			log.Error("not found async msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUID(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUID(), "to_svrtype", rpk.GetToURole())
 			return
 		}
 		for _, h := range handles {
 			h(ctx)
 		}
 	case RoutePackMsgType_Request:
-		handles := p.requestRoute.Get(RequestRouteKey{rpk.GetFromURole(), rpk.GetMsgId()})
+		handles := p.requestRoute.Get(RequestRouteKey{rpk.GetToURole(), rpk.GetMsgId()})
 		if handles == nil {
-			log.Error("not found msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUID(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUID(), "to_svrtype", rpk.GetToURole())
+			log.Error("not found request msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUID(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUID(), "to_svrtype", rpk.GetToURole())
 			return
 		}
 		for _, h := range handles {

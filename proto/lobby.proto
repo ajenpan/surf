@@ -16,6 +16,7 @@ enum TableStatus {
   TableNone = 0;
   TableInCreating = 10;
   TableInInGaming = 31;
+  TableFinished = 40;
 }
 
 message UserBaseInfo {
@@ -149,6 +150,7 @@ message ReqLogoutLobby {
     __invalid = 0;
     ID = 12010;
   }
+  uint32 uid = 1;
 }
 
 message RespLogoutLobby {

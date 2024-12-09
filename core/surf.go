@@ -249,11 +249,12 @@ func (s *Surf) Run() error {
 
 func (s *Surf) getMsgIdFromPath(path string) uint32 {
 	// TODO: name to id map
-	idx := strings.LastIndex(path, "/")
-	if idx <= 0 {
+	idx := strings.LastIndexByte(path, '/') + 1
+	if idx <= 0 || idx >= len(path) {
 		return 0
 	}
-	msgid, _ := strconv.Atoi(path[idx:])
+	msgIdStr := path[idx:]
+	msgid, _ := strconv.Atoi(msgIdStr)
 	return uint32(msgid)
 }
 
@@ -264,7 +265,7 @@ func (s *Surf) startHttpSvr() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Print("onrecv ", r.URL.Path)
 		msgid := s.getMsgIdFromPath(r.URL.Path)
-		if msgid == 0 {
+		if msgid <= 0 {
 			http.Error(w, "handle not found", http.StatusNotFound)
 			return
 		}
@@ -287,6 +288,12 @@ func (s *Surf) startHttpSvr() {
 			return
 		}
 
+		msgType := RoutePackMsgType_Request
+		msgTypeStr := r.Header.Get("MsgType")
+		if len(msgTypeStr) > 0 {
+			msgType, _ = strconv.Atoi(msgTypeStr)
+		}
+
 		rpk := NewRoutePacket(raw)
 		rpk.SetFromUID(uinfo.UserID())
 		rpk.SetFromURole(uinfo.UserRole())
@@ -294,38 +301,33 @@ func (s *Surf) startHttpSvr() {
 		rpk.SetToUID(s.NodeID())
 		rpk.SetToURole(s.NodeType())
 		rpk.SetMsgId(msgid)
+		rpk.SetMsgType(uint8(msgType))
 
 		var ctx = &HttpContext{
-			W:      w,
-			R:      r,
-			UInfo:  uinfo,
-			ConnId: uuid.NewString(),
-			respC:  make(chan func()),
+			W:         w,
+			R:         r,
+			UInfo:     uinfo,
+			ConnId:    uuid.NewString(),
+			ReqPacket: rpk,
+			respC:     make(chan func()),
 		}
 
-		s.Do(func() {
-			s.caller.Call(ctx)
-		})
-
-		f, ok := <-ctx.respC
-		if ok {
-			return
+		if msgType == RoutePackMsgType_Request {
+			s.Do(func() {
+				s.caller.Call(ctx)
+			})
+		} else {
+			s.Do(func() {
+				s.caller.Call(ctx)
+				ctx.respC <- func() {
+					ctx.W.WriteHeader(http.StatusOK)
+				}
+			})
 		}
-		f()
+		if f := <-ctx.respC; f != nil {
+			f()
+		}
 	})
-
-	// s.serverInfo.CallTable.RangeByName(func(key string, method *calltable.Method) bool {
-	// 	svrname := s.ninfo.NodeName()
-	// 	if len(svrname) > 0 {
-	// 		key = "/" + svrname + "/" + key
-	// 	} else {
-	// 		key = "/" + key
-	// 	}
-	// 	cb := s.WrapMethod(key, method)
-	// 	mux.HandleFunc(key, cb)
-	// 	log.Info("http handle func", "path", key)
-	// 	return true
-	// })
 
 	svr := &http.Server{
 		Addr:    s.conf.HttpListenAddr,
@@ -489,7 +491,7 @@ func (s *Surf) HandleAync(ntype uint16, msgid uint32, chain ...HandlerFunc) {
 	if len(chain) == 0 {
 		return
 	}
-	// s.caller.ayncRoute.Add(AyncRouteKey{ntype, msgid}, chain)
+	s.caller.ayncRoute.Add(AyncRouteKey{ntype, msgid}, chain)
 }
 
 // func (s *Surf) wrapMethod(url string, method *calltable.Method) http.HandlerFunc {

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"sync/atomic"
+
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/errors"
@@ -21,9 +23,16 @@ type ConnContext struct {
 	Conn      network.Conn
 	Core      *Surf
 	ReqPacket *RoutePacket
+	responsed atomic.Bool
 }
 
 func (ctx *ConnContext) Response(msg proto.Message, herr error) {
+	resped := ctx.responsed.Swap(true)
+	if resped {
+		log.Error("repeated response")
+		return
+	}
+
 	var body []byte
 	var err error
 
@@ -49,7 +58,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 
 	marshal := marshal.NewMarshaler(ctx.ReqPacket.GetMarshalType())
 
-	if msg != nil && marshal == nil {
+	if msg != nil && marshal != nil {
 		body, err = marshal.Marshal(msg)
 		if err != nil {
 			log.Error("response marshal error", "err", err)
