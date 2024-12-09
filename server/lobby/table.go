@@ -5,6 +5,7 @@ import (
 	"time"
 
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
+	"google.golang.org/protobuf/proto"
 )
 
 type TableUIDT = uint32
@@ -20,10 +21,13 @@ type Table struct {
 	deadline     time.Time
 	users        []*User
 	context      []byte
+	playid       int64
 
 	keepOnAt    int64
 	keepOnUsers map[uint32]*User
 	keepOnTimer *time.Timer
+
+	deadlineTimer *time.Timer
 }
 
 func (t *Table) getUser(uid uint32) *User {
@@ -63,4 +67,10 @@ func (t *Table) AddContinuePlayer(user *User) error {
 
 func (t *Table) checkStartCondi() bool {
 	return len(t.keepOnUsers) == len(t.users)
+}
+
+func (t *Table) BroadcastMessage(msg proto.Message) {
+	for _, user := range t.users {
+		user.Send(msg)
+	}
 }

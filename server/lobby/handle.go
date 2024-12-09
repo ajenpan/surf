@@ -135,11 +135,9 @@ func (h *Lobby) OnReqDispatchQue(ctx core.Context, req *msgLobby.ReqDispatchQue)
 			}
 
 			ok := table.checkStartCondi()
+
 			if ok {
-				// DoTableStart()
-
 				h.surf.Do(func() {
-
 					h.RemoveContiTable(table.idx)
 					table.keepOnUsers = make(map[uint32]*User)
 					h.DoTableStart(table)
@@ -182,6 +180,87 @@ func (h *Lobby) OnReqLogoutLobby(ctx core.Context, req *msgLobby.ReqLogoutLobby)
 	ctx.Response(&msgLobby.RespLogoutLobby{}, nil)
 }
 
-func (h *Lobby) DoTableStart(t *Table) error {
+func (h *Lobby) newPlayID(tidx TableIdxT) int64 {
+	return 0
+}
+
+func (h *Lobby) DoTableStart(table *Table) error {
+	table.status = msgLobby.TableStatus_TableInCreating
+	table.playid = h.newPlayID(table.idx)
+	// 提前锁住
+	for _, user := range table.users {
+		user.PlayInfo.PlayerStatus = msgLobby.PlayerStatus_PlayerInGaming
+	}
+
+	onFailed := func(table *Table, errcode int, errmsg string) {
+		// 		FLOGE("DoTableStart faild flag:{},tidx:{},tappid:{},tid:{},playid:{},player:{},msg:{}",
+		// 		flag, pTable->tableIdx, pTable->logic_appid, pTable->tableid, pTable->playid, fmt::join(pTable->m_players, "-"), errmsg);
+		notify := &msgLobby.NotifyDispatchResult{
+			Flag: 1,
+		}
+		table.BroadcastMessage(notify)
+		h.DismissTable(table)
+	}
+
+	onSuccess := func(table *Table) {
+
+		onDeadline := func() {
+			// 	auto pTable = TableStore::Instance().FindTable(tuid);
+			// 	if (pTable == nullptr) {
+			// 		FLOGW("table not found:{}", tuid);
+			// 		return;
+			// 	}
+			// 	if (pTable->playid != playid) {
+			// 		FLOGW("table playid has chg:{},{}", pTable->playid, playid);
+			// 		return;
+			// 	}
+			// 	FLOGW("onTallyTimeOver tidx:{},lappid:{},ltid:{},playid:{},tstatus:{}",
+			// 		  pTable->tableIdx, pTable->logic_appid, pTable->tableid, pTable->playid, (int)pTable->GetStatus());
+			// 	TableStore::Instance().RemoveTable(tuid);
+			// 	DismissTable(pTable);
+			// }
+		}
+
+		if table.deadlineTimer != nil {
+			table.deadlineTimer.Stop()
+		}
+		table.deadlineTimer = time.AfterFunc(time.Second, onDeadline)
+
+		table.status = msgLobby.TableStatus_TableInInGaming
+
+		table.keepOnTimer = nil
+		table.keepOnAt = 0
+
+		notify := table.MutableNotifyDispatchResult()
+
+		for _, user := range table.users {
+			h.inTableUsers[user.UserId] = user
+			user.Send(notify)
+		}
+
+	}
+
+	h.TallyTableFee(table, func(table *Table, ok bool) {
+		if !ok {
+			onFailed(table, 1, "tallyTableFee")
+			return
+		}
+		h.NewRemoteTable(table, 3, func(table *Table, success bool) {
+			if !success {
+				onFailed(table, 2, "NewRemoteTable faild")
+				return
+			}
+			onSuccess(table)
+		})
+	})
 	return nil
+}
+
+func (h *Lobby) TallyTableFee(table *Table, fn func(table *Table, ok bool)) {
+	// h.WGameDB.
+	// h.WGameDB.raw
+}
+
+func (h *Lobby) NewRemoteTable(table *Table, trycnt int, fn func(table *Table, ok bool)) {
+
 }

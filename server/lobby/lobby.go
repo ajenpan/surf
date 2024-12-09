@@ -28,7 +28,7 @@ type Lobby struct {
 	inTableUsers map[uint32]*User
 	uLoign       UserUniqueLogin
 	contiTable   map[TableIdxT]*Table
-	matchQues    map[int32]MatchQue
+	matchQues    map[int32]DispatchQue
 }
 
 func (h *Lobby) OnInit(surf *core.Surf) (err error) {
@@ -126,7 +126,7 @@ func (h *Lobby) DismissTable(table *Table) {
 
 }
 
-func (h *Lobby) getQue(roomid int32) *MatchQue {
+func (h *Lobby) getQue(roomid int32) *DispatchQue {
 	return nil
 }
 
