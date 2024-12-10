@@ -125,8 +125,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 	}
 
 	assess, err := coreauth.GenerateToken(h.PK, &coreauth.UserInfo{
-		UId:   uint32(user.UID),
-		UName: user.Uname,
+		UId: uint32(user.UID),
 	}, 0)
 
 	if err != nil {
@@ -156,9 +155,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 
 func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
 	out := &msgUAuth.RespLogin{}
-	// var err = &err.Error{}
 	var err error
-
 	defer func() {
 		ctx.Response(out, err)
 	}()
@@ -193,11 +190,7 @@ func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
 		return
 	}
 
-	assess, err := coreauth.GenerateToken(h.PK, &coreauth.UserInfo{
-		UId:   uint32(user.UID),
-		UName: user.Uname,
-	}, 0)
-
+	assess, err := coreauth.GenerateToken(h.PK, &coreauth.UserInfo{UId: uint32(user.UID)}, 0)
 	if err != nil {
 		return
 	}

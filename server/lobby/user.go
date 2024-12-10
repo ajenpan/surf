@@ -24,7 +24,6 @@ type UserPlayInfo struct {
 }
 
 type UserConnInfo struct {
-	ConnID     string
 	GateNodeId uint32
 	ChannelId  int32
 	OSType     string

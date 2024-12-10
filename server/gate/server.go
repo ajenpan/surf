@@ -4,7 +4,6 @@ import (
 	"log/slog"
 
 	"github.com/ajenpan/surf/core"
-	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	utilsRsa "github.com/ajenpan/surf/core/utils/rsagen"
 )
@@ -22,10 +21,11 @@ func StartNodeListener(r *Gate, addr string) (func(), error) {
 		return nil, err
 	}
 	err = ws.Start()
+	log.Info("gate node listen start success", "addr", addr)
 	return func() { ws.Stop() }, err
 }
 
-func Start(cfg *Config) (func() error, error) {
+func Start(r *Gate, cfg *Config) (func() error, error) {
 	ppk, err := utilsRsa.LoadRsaPublicKeyFromUrl(cfg.RsaPublicKeyFile)
 	if err != nil {
 		return nil, err
@@ -51,11 +51,8 @@ func Start(cfg *Config) (func() error, error) {
 		}
 	}()
 
-	r := &Gate{
-		Marshaler:       &marshal.ProtoMarshaler{},
-		ClientPublicKey: ppk,
-		NodePublicKey:   ppk,
-	}
+	r.ClientPublicKey = ppk
+	r.NodePublicKey = ppk
 
 	r.clientConnStore = core.NewClientConnStore(r.OnConnEnable)
 	r.nodeConnStore = core.NewNodeConnStore(r.OnNodeStatus)

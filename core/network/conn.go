@@ -25,7 +25,6 @@ const (
 
 type User interface {
 	UserID() uint32
-	UserName() string
 	UserRole() uint16
 }
 
@@ -49,7 +48,6 @@ func (u *userInfo) UserName() string {
 
 func (u *userInfo) fromUser(user User) {
 	u.UId = user.UserID()
-	u.UName = user.UserName()
 	u.URole = user.UserRole()
 }
 
@@ -88,6 +86,7 @@ type Conn interface {
 	Send(*HVPacket) error
 
 	Close() error
+
 	Enable() bool
 
 	RemoteAddr() string

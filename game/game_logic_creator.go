@@ -1,4 +1,4 @@
-package battle
+package game
 
 import (
 	"fmt"

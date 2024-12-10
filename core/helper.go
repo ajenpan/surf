@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/ajenpan/surf/core/marshal"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
+
+	"github.com/ajenpan/surf/core/marshal"
 )
 
 func NewRdsClient(dsn string) *redis.Client {

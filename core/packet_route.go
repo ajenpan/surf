@@ -127,11 +127,11 @@ func (r *RoutePacket) GetSYN() uint32 {
 	return binary.LittleEndian.Uint32(r.Head[4:8])
 }
 
-func (r *RoutePacket) GetFromUID() uint32 {
+func (r *RoutePacket) GetFromUId() uint32 {
 	return binary.LittleEndian.Uint32(r.Head[8:12])
 }
 
-func (r *RoutePacket) GetToUID() uint32 {
+func (r *RoutePacket) GetToUId() uint32 {
 	return binary.LittleEndian.Uint32(r.Head[12:16])
 }
 
@@ -167,11 +167,11 @@ func (r *RoutePacket) SetSYN(d uint32) {
 	binary.LittleEndian.PutUint32(r.Head[4:8], d)
 }
 
-func (r *RoutePacket) SetFromUID(d uint32) {
+func (r *RoutePacket) SetFromUId(d uint32) {
 	binary.LittleEndian.PutUint32(r.Head[8:12], d)
 }
 
-func (r *RoutePacket) SetToUID(d uint32) {
+func (r *RoutePacket) SetToUId(d uint32) {
 	binary.LittleEndian.PutUint32(r.Head[12:16], d)
 }
 

@@ -2,30 +2,60 @@ package gate
 
 import (
 	"crypto/rsa"
-
-	"google.golang.org/protobuf/proto"
+	"encoding/json"
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/calltable"
 	msgCore "github.com/ajenpan/surf/msg/core"
 )
 
-type Gate struct {
-	surf *core.Surf
+func New() *Gate {
+	return &Gate{}
+}
 
-	Calltable *calltable.CallTable
-	Marshaler marshal.Marshaler
+type Gate struct {
+	surf      *core.Surf
+	conf      *Config
+	calltable *calltable.CallTable
+
+	clientConnStore *core.ClientConnStore
+	nodeConnStore   *core.NodeConnStore
+	caller          *core.PacketRouteCaller
 
 	ClientPublicKey *rsa.PublicKey
 	NodePublicKey   *rsa.PublicKey
 
-	clientConnStore *core.ClientConnStore
-	nodeConnStore   *core.NodeConnStore
+	closer func() error
+}
 
-	caller *core.PacketRouteCaller
+func (gate *Gate) OnInit(surf *core.Surf) error {
+	var err error
+
+	gate.conf = DefaultConfig
+	confStr := surf.ServerConf()
+	if len(confStr) > 2 {
+		err = json.Unmarshal(confStr, gate.conf)
+		if err != nil {
+			return err
+		}
+	}
+
+	gate.closer, err = Start(gate, gate.conf)
+	if err != nil {
+		return err
+	}
+	gate.surf = surf
+	return err
+}
+
+func (gate *Gate) OnReady() {
+	gate.surf.UpdateNodeData(core.NodeState_Running, nil)
+}
+
+func (gate *Gate) OnStop() error {
+	return nil
 }
 
 func (gate *Gate) OnConnAuth(data []byte) (network.User, error) {
@@ -54,9 +84,9 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 
 	target_ntype := rpk.GetToURole()
-	target_nid := rpk.GetToUID()
+	target_nid := rpk.GetToUId()
 
-	log.Debug("recv route pk", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(), "to", target_nid, "torole", target_ntype, "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
+	log.Debug("recv client route pk", "from", rpk.GetFromUId(), "fromrole", rpk.GetFromURole(), "to", target_nid, "torole", target_ntype, "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
 
 	if target_ntype == 0 && target_nid == 0 {
 		log.Warn("OnConnPacket from server type and nodeid is 0")
@@ -69,43 +99,47 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 
 	ud := s.GetUserData().(*ConnUserData)
-
-	var targetNode network.Conn
-
+	var targetConn network.Conn
 	if target_nid != 0 {
-		targetNode, _ = gate.nodeConnStore.LoadByUId(target_nid)
+		targetConn, _ = gate.nodeConnStore.LoadByUId(target_nid)
 	} else {
 		// get nodeid by servertype
 		nodeid, has := ud.serverType2NodeID[target_ntype]
 		if has {
-			targetNode, _ = gate.nodeConnStore.LoadByUId(nodeid)
+			targetConn, _ = gate.nodeConnStore.LoadByUId(nodeid)
 		}
-		if !has || targetNode == nil {
-			targetNode = gate.FindIdleNode(target_ntype)
-			ud.serverType2NodeID[target_ntype] = targetNode.UserID()
+		if !has || targetConn == nil {
+			targetConn = gate.FindIdleNode(target_ntype)
 		}
 	}
 
-	if targetNode == nil {
+	if targetConn == nil {
 		pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
 		gate.SendTo(s, pk)
 		return
 	}
 
-	if _, has := ud.nodeids[targetNode.UserID()]; !has {
-		ud.nodeids[targetNode.UserID()] = struct{}{}
+	if _, has := ud.nodeids[targetConn.UserID()]; !has {
+		ud.nodeids[targetConn.UserID()] = struct{}{}
+		ud.serverType2NodeID[target_ntype] = targetConn.UserID()
+
+		notify := &msgCore.NotifyClientConnect{
+			Uid:        s.UserID(),
+			GateNodeId: gate.surf.NodeID(),
+			IpAddr:     s.RemoteAddr(),
+		}
+		gate.surf.SendAsync(targetConn, core.NodeType_Core, targetConn.UserID(), notify)
 	}
 
-	rpk.SetFromUID(s.UserID())
+	rpk.SetFromUId(s.UserID())
 	rpk.SetFromURole(s.UserRole())
-	rpk.SetToUID(targetNode.UserID())
-	rpk.SetToURole(targetNode.UserRole())
-
-	gate.SendTo(targetNode, pk)
+	rpk.SetToUId(targetConn.UserID())
+	rpk.SetToURole(targetConn.UserRole())
+	gate.SendTo(targetConn, pk)
 }
 
 func (gate *Gate) FindIdleNode(servertype uint16) network.Conn {
-	// TODO: the battle node
+	// TODO: how to find the best node
 	var ret network.Conn
 	gate.nodeConnStore.Range(func(conn network.Conn) bool {
 		if uint16(conn.UserRole()) == servertype {
@@ -139,10 +173,10 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 			return
 		}
 
-		log.Debug("OnNodePacket", "from", rpk.GetFromUID(), "fromrole", rpk.GetFromURole(),
-			"to", rpk.GetToUID(), "torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
+		log.Debug("OnNodePacket", "from", rpk.GetFromUId(), "fromrole", rpk.GetFromURole(),
+			"to", rpk.GetToUId(), "torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
 
-		clientUID := rpk.GetToUID()
+		clientUID := rpk.GetToUId()
 		if clientUID == 0 {
 			log.Warn("client not found", "clientUID", clientUID)
 			return
@@ -192,9 +226,13 @@ func (gate *Gate) onUserOnline(conn network.Conn) {
 	gate.PublishEvent("UserOnline", map[string]any{
 		"sid":          conn.ConnId(),
 		"uid":          conn.UserID(),
-		"gate_node_id": 0,
+		"gate_node_id": gate.nodeId(),
 		"enable":       true,
 	})
+}
+
+func (gate *Gate) nodeId() uint32 {
+	return gate.surf.NodeID()
 }
 
 func (gate *Gate) onUserOffline(conn network.Conn) {
@@ -203,39 +241,22 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 		"uid":    conn.UserID(),
 		"enable": false,
 	})
+
+	ud := conn.GetUserData().(*ConnUserData)
+	conn.SetUserData(nil)
+
 	notify := &msgCore.NotifyClientDisconnect{
 		Uid:        conn.UserID(),
 		GateNodeId: gate.surf.NodeID(),
 		Reason:     msgCore.NotifyClientDisconnect_Disconnect,
 	}
-	ud := conn.GetUserData().(*ConnUserData)
-	conn.SetUserData(nil)
-
-	marshaler := &marshal.ProtoMarshaler{}
-	body, err := marshaler.Marshal(notify)
-	if err != nil {
-		log.Error("marshal notify failed", "err", err)
-		return
-	}
-
-	msgid := core.GetMsgId(notify)
 
 	for nodeid := range ud.nodeids {
 		node, _ := gate.nodeConnStore.LoadByUId(nodeid)
-		if node == nil {
+		if node == nil || !node.Enable() {
 			continue
 		}
-
-		npk := core.NewRoutePacket(body)
-		npk.SetMsgId(msgid)
-		npk.SetFromUID(gate.surf.NodeID())
-		npk.SetFromURole(gate.surf.NodeType())
-
-		npk.SetToUID(nodeid)
-		// this msg is from gate to core
-		npk.SetToURole(core.NodeType_Core)
-
-		gate.SendTo(node, npk.ToHVPacket())
+		gate.surf.SendAsync(node, core.NodeType_Core, node.UserID(), notify)
 	}
 }
 
@@ -243,47 +264,11 @@ func (gate *Gate) PublishEvent(ename string, event any) {
 	log.Info("PublishEvent", "ename", ename, "event", event)
 }
 
-func (gate *Gate) OnCall(c network.Conn, pk *core.RoutePacket) {
-	var err error
-	switch pk.GetMsgType() {
-	case core.RoutePackMsgType_Async:
-		fallthrough
-	case core.RoutePackMsgType_Request:
-		method := gate.Calltable.GetByID(pk.GetMsgId())
-		if method == nil {
-			return
-		}
-		req := method.NewRequest()
-		marshaler := marshal.NewMarshaler((uint8)(pk.GetMarshalType()))
-		if marshaler == nil {
-			return
-		}
-		err = marshaler.Unmarshal(pk.GetBody(), req)
-		if err != nil {
-			return
-		}
-		ctx := &gateContext{
-			Conn:      c,
-			ReqPacket: pk,
-			caller:    c.UserID(),
-			Marshal:   marshaler,
-		}
-		method.Call(gate, ctx, req)
-	default:
+func (gate *Gate) OnCall(conn network.Conn, pk *core.RoutePacket) {
+	ctx := &core.ConnContext{
+		ReqConn:   conn,
+		Core:      gate.surf,
+		ReqPacket: pk,
 	}
-}
-
-type gateContext struct {
-	Conn      network.Conn
-	ReqPacket *core.RoutePacket
-	caller    uint32
-	Marshal   marshal.Marshaler
-}
-
-func (ctx gateContext) Response(msg proto.Message, err error) {
-
-}
-
-func (ctx gateContext) Caller() uint32 {
-	return ctx.caller
+	gate.caller.Call(ctx)
 }

@@ -1,7 +1,7 @@
 package core
 
 type Server interface {
-	OnInit(*Surf) error
+	OnInit(surf *Surf) error
 	OnReady()
 	OnStop() error
 }

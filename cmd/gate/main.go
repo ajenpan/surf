@@ -3,17 +3,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"log/slog"
 	"os"
 	"runtime"
-	"time"
 
 	"github.com/urfave/cli/v2"
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	utilsRsa "github.com/ajenpan/surf/core/utils/rsagen"
-	utilSignal "github.com/ajenpan/surf/core/utils/signal"
 	gate "github.com/ajenpan/surf/server/gate"
 )
 
@@ -51,67 +47,83 @@ func main() {
 	}
 }
 
-const PrivateKeyFile = "private.pem"
-const PublicKeyFile = "public.pem"
+// const PrivateKeyFile = "private.pem"
+// const PublicKeyFile = "public.pem"
 
-func ReadRSAKey() ([]byte, []byte, error) {
-	privateRaw, err := os.ReadFile(PrivateKeyFile)
-	if err != nil {
-		privateKey, publicKey, err := utilsRsa.GenerateRsaPem(512)
-		if err != nil {
-			return nil, nil, err
-		}
-		privateRaw = []byte(privateKey)
-		os.WriteFile(PrivateKeyFile, []byte(privateKey), 0644)
-		os.WriteFile(PublicKeyFile, []byte(publicKey), 0644)
-	}
-	publicRaw, err := os.ReadFile(PublicKeyFile)
-	if err != nil {
-		return nil, nil, err
-	}
-	return privateRaw, publicRaw, nil
-}
+// func ReadRSAKey() ([]byte, []byte, error) {
+// 	privateRaw, err := os.ReadFile(PrivateKeyFile)
+// 	if err != nil {
+// 		privateKey, publicKey, err := utilsRsa.GenerateRsaPem(512)
+// 		if err != nil {
+// 			return nil, nil, err
+// 		}
+// 		privateRaw = []byte(privateKey)
+// 		os.WriteFile(PrivateKeyFile, []byte(privateKey), 0644)
+// 		os.WriteFile(PublicKeyFile, []byte(publicKey), 0644)
+// 	}
+// 	publicRaw, err := os.ReadFile(PublicKeyFile)
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+// 	return privateRaw, publicRaw, nil
+// }
 
 func RealMain(c *cli.Context) error {
-
-	_, _, err := ReadRSAKey()
-	if err != nil {
-		panic(err)
+	svr := gate.New()
+	opts := &core.ServerInfo{
+		Svr: svr,
 	}
-
-	pk, err := utilsRsa.LoadRsaPrivateKeyFromFile(PrivateKeyFile)
-	if err != nil {
-		return err
+	conf := &core.NodeConf{
+		SurfConf: core.SurfConfig{
+			PublicKeyFilePath: "http://myali01:9999/publickey",
+		},
 	}
-
-	testuid := uint32(30000)
-	testuser := &auth.UserInfo{
-		UId:   testuid,
-		UName: fmt.Sprintf("yk%d", testuid),
-		URole: core.NodeType_Client,
+	ninfo := &auth.NodeInfo{
+		NId:   10001,
+		NName: Name,
+		NType: core.NodeType_Gate,
 	}
-	testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)
+	surf, err := core.NewSurf(ninfo, conf, opts)
 	if err != nil {
 		return err
 	}
-	slog.Info("testjwt", "jwt", testjwt)
 
-	cfg := &gate.Config{
-		RsaPublicKeyFile: "file://" + PublicKeyFile,
-		ClientListenAddr: ":11000",
-		NodeListenAddr:   ":13000",
-	}
+	err = surf.Run()
+	// _, _, err := ReadRSAKey()
+	// if err != nil {
+	// 	panic(err)
+	// }
 
-	closer, err := gate.Start(cfg)
-	if err != nil {
-		return err
-	}
-	defer closer()
+	// pk, err := utilsRsa.LoadRsaPrivateKeyFromFile(PrivateKeyFile)
+	// if err != nil {
+	// 	return err
+	// }
 
-	slog.Info("config", "config", cfg.String())
-	slog.Info("gate server started")
-
-	s := utilSignal.WaitShutdown()
-	slog.Info("recv signal", "signal", s.String())
-	return nil
+	// testuid := uint32(30000)
+	// testuser := &auth.UserInfo{
+	// 	UId:   testuid,
+	// 	UName: fmt.Sprintf("yk%d", testuid),
+	// 	URole: core.NodeType_Client,
+	// }
+	// testjwt, err := auth.GenerateToken(pk, testuser, 24*time.Hour*999)
+	// if err != nil {
+	// 	return err
+	// }
+	// slog.Info("testjwt", "jwt", testjwt)
+	// "file://public.pem"
+	// cfg := &gate.Config{
+	// 	RsaPublicKeyFile: lo,
+	// 	ClientListenAddr: ":11000",
+	// 	NodeListenAddr:   ":13000",
+	// }
+	// closer, err := gate.Start(cfg)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer closer()
+	// slog.Info("config", "config", cfg.String())
+	// slog.Info("gate server started")
+	// s := utilSignal.WaitShutdown()
+	// slog.Info("recv signal", "signal", s.String())
+	return err
 }

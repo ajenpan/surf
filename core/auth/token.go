@@ -20,9 +20,6 @@ func VerifyToken(pk *rsa.PublicKey, tokenRaw []byte) (*UserInfo, error) {
 		return nil, fmt.Errorf("invalid token")
 	}
 	ret := &UserInfo{}
-	if uname, has := claims["aud"]; has {
-		ret.UName = uname.(string)
-	}
 	if uid, has := claims["uid"]; has {
 		ret.UId = uint32(uid.(float64))
 	}
@@ -39,8 +36,7 @@ func GenerateToken(pk *rsa.PrivateKey, uinfo *UserInfo, validity time.Duration) 
 	claims := make(jwt.MapClaims)
 	claims["exp"] = time.Now().Add(validity).Unix()
 	claims["iat"] = time.Now().Unix()
-	claims["uid"] = float64(uinfo.UId)
-	claims["aud"] = uinfo.UName
+	claims["uid"] = uinfo.UId
 	claims["urid"] = uinfo.URole
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	return token.SignedString(pk)

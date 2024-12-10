@@ -19,21 +19,19 @@ type HttpContext struct {
 	R         *http.Request
 	UInfo     auth.User
 	Core      *Surf
-	ConnId    string
 	ReqPacket *RoutePacket
-	respC     chan func()
-
-	responsed atomic.Bool
+	RespChan  chan func()
+	resped    atomic.Bool
 }
 
 func (ctx *HttpContext) Response(msg proto.Message, herr error) {
-	resped := ctx.responsed.Swap(true)
+	resped := ctx.resped.Swap(true)
 	if resped {
 		log.Error("repeated response")
 		return
 	}
 
-	ctx.respC <- func() {
+	ctx.RespChan <- func() {
 		w := ctx.W
 		marshaler := marshal.NewMarshaler(ctx.ReqPacket.GetMarshalType())
 		if msg != nil && marshaler != nil {
@@ -68,16 +66,16 @@ func (ctx *HttpContext) SendAsync(msg proto.Message) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 
-func (ctx *HttpContext) FromUserID() uint32 {
+func (ctx *HttpContext) FromUId() uint32 {
 	return ctx.UInfo.UserID()
 }
 
-func (ctx *HttpContext) FromUserRole() uint16 {
+func (ctx *HttpContext) FromURole() uint16 {
 	return ctx.UInfo.UserRole()
 }
 
-func (ctx *HttpContext) ConnID() string {
-	return ctx.ConnId
+func (ctx *HttpContext) Conn() network.Conn {
+	return nil
 }
 
 func (ctx *HttpContext) Packet() *RoutePacket {

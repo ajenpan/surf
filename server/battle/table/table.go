@@ -11,8 +11,8 @@ import (
 
 	"github.com/ajenpan/surf/core/event"
 
+	"github.com/ajenpan/surf/game"
 	msgBattle "github.com/ajenpan/surf/msg/battle"
-	"github.com/ajenpan/surf/server/battle"
 )
 
 type TableOptions struct {
@@ -33,8 +33,8 @@ func NewTable(opts TableOptions) *Table {
 		opts:       opts,
 		createAt:   time.Now(),
 		quit:       make(chan bool),
-		currStat:   battle.BattleStatus_Idle,
-		beforeStat: battle.BattleStatus_Idle,
+		currStat:   game.GameStatus_Idle,
+		beforeStat: game.GameStatus_Idle,
 	}
 
 	ret.actQue = make(chan func(), 10)
@@ -62,9 +62,9 @@ type Table struct {
 
 	rwlock sync.RWMutex
 
-	logic      battle.Logic
-	currStat   battle.GameStatus
-	beforeStat battle.GameStatus
+	logic      game.Logic
+	currStat   game.GameStatus
+	beforeStat game.GameStatus
 	status     TableStatus
 
 	actQue chan func()
@@ -77,7 +77,7 @@ func (d *Table) BattleID() string {
 	return d.opts.ID
 }
 
-func (d *Table) Init(logic battle.Logic, players []*Player, logicConf []byte) error {
+func (d *Table) Init(logic game.Logic, players []*Player, logicConf []byte) error {
 	d.rwlock.Lock()
 	defer d.rwlock.Unlock()
 
@@ -85,14 +85,14 @@ func (d *Table) Init(logic battle.Logic, players []*Player, logicConf []byte) er
 		d.logic.OnReset()
 	}
 
-	iplayers := []battle.Player{}
+	iplayers := []game.Player{}
 
 	for _, p := range players {
 		d.Players.Store(p)
 		iplayers = append(iplayers, p)
 	}
 
-	if err := logic.OnInit(battle.LogicOpts{
+	if err := logic.OnInit(game.LogicOpts{
 		Table:   d,
 		Players: iplayers,
 		Conf:    logicConf,
@@ -157,7 +157,7 @@ func (d *Table) Do(f func()) {
 	d.actQue <- f
 }
 
-func (d *Table) AfterFunc(td time.Duration, f func()) battle.AfterCancelFunc {
+func (d *Table) AfterFunc(td time.Duration, f func()) game.AfterCancelFunc {
 	tk := time.AfterFunc(td, func() {
 		d.Do(f)
 	})
@@ -189,7 +189,7 @@ func (d *Table) Close() {
 	close(d.actQue)
 }
 
-func (d *Table) ReportBattleStatus(s battle.GameStatus) {
+func (d *Table) ReportBattleStatus(s game.GameStatus) {
 	if d.currStat == s {
 		return
 	}
@@ -198,10 +198,10 @@ func (d *Table) ReportBattleStatus(s battle.GameStatus) {
 	d.currStat = s
 
 	switch s {
-	case battle.BattleStatus_Idle:
-	case battle.BattleStatus_Running:
+	case game.GameStatus_Idle:
+	case game.GameStatus_Running:
 		d.reportGameStart()
-	case battle.BattleStatus_Over:
+	case game.GameStatus_Over:
 		d.reportGameOver()
 
 		d.updateStatus(TableStatus_Finished)
@@ -219,7 +219,7 @@ func (d *Table) ReportBattleEvent(topic string, event proto.Message) {
 	d.PublishEvent(event)
 }
 
-func (d *Table) SendMessageToPlayer(p battle.Player, sync uint32, msgid uint32, msg proto.Message) {
+func (d *Table) SendMessageToPlayer(p game.Player, sync uint32, msgid uint32, msg proto.Message) {
 	rp := p.(*Player)
 	raw, err := proto.Marshal(msg)
 	if err != nil {
@@ -255,7 +255,7 @@ func (d *Table) BroadcastMessage(msgid uint32, msg proto.Message) {
 }
 
 func (d *Table) IsPlaying() bool {
-	return d.currStat == battle.BattleStatus_Running
+	return d.currStat == game.GameStatus_Running
 }
 
 func (d *Table) reportGameStart() {

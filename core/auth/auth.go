@@ -7,7 +7,6 @@ import (
 
 type UserInfo struct {
 	UId   uint32 `json:"uid"`
-	UName string `json:"uname"`
 	URole uint16 `json:"urid"`
 }
 
@@ -16,9 +15,6 @@ func (u *UserInfo) UserID() uint32 {
 }
 func (u *UserInfo) UserRole() uint16 {
 	return u.URole
-}
-func (u *UserInfo) UserName() string {
-	return u.UName
 }
 
 type NodeInfo struct {

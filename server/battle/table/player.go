@@ -4,18 +4,17 @@ import (
 	"fmt"
 	"sync"
 
-	protobuf "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/ajenpan/surf/game"
 	msgBattle "github.com/ajenpan/surf/msg/battle"
-	"github.com/ajenpan/surf/server/battle"
-	bf "github.com/ajenpan/surf/server/battle"
 )
 
 type PlayerSender = func(msgid uint32, raw []byte) error
 
 func NewPlayer(p *msgBattle.PlayerInfo) *Player {
 	return &Player{
-		PlayerInfo: protobuf.Clone(p).(*msgBattle.PlayerInfo),
+		PlayerInfo: proto.Clone(p).(*msgBattle.PlayerInfo),
 	}
 }
 
@@ -71,12 +70,12 @@ func (p *Player) UID() int64 {
 	return p.PlayerInfo.Uid
 }
 
-func (p *Player) SeatID() battle.SeatID {
-	return battle.SeatID(p.PlayerInfo.SeatId)
+func (p *Player) SeatID() game.SeatID {
+	return game.SeatID(p.PlayerInfo.SeatId)
 }
 
-func (p *Player) Role() bf.RoleType {
-	return bf.RoleType(p.PlayerInfo.Role)
+func (p *Player) Role() game.PlayerType {
+	return game.PlayerType(p.PlayerInfo.Role)
 }
 
 func (p *Player) Send(msgid uint32, raw []byte) error {

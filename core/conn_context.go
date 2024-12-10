@@ -13,21 +13,21 @@ import (
 type Context interface {
 	SendAsync(msg proto.Message) error
 	Response(msg proto.Message, err error)
-	FromUserID() uint32
-	FromUserRole() uint16
-	ConnID() string
+	FromUId() uint32
+	FromURole() uint16
+	Conn() network.Conn
 	Packet() *RoutePacket
 }
 
 type ConnContext struct {
-	Conn      network.Conn
+	ReqConn   network.Conn
 	Core      *Surf
 	ReqPacket *RoutePacket
-	responsed atomic.Bool
+	resped    atomic.Bool
 }
 
 func (ctx *ConnContext) Response(msg proto.Message, herr error) {
-	resped := ctx.responsed.Swap(true)
+	resped := ctx.resped.Swap(true)
 	if resped {
 		log.Error("repeated response")
 		return
@@ -41,10 +41,10 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 	respmsgid := GetMsgId(msg)
 	rpk.SetMsgId(respmsgid)
 	rpk.SetSYN(ctx.ReqPacket.GetSYN())
-	rpk.SetToUID(ctx.FromUserID())
-	rpk.SetToURole(ctx.FromUserRole())
-	rpk.SetFromUID(ctx.Core.NodeID())
-	rpk.SetFromURole(ctx.Core.getServerType())
+	rpk.SetToUId(ctx.FromUId())
+	rpk.SetToURole(ctx.FromURole())
+	rpk.SetFromUId(ctx.Core.NodeID())
+	rpk.SetFromURole(ctx.Core.NodeType())
 	rpk.SetMsgType(RoutePackMsgType_Response)
 	rpk.SetMarshalType(ctx.ReqPacket.GetMarshalType())
 
@@ -64,31 +64,31 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 			log.Error("response marshal error", "err", err)
 			return
 		}
-		rpk.Body = body
+		rpk.SetBody(body)
 	}
 
-	err = ctx.Conn.Send(rpk.ToHVPacket())
+	err = ctx.ReqConn.Send(rpk.ToHVPacket())
 	if err != nil {
 		log.Error("response send error", "err", err)
 	}
 }
 
 func (ctx *ConnContext) SendAsync(msg proto.Message) error {
-	msgid := GetMsgId(msg)
-	return ctx.Core.SendAsyncToClient(ctx.Conn, ctx.FromUserID(), ctx.FromUserRole(), msgid, msg)
+	return ctx.Core.SendAsync(ctx.ReqConn, ctx.FromURole(), ctx.FromUId(), msg)
 }
 
-func (ctx *ConnContext) FromUserID() uint32 {
-	return ctx.ReqPacket.GetFromUID()
+func (ctx *ConnContext) FromUId() uint32 {
+	return ctx.ReqPacket.GetFromUId()
 }
 
-func (ctx *ConnContext) FromUserRole() uint16 {
+func (ctx *ConnContext) FromURole() uint16 {
 	return ctx.ReqPacket.GetFromURole()
 }
 
-func (ctx *ConnContext) ConnID() string {
-	return ctx.Conn.ConnId()
+func (ctx *ConnContext) Conn() network.Conn {
+	return ctx.ReqConn
 }
+
 func (ctx *ConnContext) Packet() *RoutePacket {
 	return ctx.ReqPacket
 }

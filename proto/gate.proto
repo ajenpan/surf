@@ -6,17 +6,3 @@ option csharp_namespace = "src.msg.gate";
 
 // Battle ServerType = 101
 // msg id start from 101 * 1000
-
-message NotifyClientDisconnect {
-  enum MSGID {
-    __invilid__MSGID = 0;
-    ID = 101001;
-  }
-
-  uint32 uid = 1;
-  enum Reason {
-    Disconnect = 0;
-  }
-  Reason reason = 2;
-  uint32 gate_node_id = 3;
-}

@@ -4,7 +4,7 @@ import (
 	"time"
 
 	gdpoker "github.com/ajenpan/poker_algorithm/guandan"
-	"github.com/ajenpan/surf/server/battle"
+	battle "github.com/ajenpan/surf/game"
 )
 
 type Player struct {

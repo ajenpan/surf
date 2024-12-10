@@ -1,4 +1,4 @@
-package handler
+package battle
 
 import (
 	"log/slog"
@@ -7,17 +7,25 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/event"
-	"github.com/ajenpan/surf/server/battle"
+	"github.com/ajenpan/surf/game"
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
 const NodeType_Battle core.NodeType = 102
 
+func ServerType() core.NodeType {
+	return NodeType_Battle
+}
+
+func ServerName() string {
+	return "battle"
+}
+
 var log = slog.Default().With("ntype", "battle")
 
 type Battle struct {
 	tables        sync.Map
-	LogicCreator  *battle.GameLogicCreator
+	LogicCreator  *game.GameLogicCreator
 	Publisher     event.Publisher
 	userBattleMap sync.Map
 
@@ -26,7 +34,7 @@ type Battle struct {
 
 func New() *Battle {
 	h := &Battle{
-		LogicCreator: battle.LogicCreator,
+		LogicCreator: game.LogicCreator,
 	}
 	return h
 }
@@ -49,14 +57,6 @@ func (h *Battle) OnReady() {
 
 func (h *Battle) OnStop() error {
 	return nil
-}
-
-func (h *Battle) ServerType() uint16 {
-	return NodeType_Battle
-}
-
-func (h *Battle) ServerName() string {
-	return "battle"
 }
 
 func (h *Battle) UIDBindBattleID(uid int64, bid string) error {

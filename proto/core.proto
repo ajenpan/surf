@@ -16,6 +16,7 @@ message NotifyClientDisconnect {
   enum Reason {
     Disconnect = 0;
     BeKicked = 1;
+    GateClosed = 2;
   }
 
   uint32 uid = 1;

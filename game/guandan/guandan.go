@@ -10,8 +10,8 @@ import (
 
 	"github.com/ajenpan/poker_algorithm/poker"
 	"github.com/ajenpan/surf/core/utils/calltable"
+	battle "github.com/ajenpan/surf/game"
 	gutils "github.com/ajenpan/surf/game/utils"
-	"github.com/ajenpan/surf/server/battle"
 )
 
 func NewLogic() battle.Logic {
@@ -105,7 +105,7 @@ func (g *Guandan) newStageInfo(t StageType) *StageInfo {
 		return &StageInfo{
 			StageType: StageType_Stage_GameStart,
 			OnBeforeEnterFn: func() {
-				g.table.ReportBattleStatus(battle.BattleStatus_Running)
+				g.table.ReportBattleStatus(battle.GameStatus_Running)
 			},
 			TimeToLive: 1 * time.Second,
 		}
@@ -142,7 +142,7 @@ func (g *Guandan) newStageInfo(t StageType) *StageInfo {
 		return &StageInfo{
 			StageType: StageType_Stage_FinalResult,
 			OnBeforeEnterFn: func() {
-				g.table.ReportBattleStatus(battle.BattleStatus_Over)
+				g.table.ReportBattleStatus(battle.GameStatus_Over)
 			},
 		}
 	default:

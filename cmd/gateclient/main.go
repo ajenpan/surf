@@ -12,7 +12,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/utils/rsagen"
 	utilSignal "github.com/ajenpan/surf/core/utils/signal"
@@ -75,13 +74,12 @@ func ReadRSAKey() ([]byte, []byte, error) {
 }
 
 var gatesvr = &gate.Gate{
-	Marshaler: &marshal.ProtoMarshaler{},
+	// Marshaler: &marshal.ProtoMarshaler{},
 }
 
 func startTcp(ppk *rsa.PrivateKey) (func(), error) {
 	uinfo := &auth.UserInfo{
 		UId:   10001,
-		UName: "gdclient",
 		URole: 0,
 	}
 	jwt, _ := auth.GenerateToken(ppk, uinfo, 2400*time.Hour)
@@ -123,7 +121,6 @@ func startTcp(ppk *rsa.PrivateKey) (func(), error) {
 func StartWsClient(ppk *rsa.PrivateKey) (func(), error) {
 	uinfo := &auth.UserInfo{
 		UId:   10001,
-		UName: "gdclient",
 		URole: 0,
 	}
 	jwt, _ := auth.GenerateToken(ppk, uinfo, 2400*time.Hour)

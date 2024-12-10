@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/ajenpan/surf/core/utils/calltable"
-	"github.com/ajenpan/surf/server/battle"
+	battle "github.com/ajenpan/surf/game"
 )
 
 // func CreateLogic() battle.Logic {

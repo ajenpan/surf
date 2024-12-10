@@ -8,8 +8,8 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/server/battle"
-	battleHandler "github.com/ajenpan/surf/server/battle/handler"
+	"github.com/ajenpan/surf/game"
+	battleHandler "github.com/ajenpan/surf/server/battle"
 
 	// games
 	"github.com/ajenpan/surf/game/guandan"
@@ -39,8 +39,8 @@ func RealMain(c *cli.Context) error {
 	// calltable := calltable.ExtractMethodFromDesc(msgBattle.File_battle_proto.Messages(), h)
 
 	// RegGames
-	battle.RegisterGame("guandan", guandan.NewLogic)
-	battle.RegisterGame("niuniu", niuniu.NewLogic)
+	game.RegisterGame("guandan", guandan.NewLogic)
+	game.RegisterGame("niuniu", niuniu.NewLogic)
 
 	opts := &core.ServerInfo{
 		Svr:                h,

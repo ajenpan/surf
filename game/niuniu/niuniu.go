@@ -11,8 +11,8 @@ import (
 	protobuf "google.golang.org/protobuf/proto"
 
 	"github.com/ajenpan/surf/core/utils/calltable"
+	battle "github.com/ajenpan/surf/game"
 	"github.com/ajenpan/surf/game/utils"
-	"github.com/ajenpan/surf/server/battle"
 )
 
 func NewLogic() battle.Logic {
@@ -142,7 +142,7 @@ func (nn *Niuniu) OnStart([]battle.Player) error {
 		return fmt.Errorf("player is not enrough")
 	}
 
-	nn.table.ReportBattleStatus(battle.BattleStatus_Running)
+	nn.table.ReportBattleStatus(battle.GameStatus_Running)
 	nn.ChangeLogicStep(GameStep_BEGIN)
 	return nil
 }
@@ -287,7 +287,7 @@ func (nn *Niuniu) OnTick(duration time.Duration) {
 		nn.NextStep()
 	case GameStep_OVER:
 		if nn.StepTimeover() {
-			nn.table.ReportBattleStatus(battle.BattleStatus_Over)
+			nn.table.ReportBattleStatus(battle.GameStatus_Over)
 			nn.NextStep()
 		}
 	default:

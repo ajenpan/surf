@@ -1,4 +1,4 @@
-package handler
+package battle
 
 import (
 	"github.com/google/uuid"
@@ -7,7 +7,6 @@ import (
 	"github.com/ajenpan/surf/core/errors"
 
 	msgBattle "github.com/ajenpan/surf/msg/battle"
-	msgGate "github.com/ajenpan/surf/msg/gate"
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
@@ -89,15 +88,11 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *msgBattle.ReqJoinBattle) 
 		})
 	}
 
-	d.OnPlayerConn(int64(ctx.FromUserID()), sender, true)
+	d.OnPlayerConn(int64(ctx.FromUId()), sender, true)
 
 	ctx.Response(out, err)
 
-	h.UIDBindBattleID(int64(ctx.FromUserID()), in.BattleId)
-}
-
-func (h *Battle) OnNotifyClientDisconnect(ctx core.Context, in *msgGate.NotifyClientDisconnect) {
-	h.OnPlayerDisConn(in.Uid, in.GateNodeId, int32(in.Reason))
+	h.UIDBindBattleID(int64(ctx.FromUId()), in.BattleId)
 }
 
 func (h *Battle) OnPlayerDisConn(uid uint32, gateNodeId uint32, reason int32) {
@@ -118,7 +113,7 @@ func (h *Battle) OnReqQuitBattle(ctx core.Context, in *msgBattle.ReqQuitBattle) 
 	resp := &msgBattle.RespQuitBattle{
 		BattleId: in.BattleId,
 	}
-	uid := ctx.FromUserID()
+	uid := ctx.FromUId()
 	h.UIDUnBindBattleID(int64(uid), in.BattleId)
 	ctx.Response(resp, nil)
 }
@@ -129,5 +124,5 @@ func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *msgBattle.BattleMsgTo
 		log.Warn("battle not found", "battleid", in.BattleId)
 		return
 	}
-	d.OnPlayerMessage(int64(ctx.FromUserID()), in.Syn, in.Msgid, in.Data)
+	d.OnPlayerMessage(int64(ctx.FromUId()), in.Syn, in.Msgid, in.Data)
 }

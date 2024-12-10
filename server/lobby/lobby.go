@@ -29,6 +29,8 @@ type Lobby struct {
 	uLoign       UserUniqueLogin
 	contiTable   map[TableIdxT]*Table
 	matchQues    map[int32]DispatchQue
+
+	banker *Banker
 }
 
 func (h *Lobby) OnInit(surf *core.Surf) (err error) {

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/ajenpan/surf/core"
+	"github.com/ajenpan/surf/core/marshal"
+	msgBattle "github.com/ajenpan/surf/msg/battle"
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
 )
 
@@ -14,8 +16,8 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 	resp := &msgLobby.RespLoginLobby{}
 	var err error
 
-	uid := ctx.FromUserID()
-	if ctx.FromUserRole() != 0 {
+	uid := ctx.FromUId()
+	if ctx.FromURole() != 0 {
 		uid = req.Uid
 	}
 
@@ -51,7 +53,6 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 		}
 	}
 
-	user.ConnInfo.ConnID = ctx.ConnID()
 	user.ConnInfo.Sender = ctx.SendAsync
 	user.GameInfo.GameId = req.GameId
 	user.PlayInfo.gameRoomId = req.GameRoomId
@@ -98,7 +99,7 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 }
 
 func (h *Lobby) OnReqDispatchQue(ctx core.Context, req *msgLobby.ReqDispatchQue) {
-	uid := ctx.FromUserID()
+	uid := ctx.FromUId()
 	user := h.getLoginUser(uid)
 	resp := &msgLobby.RespDispatchQue{}
 	var herr error
@@ -172,8 +173,8 @@ func (h *Lobby) OnReqDispatchQue(ctx core.Context, req *msgLobby.ReqDispatchQue)
 }
 
 func (h *Lobby) OnReqLogoutLobby(ctx core.Context, req *msgLobby.ReqLogoutLobby) {
-	uid := ctx.FromUserID()
-	if ctx.FromUserRole() != 0 {
+	uid := ctx.FromUId()
+	if ctx.FromURole() != 0 {
 		uid = req.Uid
 	}
 	h.delLoginUser(uid)
@@ -192,7 +193,7 @@ func (h *Lobby) DoTableStart(table *Table) error {
 		user.PlayInfo.PlayerStatus = msgLobby.PlayerStatus_PlayerInGaming
 	}
 
-	onFailed := func(table *Table, errcode int, errmsg string) {
+	onFailed := func(table *Table, flag int32, err error) {
 		// 		FLOGE("DoTableStart faild flag:{},tidx:{},tappid:{},tid:{},playid:{},player:{},msg:{}",
 		// 		flag, pTable->tableIdx, pTable->logic_appid, pTable->tableid, pTable->playid, fmt::join(pTable->m_players, "-"), errmsg);
 		notify := &msgLobby.NotifyDispatchResult{
@@ -240,14 +241,14 @@ func (h *Lobby) DoTableStart(table *Table) error {
 
 	}
 
-	h.TallyTableFee(table, func(table *Table, ok bool) {
-		if !ok {
-			onFailed(table, 1, "tallyTableFee")
+	h.TallyTableFee(table, func(table *Table, err error) {
+		if err != nil {
+			onFailed(table, 1, err)
 			return
 		}
-		h.NewRemoteTable(table, 3, func(table *Table, success bool) {
-			if !success {
-				onFailed(table, 2, "NewRemoteTable faild")
+		h.NewRemoteTable(table, 3, func(table *Table, err error) {
+			if err != nil {
+				onFailed(table, 2, err)
 				return
 			}
 			onSuccess(table)
@@ -256,11 +257,34 @@ func (h *Lobby) DoTableStart(table *Table) error {
 	return nil
 }
 
-func (h *Lobby) TallyTableFee(table *Table, fn func(table *Table, ok bool)) {
+func (h *Lobby) TallyTableFee(table *Table, fn func(table *Table, err error)) {
 	// h.WGameDB.
 	// h.WGameDB.raw
+	var err error
+	if h.banker != nil {
+		for _, user := range table.users {
+			err = h.banker.UpdateUserProp(user.UserId, 1, -100)
+			if err != nil {
+				break
+			}
+		}
+	}
+
+	if fn != nil {
+		fn(table, err)
+	}
 }
 
-func (h *Lobby) NewRemoteTable(table *Table, trycnt int, fn func(table *Table, ok bool)) {
+func (h *Lobby) NewRemoteTable(table *Table, trycnt int, fn func(table *Table, err error)) {
+	req := &msgBattle.ReqStartBattle{}
 
+	marshaler := marshal.NewMarshaler(marshal.MarshalerId_protobuf)
+	raw, err := marshaler.Marshal(req)
+	if err != nil {
+		return
+	}
+	pkt := core.NewRoutePacket(raw)
+	pkt.SetMarshalType(marshal.MarshalerId_protobuf)
+
+	// h.surf.SendToGate(0, 0, pkt.ToHVPacket())
 }
