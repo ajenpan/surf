@@ -3,6 +3,7 @@ package lobby
 import (
 	"time"
 
+	"github.com/ajenpan/surf/game"
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
 	"google.golang.org/protobuf/proto"
 )
@@ -34,6 +35,7 @@ type UserConnInfo struct {
 
 type User struct {
 	UserId uint32
+	UType  game.PlayerType
 
 	BaseInfo UserBaseInfo
 	GameInfo UserGameInfo

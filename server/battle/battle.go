@@ -44,10 +44,10 @@ func (h *Battle) OnInit(surf *core.Surf) error {
 	confstr := surf.ServerConf()
 	log.Info("battle server conf", "conf", confstr)
 
-	core.HandleRequestFunc(surf, h.OnReqStartBattle)
-	core.HandleRequestFunc(surf, h.OnReqJoinBattle)
-	core.HandleRequestFunc(surf, h.OnReqQuitBattle)
-	core.HandleAyncFunc(surf, surf.NodeType(), h.OnBattleMsgToServer)
+	core.HandleFunc(surf, h.OnReqStartBattle)
+	core.HandleFunc(surf, h.OnReqJoinBattle)
+	core.HandleFunc(surf, h.OnReqQuitBattle)
+	core.HandleFunc(surf, h.OnBattleMsgToServer)
 	return nil
 }
 

@@ -46,9 +46,9 @@ func (h *Lobby) OnInit(surf *core.Surf) (err error) {
 	h.uLoign.NodeType = surf.NodeType()
 	h.uLoign.Rds = h.WRds
 
-	core.HandleRequestFunc(surf, h.OnReqDispatchQue)
-	core.HandleRequestFunc(surf, h.OnReqLoginLobby)
-	core.HandleRequestFunc(surf, h.OnReqLogoutLobby)
+	core.HandleFunc(surf, h.OnReqDispatchQue)
+	core.HandleFunc(surf, h.OnReqLoginLobby)
+	core.HandleFunc(surf, h.OnReqLogoutLobby)
 
 	h.surf = surf
 	return nil

@@ -40,20 +40,12 @@ func NewMysqlClient(dsn string) *gorm.DB {
 	return dbc
 }
 
-func HandleRequestFunc[T proto.Message](s *Surf, f func(Context, T)) {
+func HandleFunc[T proto.Message](s *Surf, f func(Context, T)) {
 	var v T
 	msgid := GetMsgId(v)
 	msgname := string(v.ProtoReflect().Descriptor().Name())
-	s.HandleRequest(msgid, FuncToHandle(f))
+	s.HandleFuncs(msgid, FuncToHandle(f))
 	log.Info("HandleRequest", "msgid", msgid, "msgname", msgname)
-}
-
-func HandleAyncFunc[T proto.Message](s *Surf, ntype uint16, fn func(Context, T)) {
-	var v T
-	msgid := GetMsgId(v)
-	msgname := string(v.ProtoReflect().Descriptor().Name())
-	s.HandleAync(ntype, msgid, FuncToHandle(fn))
-	log.Info("HandleAyncFunc", "msgid", msgid, "msgname", msgname, "ntype", ntype)
 }
 
 func GetMsgIdFromFunc[T proto.Message](f func(Context, T)) uint32 {
@@ -108,4 +100,24 @@ func Assert(guard bool, text string) {
 	if !guard {
 		panic(text)
 	}
+}
+
+func SendRequestToNode[RespT any](surf *Surf, ntype uint16, nid uint32, msg proto.Message, fn func(result *ResponseResult, resp *RespT)) error {
+	var resp *RespT = new(RespT)
+	return surf.SendRequestToNode(ntype, nid, msg, func(result *ResponseResult, pk *RoutePacket) {
+		if fn == nil {
+			return
+		}
+		if !result.Ok() {
+			fn(result, nil)
+			return
+		}
+		marshaler := marshal.NewMarshaler(pk.GetMarshalType())
+		err := marshaler.Unmarshal(pk.Body, resp)
+		if err != nil {
+			log.Error(err.Error())
+			return
+		}
+		fn(result, resp)
+	})
 }

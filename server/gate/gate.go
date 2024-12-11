@@ -7,18 +7,18 @@ import (
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/network"
-	"github.com/ajenpan/surf/core/utils/calltable"
 	msgCore "github.com/ajenpan/surf/msg/core"
 )
 
 func New() *Gate {
-	return &Gate{}
+	return &Gate{
+		caller: core.NewPacketRouteCaller(),
+	}
 }
 
 type Gate struct {
-	surf      *core.Surf
-	conf      *Config
-	calltable *calltable.CallTable
+	surf *core.Surf
+	conf *Config
 
 	clientConnStore *core.ClientConnStore
 	nodeConnStore   *core.NodeConnStore
@@ -46,6 +46,7 @@ func (gate *Gate) OnInit(surf *core.Surf) error {
 	if err != nil {
 		return err
 	}
+
 	gate.surf = surf
 	return err
 }
@@ -55,6 +56,9 @@ func (gate *Gate) OnReady() {
 }
 
 func (gate *Gate) OnStop() error {
+	if gate.closer != nil {
+		gate.closer()
+	}
 	return nil
 }
 
@@ -79,7 +83,7 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 
 	rpk := core.NewRoutePacket(nil).FromHVPacket(pk)
 	if rpk == nil {
-		log.Warn("OnConnPacket parse route packet failed", "pk", pk)
+		log.Error("OnConnPacket parse route packet failed")
 		return
 	}
 
@@ -98,7 +102,7 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		return
 	}
 
-	ud := s.GetUserData().(*ConnUserData)
+	ud := s.GetUserData().(*ClientConnUserData)
 	var targetConn network.Conn
 	if target_nid != 0 {
 		targetConn, _ = gate.nodeConnStore.LoadByUId(target_nid)
@@ -162,6 +166,11 @@ func (gate *Gate) OnNodeAuth(data []byte) (network.User, error) {
 
 func (gate *Gate) OnNodeStatus(conn network.Conn, enable bool) {
 	log.Info("OnNodeStatus", "connid", conn.ConnId(), "nodeid", conn.UserID(), "svrtype", conn.UserRole(), "enable", enable)
+	if enable {
+		gate.onNodeOnline(conn)
+	} else {
+		gate.onNodeOffline(conn)
+	}
 }
 
 func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
@@ -176,20 +185,29 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 		log.Debug("OnNodePacket", "from", rpk.GetFromUId(), "fromrole", rpk.GetFromURole(),
 			"to", rpk.GetToUId(), "torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
 
-		clientUID := rpk.GetToUId()
-		if clientUID == 0 {
-			log.Warn("client not found", "clientUID", clientUID)
-			return
+		toUId := rpk.GetToUId()
+		toURole := rpk.GetToURole()
+
+		var targetConn network.Conn = nil
+		var found bool = false
+
+		if toURole == 0 {
+			targetConn, found = gate.clientConnStore.LoadByUId(toUId)
+		} else {
+			if toUId == 0 {
+				// TODO:
+			} else {
+				targetConn, found = gate.nodeConnStore.LoadByUId(toUId)
+			}
 		}
 
-		v, found := gate.clientConnStore.LoadByUId(clientUID)
 		if !found {
-			log.Warn("client not found", "cid", clientUID)
+			log.Warn("client not found", "cid", toUId)
 			pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
 			gate.SendTo(s, pk)
 			return
 		}
-		gate.SendTo(v, pk)
+		gate.SendTo(targetConn, pk)
 	default:
 		log.Warn("OnNodePacket unknown packet type", "type", pk.Meta.GetType())
 	}
@@ -202,32 +220,29 @@ func (gate *Gate) SendTo(c network.Conn, pk *network.HVPacket) {
 	}
 }
 
-func (gate *Gate) onServerOnline(s network.Conn) {
+func (gate *Gate) onNodeOnline(s network.Conn) {
 	gate.PublishEvent("NodeOnline", map[string]any{
-		"conn_id":  s.ConnId(),
-		"node_id":  s.UserID(),
-		"svr_type": s.UserRole(),
-		"enable":   true,
+		"conn_id":   s.ConnId(),
+		"node_id":   s.UserID(),
+		"node_type": s.UserRole(),
 	})
 }
 
-func (gate *Gate) onServerOffline(s network.Conn) {
+func (gate *Gate) onNodeOffline(s network.Conn) {
 	gate.PublishEvent("NodeOffline", map[string]any{
 		"conn_id":   s.ConnId(),
 		"node_id":   s.UserID(),
 		"node_type": s.UserRole(),
-		"enable":    false,
 	})
 }
 
 func (gate *Gate) onUserOnline(conn network.Conn) {
-	conn.SetUserData(NewConnUserData(conn))
+	conn.SetUserData(NewClientConnUserData(conn))
 
 	gate.PublishEvent("UserOnline", map[string]any{
 		"sid":          conn.ConnId(),
 		"uid":          conn.UserID(),
 		"gate_node_id": gate.nodeId(),
-		"enable":       true,
 	})
 }
 
@@ -237,12 +252,11 @@ func (gate *Gate) nodeId() uint32 {
 
 func (gate *Gate) onUserOffline(conn network.Conn) {
 	gate.PublishEvent("UserOffline", map[string]any{
-		"sid":    conn.ConnId(),
-		"uid":    conn.UserID(),
-		"enable": false,
+		"sid": conn.ConnId(),
+		"uid": conn.UserID(),
 	})
 
-	ud := conn.GetUserData().(*ConnUserData)
+	ud := conn.GetUserData().(*ClientConnUserData)
 	conn.SetUserData(nil)
 
 	notify := &msgCore.NotifyClientDisconnect{

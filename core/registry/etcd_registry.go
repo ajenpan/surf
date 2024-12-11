@@ -23,7 +23,7 @@ type EtcdRegistry struct {
 	cli      *etcclientv3.Client
 	nodekey  string
 	opts     EtcdRegistryOpts
-	closeCh  chan struct{}
+	closed   chan struct{}
 	nodeData string
 	mu       sync.RWMutex
 	leaseID  etcclientv3.LeaseID
@@ -57,7 +57,7 @@ func NewEtcdRegistry(opts EtcdRegistryOpts) (*EtcdRegistry, error) {
 	ret := &EtcdRegistry{
 		nodekey: nodekey,
 		cli:     etcdcli,
-		closeCh: make(chan struct{}),
+		closed:  make(chan struct{}),
 		opts:    opts,
 		leaseID: grantResp.ID,
 	}
@@ -100,7 +100,7 @@ func (reg *EtcdRegistry) keepAlive() error {
 			if err != nil {
 				return err
 			}
-		case <-reg.closeCh:
+		case <-reg.closed:
 			return nil
 		}
 	}
@@ -111,10 +111,10 @@ func (reg *EtcdRegistry) Close() error {
 	defer reg.mu.Unlock()
 
 	select {
-	case <-reg.closeCh:
+	case <-reg.closed:
 		return nil
 	default:
-		close(reg.closeCh)
+		close(reg.closed)
 		reg.unregister()
 		return reg.cli.Close()
 	}

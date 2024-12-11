@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/ajenpan/surf/core"
-	"github.com/ajenpan/surf/core/marshal"
 	msgBattle "github.com/ajenpan/surf/msg/battle"
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
+	"github.com/google/uuid"
 )
 
 func (h *Lobby) OnClientConnect() {}
@@ -181,8 +181,8 @@ func (h *Lobby) OnReqLogoutLobby(ctx core.Context, req *msgLobby.ReqLogoutLobby)
 	ctx.Response(&msgLobby.RespLogoutLobby{}, nil)
 }
 
-func (h *Lobby) newPlayID(tidx TableIdxT) int64 {
-	return 0
+func (h *Lobby) newPlayID(_ TableIdxT) string {
+	return uuid.NewString()
 }
 
 func (h *Lobby) DoTableStart(table *Table) error {
@@ -276,15 +276,35 @@ func (h *Lobby) TallyTableFee(table *Table, fn func(table *Table, err error)) {
 }
 
 func (h *Lobby) NewRemoteTable(table *Table, trycnt int, fn func(table *Table, err error)) {
-	req := &msgBattle.ReqStartBattle{}
-
-	marshaler := marshal.NewMarshaler(marshal.MarshalerId_protobuf)
-	raw, err := marshaler.Marshal(req)
-	if err != nil {
+	if trycnt <= 0 {
+		fn(table, fmt.Errorf("new remote table failed"))
 		return
 	}
-	pkt := core.NewRoutePacket(raw)
-	pkt.SetMarshalType(marshal.MarshalerId_protobuf)
+	req := &msgBattle.ReqStartBattle{
+		GameName:    table.game.Name,
+		GameConf:    table.game.DefaultConf,
+		TableConf:   nil,
+		PlayerInfos: make([]*msgBattle.PlayerInfo, 0, len(table.users)),
+		Playid:      table.playid,
+	}
 
-	// h.surf.SendToGate(0, 0, pkt.ToHVPacket())
+	for _, user := range table.users {
+		req.PlayerInfos = append(req.PlayerInfos, &msgBattle.PlayerInfo{
+			Uid:    int64(user.UserId),
+			SeatId: user.PlayInfo.SeatId,
+			Score:  user.GameInfo.PlayScore,
+			Role:   user.UType,
+		})
+	}
+
+	err := core.SendRequestToNode(h.surf, core.NodeType_Battle, 0, req, func(result *core.ResponseResult, pk *msgBattle.RespStartBattle) {
+		if result.Failed() {
+			h.NewRemoteTable(table, trycnt-1, fn)
+			return
+		}
+	})
+
+	if err != nil {
+		h.NewRemoteTable(table, trycnt-1, fn)
+	}
 }

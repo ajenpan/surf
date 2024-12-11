@@ -9,9 +9,12 @@ import (
 	"strings"
 	"time"
 
+	etcclientv3 "go.etcd.io/etcd/client/v3"
+
 	"github.com/ajenpan/surf/core/auth"
 	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
+	"github.com/ajenpan/surf/core/registry"
 	utilRsa "github.com/ajenpan/surf/core/utils/rsagen"
 	msgCore "github.com/ajenpan/surf/msg/core"
 )
@@ -26,8 +29,8 @@ func (s *Surf) init() error {
 	s.caller = NewPacketRouteCaller()
 
 	if s.NodeType() != NodeType_Gate {
-		HandleAyncFunc(s, NodeType_Gate, s.onNotifyClientConnect)
-		HandleAyncFunc(s, NodeType_Gate, s.onNotifyClientDisconnect)
+		HandleFunc(s, s.onNotifyClientConnect)
+		HandleFunc(s, s.onNotifyClientDisconnect)
 	}
 
 	err = s.serverInfo.Svr.OnInit(s)
@@ -302,4 +305,38 @@ func (s *Surf) connectGates() {
 		})
 		client.Start()
 	}
+}
+
+func (s *Surf) startNodeWatcher() error {
+	if s.conf.EtcdConf != nil {
+		var err error
+
+		cb := func(ev *etcclientv3.Event) {
+			// strings.CutSuffix(ev.Kv.String(),"")
+
+		}
+
+		s.nodeWatcher, err = registry.NewEtcdWatcher(*s.conf.EtcdConf, "/reg/node/", cb, etcclientv3.WithPrefix())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Surf) startNodeRegistry() error {
+	if s.conf.EtcdConf != nil {
+		regopts := registry.EtcdRegistryOpts{
+			EtcdConf:   *s.conf.EtcdConf,
+			NodeId:     fmt.Sprintf("%d", s.ninfo.NodeID()),
+			NodeType:   s.ninfo.NodeName(),
+			TimeoutSec: 5,
+		}
+		reg, err := registry.NewEtcdRegistry(regopts)
+		if err != nil {
+			return err
+		}
+		s.registry = reg
+	}
+	return nil
 }

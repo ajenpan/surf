@@ -53,6 +53,9 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 			Node:   ninfo,
 			Meta:   registryMeta{},
 		},
+		clientGateMap:  make(map[uint32]*clientGateItem),
+		gateConnMap:    make(map[string]network.Conn),
+		gateHoldUserid: make(map[string]map[uint32]*clientGateItem),
 	}
 	err := surf.init()
 	if err != nil {
@@ -75,7 +78,7 @@ type Surf struct {
 
 	rasPublicKey *rsa.PublicKey
 	registry     *registry.EtcdRegistry
-	watcher      *registry.EtcdWatch
+	nodeWatcher  *registry.EtcdWatcher
 
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
@@ -196,21 +199,15 @@ func (s *Surf) Run() error {
 
 	defer s.Close()
 
-	s.connectGates()
-
-	if s.conf.EtcdConf != nil {
-		regopts := registry.EtcdRegistryOpts{
-			EtcdConf:   *s.conf.EtcdConf,
-			NodeId:     fmt.Sprintf("%d", s.ninfo.NodeID()),
-			NodeType:   s.ninfo.NodeName(),
-			TimeoutSec: 5,
-		}
-		reg, err := registry.NewEtcdRegistry(regopts)
-		if err != nil {
-			return err
-		}
-		s.registry = reg
+	if err := s.startNodeRegistry(); err != nil {
+		return err
 	}
+
+	if err := s.startNodeWatcher(); err != nil {
+		return err
+	}
+
+	s.connectGates()
 
 	s.serverInfo.Svr.OnReady()
 
@@ -252,6 +249,12 @@ func (s *Surf) SendAsyncToClient(uid uint32, msg proto.Message) error {
 }
 
 func (s *Surf) SendRequestToNode(ntype uint16, nid uint32, msg proto.Message, cb RequestCallbackFunc) error {
+	if ntype == 0 {
+		return fmt.Errorf("err node type")
+	}
+	if nid == 0 {
+		nid = s.NextNodeId(ntype)
+	}
 	conn := s.GetClientConn(nid)
 	if conn == nil {
 		return fmt.Errorf("conn not found")
@@ -318,16 +321,13 @@ func (s *Surf) GetClientConn(uid uint32) network.Conn {
 	return item.conn
 }
 
-func (s *Surf) HandleRequest(msgid uint32, chain ...HandlerFunc) {
+func (s *Surf) HandleFuncs(msgid uint32, chain ...HandlerFunc) {
 	if len(chain) == 0 {
 		return
 	}
-	s.caller.requestRoute.Add(RequestRouteKey{s.NodeType(), msgid}, chain)
+	s.caller.handlers.Add(msgid, chain)
 }
 
-func (s *Surf) HandleAync(ntype uint16, msgid uint32, chain ...HandlerFunc) {
-	if len(chain) == 0 {
-		return
-	}
-	s.caller.ayncRoute.Add(AyncRouteKey{ntype, msgid}, chain)
+func (s *Surf) NextNodeId(ntype uint16) uint32 {
+	return 0
 }

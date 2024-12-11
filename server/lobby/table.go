@@ -21,13 +21,15 @@ type Table struct {
 	deadline     time.Time
 	users        []*User
 	context      []byte
-	playid       int64
+	playid       string
 
 	keepOnAt    int64
 	keepOnUsers map[uint32]*User
 	keepOnTimer *time.Timer
 
 	deadlineTimer *time.Timer
+
+	game *GameInfo
 }
 
 func (t *Table) getUser(uid uint32) *User {
