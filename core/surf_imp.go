@@ -343,18 +343,20 @@ func (s *Surf) startNodeWatcher() error {
 }
 
 func (s *Surf) startNodeRegistry() error {
-	if s.conf.EtcdConf != nil {
-		regopts := registry.EtcdRegistryOpts{
-			EtcdConf:   *s.conf.EtcdConf,
-			NodeId:     fmt.Sprintf("%d", s.ninfo.NodeID()),
-			NodeType:   s.ninfo.NodeName(),
-			TimeoutSec: 5,
-		}
-		reg, err := registry.NewEtcdRegistry(regopts)
-		if err != nil {
-			return err
-		}
-		s.registry = reg
+	if s.conf.EtcdConf == nil {
+		return nil
 	}
-	return nil
+
+	regopts := registry.EtcdRegistryOpts{
+		EtcdConf:   *s.conf.EtcdConf,
+		NodeId:     fmt.Sprintf("%d", s.ninfo.NodeID()),
+		NodeType:   s.ninfo.NodeName(),
+		TimeoutSec: 5,
+	}
+	reg, err := registry.NewEtcdRegistry(regopts)
+	if err != nil {
+		return err
+	}
+	s.registry = reg
+	return s.UpdateNodeData(NodeState_Init, nil)
 }

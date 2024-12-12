@@ -42,6 +42,7 @@ func RealMain(c *cli.Context) error {
 			HttpListenAddr:    ":10300",
 			WsListenAddr:      ":10301",
 			PublicKeyFilePath: "http://myali01:9999/publickey",
+			// EtcdConf:          &registry.EtcdConfig{},
 		},
 	}
 	ninfo := &auth.NodeInfo{
@@ -53,7 +54,7 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-
+	defer surf.Close()
 	err = surf.Run()
 	return err
 }

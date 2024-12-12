@@ -2,7 +2,6 @@ package registry
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -40,14 +39,13 @@ func NewEtcdRegistry(opts EtcdRegistryOpts) (*EtcdRegistry, error) {
 	}
 
 	nodekey := strings.Join([]string{"/nodes", opts.NodeType, opts.NodeId}, "/")
-	resp, err := etcdcli.Get(context.Background(), nodekey, etcclientv3.WithLimit(1))
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.Count >= 1 {
-		return nil, fmt.Errorf("node alread exist, key:%s", nodekey)
-	}
+	// resp, err := etcdcli.Get(context.Background(), nodekey, etcclientv3.WithLimit(1))
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// if resp.Count >= 1 {
+	// 	return nil, fmt.Errorf("node alread exist, key:%s", nodekey)
+	// }
 
 	grantResp, err := etcdcli.Grant(context.Background(), opts.TimeoutSec)
 	if err != nil {
@@ -63,6 +61,16 @@ func NewEtcdRegistry(opts EtcdRegistryOpts) (*EtcdRegistry, error) {
 	}
 
 	go ret.keepAlive()
+	// resp, err := ret.cli.KeepAlive(context.Background(), grantResp.ID)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// go func() {
+	// 	for v := range resp {
+	// 		 v
+	// 	}
+	// }()
+
 	return ret, nil
 }
 

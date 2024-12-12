@@ -52,6 +52,9 @@ func RealMain(c *cli.Context) error {
 			HttpListenAddr:    ":13300",
 			WsListenAddr:      ":13301",
 			PublicKeyFilePath: "http://myali01:9999/publickey",
+			GateAddrList: []string{
+				"ws://localhost:10101",
+			},
 		},
 	}
 	ninfo := &auth.NodeInfo{
@@ -63,7 +66,7 @@ func RealMain(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-
+	defer surf.Close()
 	err = surf.Run()
 	return err
 }

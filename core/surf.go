@@ -30,6 +30,8 @@ const (
 	NodeType_Client NodeType = 0
 	NodeType_Core   NodeType = 100
 	NodeType_Gate   NodeType = 101
+
+	NodeName_Gate string = "gate"
 )
 
 type ServerInfo struct {
@@ -176,15 +178,13 @@ func (s *Surf) Close() error {
 	return nil
 }
 
-func (s *Surf) UpdateNodeData(status NodeState, data json.RawMessage) error {
+func (s *Surf) UpdateNodeData(state NodeState, data json.RawMessage) error {
 	if s.registry == nil {
 		return fmt.Errorf("registry not init")
 	}
 
-	s.mux.Lock()
 	s.regData.Data = data
-	s.regData.Status = status
-	s.mux.Unlock()
+	s.regData.Status = state
 
 	raw, err := json.Marshal(s.regData)
 	if err != nil {
