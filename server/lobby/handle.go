@@ -66,7 +66,7 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 
 	isReconnect := table != nil && user.PlayInfo.PlayerStatus == msgLobby.PlayerStatus_PlayerInGaming
 
-	log.Info("on user login")
+	log.Info("on user login", "uid", uid, "roomid", req.GameRoomId)
 
 	if isReconnect {
 		h.addLoginUser(user)
