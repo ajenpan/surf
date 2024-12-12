@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"sync/atomic"
 
 	"google.golang.org/protobuf/proto"
@@ -11,11 +12,12 @@ import (
 )
 
 type Context interface {
-	SendAsync(msg proto.Message) error
+	Async(msg proto.Message) error
 	Response(msg proto.Message, err error)
+
 	FromUId() uint32
 	FromURole() uint16
-	Conn() network.Conn
+	ConnId() string
 	Packet() *RoutePacket
 }
 
@@ -27,6 +29,7 @@ type ConnContext struct {
 }
 
 func (ctx *ConnContext) Response(msg proto.Message, herr error) {
+	context.Background()
 	resped := ctx.resped.Swap(true)
 	if resped {
 		log.Error("repeated response")
@@ -73,7 +76,7 @@ func (ctx *ConnContext) Response(msg proto.Message, herr error) {
 	}
 }
 
-func (ctx *ConnContext) SendAsync(msg proto.Message) error {
+func (ctx *ConnContext) Async(msg proto.Message) error {
 	return ctx.Core.SendAsync(ctx.ReqConn, ctx.FromURole(), ctx.FromUId(), msg)
 }
 
@@ -88,7 +91,9 @@ func (ctx *ConnContext) FromURole() uint16 {
 func (ctx *ConnContext) Conn() network.Conn {
 	return ctx.ReqConn
 }
-
+func (ctx *ConnContext) ConnId() string {
+	return ctx.ReqConn.ConnId()
+}
 func (ctx *ConnContext) Packet() *RoutePacket {
 	return ctx.ReqPacket
 }

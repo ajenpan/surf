@@ -24,6 +24,14 @@ var log = slog.Default().With("module", "surf")
 
 var DefaultRequestTimeoutSec uint32 = 3
 
+type NodeType = uint16
+
+const (
+	NodeType_Client NodeType = 0
+	NodeType_Core   NodeType = 100
+	NodeType_Gate   NodeType = 101
+)
+
 type ServerInfo struct {
 	Svr       Server
 	Marshaler marshal.Marshaler
@@ -50,7 +58,7 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 		svrconf:    conf.ServerConf,
 		regData: nodeRegistryData{
 			Status: 1,
-			Node:   ninfo,
+			Node:   *ninfo,
 			Meta:   registryMeta{},
 		},
 		clientGateMap:  make(map[uint32]*clientGateItem),
@@ -65,7 +73,7 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 }
 
 type clientGateItem struct {
-	conn     network.Conn
+	connId   string
 	clientIp string
 	connAt   time.Time
 }
@@ -96,6 +104,8 @@ type Surf struct {
 	clientGateMap  map[uint32]*clientGateItem
 	gateConnMap    map[string]network.Conn
 	gateHoldUserid map[string]map[uint32]*clientGateItem
+
+	nodeGroup *NodeGroup
 }
 
 func (s *Surf) Do(fn func()) {
@@ -233,7 +243,7 @@ func (s *Surf) Run() error {
 }
 
 func (s *Surf) SendRequestToClient(uid uint32, msg proto.Message, cb RequestCallbackFunc) error {
-	conn := s.GetClientConn(uid)
+	conn := s.ClientGateConn(uid)
 	if conn == nil {
 		return fmt.Errorf("conn not found")
 	}
@@ -241,7 +251,7 @@ func (s *Surf) SendRequestToClient(uid uint32, msg proto.Message, cb RequestCall
 }
 
 func (s *Surf) SendAsyncToClient(uid uint32, msg proto.Message) error {
-	conn := s.GetClientConn(uid)
+	conn := s.ClientGateConn(uid)
 	if conn == nil {
 		return fmt.Errorf("conn not found")
 	}
@@ -249,13 +259,29 @@ func (s *Surf) SendAsyncToClient(uid uint32, msg proto.Message) error {
 }
 
 func (s *Surf) SendRequestToNode(ntype uint16, nid uint32, msg proto.Message, cb RequestCallbackFunc) error {
+	if ntype == 0 && nid == 0 {
+		return fmt.Errorf("err target")
+	}
+
+	var err error
 	if ntype == 0 {
-		return fmt.Errorf("err node type")
+		info := s.nodeGroup.Get(nid)
+		if info != nil {
+			ntype = info.Node.NType
+		}
+		if ntype == 0 {
+			return fmt.Errorf("err node type")
+		}
 	}
+
 	if nid == 0 {
-		nid = s.NextNodeId(ntype)
+		nid, err = s.NextNodeId(ntype)
+		if err != nil {
+			return err
+		}
 	}
-	conn := s.GetClientConn(nid)
+
+	conn := s.NodeGateConn()
 	if conn == nil {
 		return fmt.Errorf("conn not found")
 	}
@@ -263,7 +289,7 @@ func (s *Surf) SendRequestToNode(ntype uint16, nid uint32, msg proto.Message, cb
 }
 
 func (s *Surf) SendAsyncToNode(ntype uint16, nid uint32, msg proto.Message) error {
-	conn := s.GetClientConn(nid)
+	conn := s.ClientGateConn(nid)
 	if conn == nil {
 		return fmt.Errorf("conn not found")
 	}
@@ -313,12 +339,19 @@ func (s *Surf) SendRequest(conn network.Conn, urole uint16, uid uint32, msg prot
 	return err
 }
 
-func (s *Surf) GetClientConn(uid uint32) network.Conn {
+func (s *Surf) ClientGateConn(uid uint32) network.Conn {
 	item, has := s.clientGateMap[uid]
 	if !has {
 		return nil
 	}
-	return item.conn
+	return s.gateConnMap[item.connId]
+}
+
+func (s *Surf) NodeGateConn() network.Conn {
+	for _, v := range s.gateConnMap {
+		return v
+	}
+	return nil
 }
 
 func (s *Surf) HandleFuncs(msgid uint32, chain ...HandlerFunc) {
@@ -328,6 +361,10 @@ func (s *Surf) HandleFuncs(msgid uint32, chain ...HandlerFunc) {
 	s.caller.handlers.Add(msgid, chain)
 }
 
-func (s *Surf) NextNodeId(ntype uint16) uint32 {
-	return 0
+func (s *Surf) NextNodeId(ntype uint16) (uint32, error) {
+	node := s.nodeGroup.Choice(ntype)
+	if node == nil {
+		return 0, fmt.Errorf("there's no enable node online")
+	}
+	return node.Node.NId, nil
 }

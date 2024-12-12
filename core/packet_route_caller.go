@@ -23,8 +23,6 @@ func (r *ResponseResult) String() string {
 	return fmt.Sprintf("timeout:%v,errcode:%v", r.Timeout, r.Errcode)
 }
 
-var responseOK = &ResponseResult{}
-
 type RequestCallbackFunc func(result *ResponseResult, pk *RoutePacket)
 
 type RequestCallbackCache struct {

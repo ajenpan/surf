@@ -15,6 +15,7 @@ import (
 	"github.com/ajenpan/surf/core/marshal"
 )
 
+// dsn='redis://<user>:<password>@<host>:<port>/<db_number>'
 func NewRdsClient(dsn string) *redis.Client {
 	opt, err := redis.ParseURL(dsn)
 	if err != nil {

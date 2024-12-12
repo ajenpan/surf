@@ -17,7 +17,7 @@ const (
 
 type nodeRegistryData struct {
 	Status NodeState       `json:"status"`
-	Node   *auth.NodeInfo  `json:"node"`
+	Node   auth.NodeInfo   `json:"node"`
 	Meta   registryMeta    `json:"meta"`
 	Data   json.RawMessage `json:"data"`
 }

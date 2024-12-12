@@ -3,17 +3,25 @@ package lobby
 import (
 	"log/slog"
 
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"github.com/ajenpan/surf/core"
-	lobbymsg "github.com/ajenpan/surf/msg/lobby"
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
-	"github.com/redis/go-redis/v9"
+	"github.com/ajenpan/surf/server"
 )
+
+func NodeType() core.NodeType {
+	return server.NodeType_Lobby
+}
+
+func NodeName() string {
+	return server.NodeName_Lobby
+}
 
 var log = slog.Default()
 
-func NewLobby() *Lobby {
+func New() *Lobby {
 	return &Lobby{
 		loginUsers:   make(map[uint32]*User),
 		inTableUsers: make(map[uint32]*User),
@@ -21,23 +29,21 @@ func NewLobby() *Lobby {
 }
 
 type Lobby struct {
-	WGameDB      *gorm.DB
-	WRds         *redis.Client
-	surf         *core.Surf
+	WGameDB *gorm.DB
+	WRds    *redis.Client
+	surf    *core.Surf
+
 	loginUsers   map[uint32]*User
 	inTableUsers map[uint32]*User
-	uLoign       UserUniqueLogin
 	contiTable   map[TableIdxT]*Table
 	matchQues    map[int32]DispatchQue
 
+	uLoign UserUniqueLogin
 	banker *Banker
 }
 
 func (h *Lobby) OnInit(surf *core.Surf) (err error) {
-	cfg, err := ConfigFromJson(surf.ServerConf())
-	if err != nil {
-		return err
-	}
+	cfg := DefaultConf
 
 	h.WRds = core.NewRdsClient(cfg.WRedisDSN)
 	h.WGameDB = core.NewMysqlClient(cfg.WGameDBDSN)
@@ -46,9 +52,9 @@ func (h *Lobby) OnInit(surf *core.Surf) (err error) {
 	h.uLoign.NodeType = surf.NodeType()
 	h.uLoign.Rds = h.WRds
 
-	core.HandleFunc(surf, h.OnReqDispatchQue)
 	core.HandleFunc(surf, h.OnReqLoginLobby)
 	core.HandleFunc(surf, h.OnReqLogoutLobby)
+	core.HandleFunc(surf, h.OnReqJoinQue)
 
 	h.surf = surf
 	return nil
@@ -62,8 +68,8 @@ func (h *Lobby) OnStop() error {
 	return nil
 }
 
-func (h *Lobby) GetUserGameInfo(uid uint32) (*lobbymsg.UserBaseInfo, error) {
-	info := &lobbymsg.UserBaseInfo{}
+func (h *Lobby) GetUserGameInfo(uid uint32) (*msgLobby.UserBaseInfo, error) {
+	info := &msgLobby.UserBaseInfo{}
 	return info, nil
 }
 

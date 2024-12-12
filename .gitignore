@@ -5,5 +5,4 @@ log.txt
 *.db
 *.exe
 *.pem
-.vscode
-/msg-cs
+msg-cs

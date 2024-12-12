@@ -13,6 +13,7 @@ type UserInfo struct {
 func (u *UserInfo) UserID() uint32 {
 	return u.UId
 }
+
 func (u *UserInfo) UserRole() uint16 {
 	return u.URole
 }

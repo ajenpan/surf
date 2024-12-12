@@ -5,6 +5,13 @@ import (
 	"sync/atomic"
 )
 
+// todo:
+type NodeSelect interface {
+	Next() uint32
+	Add(key uint32)
+	Del(key uint32)
+}
+
 type nodeSelecter struct {
 	rwl  sync.RWMutex
 	idx  atomic.Uint32
@@ -77,17 +84,30 @@ func (g *NodeGroup) Set(item *nodeRegistryData) {
 	}
 }
 
-func (g *NodeGroup) Choice(ntype uint16) (*nodeRegistryData, int) {
+func (g *NodeGroup) Choice(ntype uint16) *nodeRegistryData {
 	g.lock.RLock()
 	defer g.lock.RUnlock()
 
 	selecter, got := g.selecters[ntype]
 	if !got {
-		return nil, 0
+		return nil
 	}
+	size := selecter.Size()
 
-	nid := selecter.Next()
-	return g.m[nid], selecter.Size()
+	var ret *nodeRegistryData
+	for i := 0; i < size; i++ {
+		nid := selecter.Next()
+		v, has := g.m[nid]
+		if !has {
+			continue
+		}
+
+		if v.Status == NodeState_Running {
+			ret = v
+			break
+		}
+	}
+	return ret
 }
 
 func (g *NodeGroup) Del(uid uint32) *nodeRegistryData {

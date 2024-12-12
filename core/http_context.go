@@ -62,7 +62,7 @@ func (ctx *HttpContext) Request(msg proto.Message, cb func(pk *network.HVPacket,
 	// do nothing
 }
 
-func (ctx *HttpContext) SendAsync(msg proto.Message) error {
+func (ctx *HttpContext) Async(msg proto.Message) error {
 	return fmt.Errorf("SendAsync is not impl")
 }
 
@@ -76,6 +76,10 @@ func (ctx *HttpContext) FromURole() uint16 {
 
 func (ctx *HttpContext) Conn() network.Conn {
 	return nil
+}
+
+func (ctx *HttpContext) ConnId() string {
+	return ""
 }
 
 func (ctx *HttpContext) Packet() *RoutePacket {

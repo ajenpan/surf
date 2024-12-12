@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -201,6 +202,7 @@ func (s *Surf) catch() {
 		log.Error("catch panic", "err", err)
 	}
 }
+
 func (s *Surf) onConnAuth(data []byte) (network.User, error) {
 	return auth.VerifyToken(s.rasPublicKey, data)
 }
@@ -231,17 +233,18 @@ func (s *Surf) onGateStatus(conn network.Conn, enable bool) {
 
 func (s *Surf) onNotifyClientConnect(ctx Context, msg *msgCore.NotifyClientConnect) {
 	item := &clientGateItem{
-		conn:     ctx.Conn(),
+		// conn:     ctx.Conn(),
+		connId:   ctx.ConnId(),
 		clientIp: msg.IpAddr,
 		connAt:   time.Now(),
 	}
 	s.Do(func() {
 		s.clientGateMap[msg.Uid] = item
 		if ctx.FromURole() == NodeType_Gate {
-			m, has := s.gateHoldUserid[ctx.Conn().ConnId()]
+			m, has := s.gateHoldUserid[ctx.ConnId()]
 			if !has {
 				m = make(map[uint32]*clientGateItem)
-				s.gateHoldUserid[ctx.Conn().ConnId()] = m
+				s.gateHoldUserid[ctx.ConnId()] = m
 			}
 			m[msg.Uid] = item
 		}
@@ -252,7 +255,7 @@ func (s *Surf) onNotifyClientConnect(ctx Context, msg *msgCore.NotifyClientConne
 func (s *Surf) onNotifyClientDisconnect(ctx Context, msg *msgCore.NotifyClientDisconnect) {
 	s.Do(func() {
 		delete(s.clientGateMap, msg.Uid)
-		if m, has := s.gateHoldUserid[ctx.Conn().ConnId()]; has {
+		if m, has := s.gateHoldUserid[ctx.ConnId()]; has {
 			delete(m, msg.Uid)
 		}
 		s.notifyClientDisconnect(msg.Uid, msg.GateNodeId, msg.Reason)
@@ -310,10 +313,25 @@ func (s *Surf) connectGates() {
 func (s *Surf) startNodeWatcher() error {
 	if s.conf.EtcdConf != nil {
 		var err error
-
 		cb := func(ev *etcclientv3.Event) {
-			// strings.CutSuffix(ev.Kv.String(),"")
-
+			switch ev.Type {
+			case etcclientv3.EventTypePut:
+				node := &nodeRegistryData{}
+				err := json.Unmarshal(ev.Kv.Value, node)
+				if err != nil {
+					return
+				}
+				s.nodeGroup.Set(node)
+			case etcclientv3.EventTypeDelete:
+				nid := 0
+				strkey := string(ev.Kv.Key)
+				strlist := strings.Split(strkey, "/")
+				if len(strlist) == 0 {
+					return
+				}
+				nid, _ = strconv.Atoi(strlist[len(strlist)-1])
+				s.nodeGroup.Del(uint32(nid))
+			}
 		}
 
 		s.nodeWatcher, err = registry.NewEtcdWatcher(*s.conf.EtcdConf, "/reg/node/", cb, etcclientv3.WithPrefix())

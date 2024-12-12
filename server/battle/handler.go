@@ -81,7 +81,7 @@ func (h *Battle) OnReqJoinBattle(ctx core.Context, in *msgBattle.ReqJoinBattle) 
 	}
 
 	sender := func(msgid uint32, raw []byte) error {
-		return ctx.SendAsync(&msgBattle.BattleMsgToClient{
+		return ctx.Async(&msgBattle.BattleMsgToClient{
 			BattleId: in.BattleId,
 			Msgid:    msgid,
 			Data:     raw,

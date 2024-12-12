@@ -4,6 +4,8 @@ package openproto.lobby;
 option go_package = "msg/lobby";
 option csharp_namespace = "src.msg.lobby";
 
+// lobby msgid start at 103000
+
 enum PlayerStatus {
   PlayerNone = 0;
   PlayerInQueue = 10;
@@ -63,7 +65,7 @@ message TableInfo {
 message ReqLoginLobby {
   enum MSGID {
     __INVALID__ = 0;
-    ID = 12001;
+    ID = 103001;
   }
   uint32 uid = 1; // 可空
   int32 game_id = 2;
@@ -73,7 +75,7 @@ message ReqLoginLobby {
 message RespLoginLobby {
   enum MSGID {
     __INVALID__ = 0;
-    ID = 12002;
+    ID = 103002;
   }
 
   enum FLAG {
@@ -81,7 +83,7 @@ message RespLoginLobby {
     kSuccess = 0;
     // process returns
     kOtherErr = 99;
-    kInloining = 103; // 正在登录
+    kInloining = 1030; // 正在登录
 
     kDBPError = 105;  // 可能是dbp超时, 或者脚本catch导致的.
     kRoomidErr = 106; // 场次id 错误
@@ -101,18 +103,22 @@ message RespLoginLobby {
   UserMetaInfo meta_info = 13;
 }
 
-message ReqDispatchQue {
+message ReqJoinQue {
   enum MSGID {
     __INVALID__ = 0;
-    ID = 12003;
+    ID = 103003;
   }
-  int32 join_type = 1;
+  enum JoinType {
+    Noraml = 0;   // 正常
+    NextGame = 1; // 续桌
+  }
+  JoinType join_type = 1;
 }
 
-message RespDispatchQue {
+message RespJoinQue {
   enum MSGID {
     __INVALID__ = 0;
-    ID = 12004;
+    ID = 103004;
   }
   int32 flag = 1;
   int32 dispatch_id = 2;
@@ -121,7 +127,7 @@ message RespDispatchQue {
 message NotifyDispatchResult {
   enum MSGID {
     __INVALID__ = 0;
-    ID = 12005;
+    ID = 103005;
   }
 
   enum FLAG {
@@ -148,7 +154,7 @@ message NotifyDispatchResult {
 message ReqLogoutLobby {
   enum MSGID {
     __invalid = 0;
-    ID = 12010;
+    ID = 103006;
   }
   uint32 uid = 1;
 }
@@ -156,7 +162,7 @@ message ReqLogoutLobby {
 message RespLogoutLobby {
   enum MSGID {
     __invalid = 0;
-    ID = 12011;
+    ID = 103007;
   }
   int32 flag = 1;
 }
@@ -164,7 +170,7 @@ message RespLogoutLobby {
 message NotifyTableStatus {
   enum MSGID {
     __invalid = 0;
-    ID = 12020;
+    ID = 103008;
   }
 
   TableStatus status = 1;
@@ -174,7 +180,7 @@ message NotifyTableStatus {
 message ReqUserDetailInfo {
   enum MSGID {
     __invalid = 0;
-    ID = 12030;
+    ID = 103009;
   }
   repeated int64 uid = 1;
 }
@@ -182,7 +188,7 @@ message ReqUserDetailInfo {
 message RespUserDetailInfo {
   enum MSGID {
     __invalid = 0;
-    ID = 12031;
+    ID = 103010;
   }
   map<int64, UserBaseInfo> users = 1;
 }

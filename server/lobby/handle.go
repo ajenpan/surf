@@ -7,10 +7,17 @@ import (
 	"github.com/ajenpan/surf/core"
 	msgBattle "github.com/ajenpan/surf/msg/battle"
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
+	"github.com/ajenpan/surf/server"
 	"github.com/google/uuid"
 )
 
-func (h *Lobby) OnClientConnect() {}
+func (h *Lobby) OnClientConnect(uid uint32, gateNodeId uint32, ip string) {
+
+}
+
+func (h *Lobby) OnClientDisconnect(uid uint32, gateNodeId uint32, reason int32) {
+
+}
 
 func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 	resp := &msgLobby.RespLoginLobby{}
@@ -53,7 +60,7 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 		}
 	}
 
-	user.ConnInfo.Sender = ctx.SendAsync
+	user.ConnInfo.Sender = ctx.Async
 	user.GameInfo.GameId = req.GameId
 	user.PlayInfo.gameRoomId = req.GameRoomId
 
@@ -98,10 +105,10 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 	ctx.Response(resp, nil)
 }
 
-func (h *Lobby) OnReqDispatchQue(ctx core.Context, req *msgLobby.ReqDispatchQue) {
+func (h *Lobby) OnReqJoinQue(ctx core.Context, req *msgLobby.ReqJoinQue) {
 	uid := ctx.FromUId()
 	user := h.getLoginUser(uid)
-	resp := &msgLobby.RespDispatchQue{}
+	resp := &msgLobby.RespJoinQue{}
 	var herr error
 
 	defer func() { ctx.Response(resp, herr) }()
@@ -128,7 +135,7 @@ func (h *Lobby) OnReqDispatchQue(ctx core.Context, req *msgLobby.ReqDispatchQue)
 
 	if user.PlayInfo.tidx != 0 {
 		table := h.FindContiTable(user.PlayInfo.tidx)
-		if req.JoinType != 0 && table != nil {
+		if req.JoinType != msgLobby.ReqJoinQue_Noraml && table != nil {
 			needJoinQue = false
 
 			if herr = table.AddContinuePlayer(user); herr != nil {
@@ -297,7 +304,7 @@ func (h *Lobby) NewRemoteTable(table *Table, trycnt int, fn func(table *Table, e
 		})
 	}
 
-	err := core.SendRequestToNode(h.surf, core.NodeType_Battle, 0, req, func(result *core.ResponseResult, pk *msgBattle.RespStartBattle) {
+	err := core.SendRequestToNode(h.surf, server.NodeType_Battle, 0, req, func(result *core.ResponseResult, pk *msgBattle.RespStartBattle) {
 		if result.Failed() {
 			h.NewRemoteTable(table, trycnt-1, fn)
 			return
