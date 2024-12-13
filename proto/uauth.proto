@@ -17,7 +17,7 @@ enum ResponseFlag {
   // login + 100
 }
 
-message ReqCaptcha  {
+message ReqCaptcha {
   string captcha_type = 1;
 }
 
@@ -98,7 +98,19 @@ message RespAnonymousLogin {
   UserInfo user_info = 3;
 }
 
-message ReqPublicKeys {}
+message ReqVerifyToken {
+  string access_token = 1;
+
+}
+message RespVerifyToken {
+  bool ok = 1;
+  UserInfo user_info = 3;
+}
+
+message ReqPublicKeys {
+  
+}
+
 message RespPublicKeys {
   bytes keys = 1;
 }

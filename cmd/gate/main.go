@@ -10,7 +10,6 @@ import (
 
 	"github.com/ajenpan/surf/core"
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/registry"
 	gate "github.com/ajenpan/surf/server/gate"
 )
 
@@ -54,11 +53,11 @@ func RealMain(c *cli.Context) error {
 	conf := &core.NodeConf{
 		SurfConf: core.SurfConfig{
 			PublicKeyFilePath: "http://myali01:9999/publickey",
-			EtcdConf:          &registry.EtcdConfig{Endpoints: []string{"test122:2379"}},
+			// EtcdConf:          &registry.EtcdConfig{Endpoints: []string{"test122:2379"}},
 		},
 	}
 	ninfo := &auth.NodeInfo{
-		NId:   10001,
+		NId:   10000,
 		NName: core.NodeName_Gate,
 		NType: core.NodeType_Gate,
 	}

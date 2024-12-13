@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/ajenpan/surf/core/network"
 )
 
 type ResponseResult struct {
@@ -84,36 +86,31 @@ func (s *PacketRouteCaller) PopRespCallback(key ResponseRouteKey) *RequestCallba
 	return ret
 }
 
-func (p *PacketRouteCaller) Call(ctx Context) {
-	rpk := ctx.Packet()
-
-	if rpk.GetSubType() != 0 {
-		log.Error("recv err packet subtype", "subtype", rpk.GetSubType())
+func (p *PacketRouteCaller) Call(ctx network.Conn, rpk *RoutePacket) {
+	if rpk.SubType() != 0 {
+		log.Error("recv err packet subtype", "subtype", rpk.SubType())
 		return
 	}
-
-	switch rpk.GetMsgType() {
+	switch rpk.MsgType() {
 	case RoutePackMsgType_Async:
 		fallthrough
 	case RoutePackMsgType_Request:
-		handles := p.handlers.Get(rpk.GetMsgId())
-		if handles == nil {
-			log.Error("not found msg handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUId(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUId(), "to_svrtype", rpk.GetToURole())
+		h := p.handlers.Get(rpk.MsgId())
+		if h == nil {
+			log.Error("not found msg handler", "msgid", rpk.MsgId(), "from_uid", rpk.FromUId(), "from_svrtype", rpk.FromURole(), "to_uid", rpk.ToUId(), "to_svrtype", rpk.ToURole())
 			return
 		}
-		for _, h := range handles {
-			h(ctx)
-		}
+		h(ctx, rpk)
 	case RoutePackMsgType_Response:
-		cbinfo := p.PopRespCallback(ResponseRouteKey{ctx.FromUId(), rpk.GetSYN()})
+		cbinfo := p.PopRespCallback(ResponseRouteKey{rpk.FromUId(), rpk.SYN()})
 		if cbinfo == nil {
-			log.Error("not found resp handler", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUId(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUId(), "to_svrtype", rpk.GetToURole())
+			log.Error("not found resp handler", "msgid", rpk.MsgId(), "from_uid", rpk.FromUId(), "from_svrtype", rpk.FromURole(), "to_uid", rpk.ToUId(), "to_svrtype", rpk.ToURole())
 			return
 		}
 		if cbinfo.cbfun != nil {
-			cbinfo.cbfun(&ResponseResult{false, rpk.GetErrCode()}, rpk)
+			cbinfo.cbfun(&ResponseResult{false, rpk.ErrCode()}, rpk)
 		}
 	default:
-		log.Error("unknow msg type", "msgid", rpk.GetMsgId(), "from_uid", rpk.GetFromUId(), "from_svrtype", rpk.GetFromURole(), "to_uid", rpk.GetToUId(), "to_svrtype", rpk.GetToURole())
+		log.Error("unknow msg type", "msgid", rpk.MsgId(), "from_uid", rpk.FromUId(), "from_svrtype", rpk.FromURole(), "to_uid", rpk.ToUId(), "to_svrtype", rpk.ToURole())
 	}
 }

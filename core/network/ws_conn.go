@@ -122,11 +122,11 @@ func (c *WSConn) Status() ConnStatus {
 	return ConnStatus(atomic.LoadInt32((*int32)(&c.status)))
 }
 
-func (c *WSConn) writePacket(p *HVPacket) error {
+func (c *WSConn) WritePacket(p *HVPacket) error {
 	return wsconnWritePacket(c.imp, p)
 }
 
-func (c *WSConn) readPacket() (*HVPacket, error) {
+func (c *WSConn) ReadPacket() (*HVPacket, error) {
 	return wsconnReadPacket(c.imp)
 }
 
@@ -140,7 +140,7 @@ func (c *WSConn) writeWork() error {
 				return nil
 			}
 			c.imp.SetWriteDeadline(time.Now().Add(c.rwtimeout))
-			err := c.writePacket(p)
+			err := c.WritePacket(p)
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func (c *WSConn) readWork() error {
 	for {
 		rdl := time.Now().Add(c.rwtimeout)
 		c.imp.SetReadDeadline(rdl)
-		pk, err := c.readPacket()
+		pk, err := c.ReadPacket()
 		if err != nil {
 			return err
 		}

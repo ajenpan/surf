@@ -77,46 +77,46 @@ var gatesvr = &gate.Gate{
 	// Marshaler: &marshal.ProtoMarshaler{},
 }
 
-func startTcp(ppk *rsa.PrivateKey) (func(), error) {
-	uinfo := &auth.UserInfo{
-		UId:   10001,
-		URole: 0,
-	}
-	jwt, _ := auth.GenerateToken(ppk, uinfo, 2400*time.Hour)
-	fmt.Println(jwt)
+// func startTcp(ppk *rsa.PrivateKey) (func(), error) {
+// 	uinfo := &auth.UserInfo{
+// 		UId:   10001,
+// 		URole: 0,
+// 	}
+// 	jwt, _ := auth.GenerateToken(ppk, uinfo, 2400*time.Hour)
+// 	fmt.Println(jwt)
 
-	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
-		ListenAddr:   ":19999",
-		OnConnPacket: gatesvr.OnNodePacket,
-		OnConnStatus: gatesvr.OnNodeStatus,
-		OnConnAuth: func(data []byte) (network.User, error) {
-			return auth.VerifyToken(&ppk.PublicKey, data)
-		}},
-	)
-	if err != nil {
-		return nil, err
-	}
-	tcpsvr.Start()
+// 	tcpsvr, err := network.NewTcpServer(network.TcpServerOptions{
+// 		ListenAddr:   ":19999",
+// 		OnConnPacket: gatesvr.OnNodePacket,
+// 		OnConnStatus: gatesvr.OnNodeStatus,
+// 		OnConnAuth: func(data []byte) (network.User, error) {
+// 			return auth.VerifyToken(&ppk.PublicKey, data)
+// 		}},
+// 	)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	tcpsvr.Start()
 
-	client := network.NewTcpClient(network.TcpClientOptions{
-		RemoteAddress:  "localhost:19999",
-		AuthToken:      []byte(jwt),
-		UInfo:          uinfo,
-		ReconnectDelay: time.Second,
-		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
-			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
-		},
-		OnConnStatus: func(c network.Conn, b bool) {
-			fmt.Printf("conn:%v status:%v\n", c.ConnId(), b)
-		},
-	})
-	client.Start()
+// 	client := network.NewTcpClient(network.TcpClientOptions{
+// 		RemoteAddress:  "localhost:19999",
+// 		AuthToken:      []byte(jwt),
+// 		UInfo:          uinfo,
+// 		ReconnectDelay: time.Second,
+// 		OnConnPacket: func(c network.Conn, h *network.HVPacket) {
+// 			fmt.Printf("conn recv pk:%d \n", h.Meta.GetType())
+// 		},
+// 		OnConnStatus: func(c network.Conn, b bool) {
+// 			fmt.Printf("conn:%v status:%v\n", c.ConnId(), b)
+// 		},
+// 	})
+// 	client.Start()
 
-	return func() {
-		tcpsvr.Stop()
-		client.Close()
-	}, nil
-}
+// 	return func() {
+// 		tcpsvr.Stop()
+// 		client.Close()
+// 	}, nil
+// }
 
 func StartWsClient(ppk *rsa.PrivateKey) (func(), error) {
 	uinfo := &auth.UserInfo{

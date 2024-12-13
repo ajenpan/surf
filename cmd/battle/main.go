@@ -49,8 +49,8 @@ func RealMain(c *cli.Context) error {
 
 	conf := &core.NodeConf{
 		SurfConf: core.SurfConfig{
-			HttpListenAddr:    ":13300",
-			WsListenAddr:      ":13301",
+			HttpListenAddr:    ":10200",
+			WsListenAddr:      ":10201",
 			PublicKeyFilePath: "http://myali01:9999/publickey",
 			GateAddrList: []string{
 				"ws://localhost:10101",
@@ -58,7 +58,7 @@ func RealMain(c *cli.Context) error {
 		},
 	}
 	ninfo := &auth.NodeInfo{
-		NId:   10001,
+		NId:   10201,
 		NName: Name,
 		NType: battleHandler.NodeType_Battle,
 	}

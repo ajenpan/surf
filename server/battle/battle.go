@@ -44,15 +44,17 @@ func (h *Battle) OnInit(surf *core.Surf) error {
 	confstr := surf.ServerConf()
 	log.Info("battle server conf", "conf", confstr)
 
-	core.HandleFunc(surf, h.OnReqStartBattle)
-	core.HandleFunc(surf, h.OnReqJoinBattle)
-	core.HandleFunc(surf, h.OnReqQuitBattle)
-	core.HandleFunc(surf, h.OnBattleMsgToServer)
+	core.HandleRequestFromConn(surf, h.OnStartBattle)
+	core.HandleRequestFromConn(surf, h.OnJoinBattle)
+	core.HandleRequestFromConn(surf, h.OnQuitBattle)
+
+	core.HandleAsyncFromConn(surf, h.OnBattleMsgToServer)
 	return nil
 }
 
-func (h *Battle) OnReady() {
+func (h *Battle) OnReady() error {
 	h.surf.UpdateNodeData(core.NodeState_Running, nil)
+	return nil
 }
 
 func (h *Battle) OnStop() error {
@@ -85,4 +87,18 @@ func (h *Battle) getBattleById(battleId string) *table.Table {
 		return raw.(*table.Table)
 	}
 	return nil
+}
+func (h *Battle) reportBattleFinished(battleid string) {
+	d := h.getBattleById(battleid)
+	if d == nil {
+		return
+	}
+
+	d.Players.Range(func(p *table.Player) bool {
+		h.UIDUnBindBattleID(int64(p.UID()), battleid)
+		return true
+	})
+	h.tables.Delete(battleid)
+	d.Close()
+	log.Info("battle finished", "battleid", battleid)
 }

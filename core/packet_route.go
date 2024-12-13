@@ -27,15 +27,15 @@ type routePacketHeadBytes []uint8
 
 func NewRoutePacket(body []byte) *RoutePacket {
 	return &RoutePacket{
-		Head: make(routePacketHeadBytes, RoutePackHeadBytesLen),
-		Body: body,
+		head: make(routePacketHeadBytes, RoutePackHeadBytesLen),
+		body: body,
 	}
 }
 
 func NewRouteFailedPacket(subtype uint8) *RoutePacket {
 	return &RoutePacket{
 		subtype: RoutePackType_SubFlag_RouteFail,
-		Head:    make(routePacketHeadBytes, RoutePackHeadBytesLen),
+		head:    make(routePacketHeadBytes, RoutePackHeadBytesLen),
 	}
 }
 
@@ -87,18 +87,17 @@ func (r *RoutePacketHead) ToBytes() []byte {
 
 type RoutePacket struct {
 	subtype uint8
-
-	Head routePacketHeadBytes
-	Body []byte
+	head    routePacketHeadBytes
+	body    []byte
 }
 
 func (r *RoutePacket) FromHVPacket(hv *network.HVPacket) *RoutePacket {
 	r.subtype = hv.Meta.GetSubFlag()
-	r.Head = hv.GetHead()
-	if len(r.Head) != RoutePackHeadBytesLen {
+	r.head = hv.GetHead()
+	if len(r.head) != RoutePackHeadBytesLen {
 		return nil
 	}
-	r.Body = hv.GetBody()
+	r.body = hv.GetBody()
 	return r
 }
 
@@ -106,95 +105,95 @@ func (r *RoutePacket) ToHVPacket() *network.HVPacket {
 	ret := network.NewHVPacket()
 	ret.Meta.SetType(network.PacketType_Route)
 	ret.Meta.SetSubFlag(r.subtype)
-	ret.SetHead(r.Head)
-	ret.SetBody(r.Body)
+	ret.SetHead(r.head)
+	ret.SetBody(r.body)
 	return ret
 }
 
-func (r *RoutePacket) GetSubType() uint8 {
+func (r *RoutePacket) SubType() uint8 {
 	return r.subtype
+}
+
+func (r *RoutePacket) MsgId() uint32 {
+	return binary.LittleEndian.Uint32(r.head[0:4])
+}
+
+func (r *RoutePacket) SYN() uint32 {
+	return binary.LittleEndian.Uint32(r.head[4:8])
+}
+
+func (r *RoutePacket) FromUId() uint32 {
+	return binary.LittleEndian.Uint32(r.head[8:12])
+}
+
+func (r *RoutePacket) ToUId() uint32 {
+	return binary.LittleEndian.Uint32(r.head[12:16])
+}
+
+func (r *RoutePacket) FromURole() uint16 {
+	return binary.LittleEndian.Uint16(r.head[16:18])
+}
+
+func (r *RoutePacket) ToURole() uint16 {
+	return binary.LittleEndian.Uint16(r.head[18:20])
+}
+
+func (r *RoutePacket) ErrCode() int16 {
+	return (int16)(binary.LittleEndian.Uint16(r.head[20:22]))
+}
+
+func (r *RoutePacket) MsgType() uint8 {
+	return r.head[22]
+}
+
+func (r *RoutePacket) MarshalType() uint8 {
+	return r.head[23]
+}
+
+func (r *RoutePacket) Body() []byte {
+	return r.body
 }
 
 func (r *RoutePacket) SetSubType(t uint8) {
 	r.subtype = t
 }
 
-func (r *RoutePacket) GetMsgId() uint32 {
-	return binary.LittleEndian.Uint32(r.Head[0:4])
-}
-
-func (r *RoutePacket) GetSYN() uint32 {
-	return binary.LittleEndian.Uint32(r.Head[4:8])
-}
-
-func (r *RoutePacket) GetFromUId() uint32 {
-	return binary.LittleEndian.Uint32(r.Head[8:12])
-}
-
-func (r *RoutePacket) GetToUId() uint32 {
-	return binary.LittleEndian.Uint32(r.Head[12:16])
-}
-
-func (r *RoutePacket) GetFromURole() uint16 {
-	return binary.LittleEndian.Uint16(r.Head[16:18])
-}
-
-func (r *RoutePacket) GetToURole() uint16 {
-	return binary.LittleEndian.Uint16(r.Head[18:20])
-}
-
-func (r *RoutePacket) GetErrCode() int16 {
-	return (int16)(binary.LittleEndian.Uint16(r.Head[20:22]))
-}
-
-func (r *RoutePacket) GetMsgType() uint8 {
-	return r.Head[22]
-}
-
-func (r *RoutePacket) GetMarshalType() uint8 {
-	return r.Head[23]
-}
-
-func (r *RoutePacket) GetBody() []byte {
-	return r.Body
-}
-
 func (r *RoutePacket) SetMsgId(d uint32) {
-	binary.LittleEndian.PutUint32(r.Head[0:4], d)
+	binary.LittleEndian.PutUint32(r.head[0:4], d)
 }
 
 func (r *RoutePacket) SetSYN(d uint32) {
-	binary.LittleEndian.PutUint32(r.Head[4:8], d)
+	binary.LittleEndian.PutUint32(r.head[4:8], d)
 }
 
 func (r *RoutePacket) SetFromUId(d uint32) {
-	binary.LittleEndian.PutUint32(r.Head[8:12], d)
+	binary.LittleEndian.PutUint32(r.head[8:12], d)
 }
 
 func (r *RoutePacket) SetToUId(d uint32) {
-	binary.LittleEndian.PutUint32(r.Head[12:16], d)
+	binary.LittleEndian.PutUint32(r.head[12:16], d)
 }
 
 func (r *RoutePacket) SetFromURole(d uint16) {
-	binary.LittleEndian.PutUint16(r.Head[16:18], d)
+	binary.LittleEndian.PutUint16(r.head[16:18], d)
 }
 
 func (r *RoutePacket) SetToURole(d uint16) {
-	binary.LittleEndian.PutUint16(r.Head[18:20], d)
+	binary.LittleEndian.PutUint16(r.head[18:20], d)
 }
 
 func (r *RoutePacket) SetErrCode(d int16) {
-	binary.LittleEndian.PutUint16(r.Head[20:22], uint16(d))
+	binary.LittleEndian.PutUint16(r.head[20:22], uint16(d))
 }
 
 func (r *RoutePacket) SetMsgType(d uint8) {
-	r.Head[22] = d
+	r.head[22] = d
 }
 
 func (r *RoutePacket) SetMarshalType(d uint8) {
-	r.Head[23] = d
+	r.head[23] = d
 }
 
 func (r *RoutePacket) SetBody(d []byte) {
-	r.Body = d
+	r.body = d
 }

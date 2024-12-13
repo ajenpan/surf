@@ -21,7 +21,9 @@ func newTcpConn(id string, uinfo User, imp net.Conn, rwtimeout time.Duration) *T
 		lastSendAt: time.Now().UnixMilli(),
 		lastRecvAt: time.Now().UnixMilli(),
 	}
-	ret.userInfo.fromUser(uinfo)
+	if uinfo != nil {
+		ret.userInfo.fromUser(uinfo)
+	}
 	return ret
 }
 
@@ -106,6 +108,17 @@ func (s *TcpConn) Enable() bool {
 
 func (s *TcpConn) Status() ConnStatus {
 	return ConnStatus(atomic.LoadInt32((*int32)(&s.status)))
+}
+
+func (s *TcpConn) ReadPacket() (*HVPacket, error) {
+	pk := NewHVPacket()
+	_, err := pk.ReadFrom(s.imp)
+	return pk, err
+}
+
+func (s *TcpConn) WritePacket(hv *HVPacket) error {
+	_, err := hv.WriteTo(s.imp)
+	return err
 }
 
 func (c *TcpConn) writeWork() error {

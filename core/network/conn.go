@@ -47,6 +47,9 @@ func (u *userInfo) UserName() string {
 }
 
 func (u *userInfo) fromUser(user User) {
+	if user == nil {
+		return
+	}
 	u.UId = user.UserID()
 	u.URole = user.UserRole()
 }
@@ -63,7 +66,7 @@ func (s *SYNGenerator) NextSYN() uint32 {
 	return ret
 }
 
-type FuncOnConnAuth func(data []byte) (User, error)
+type FuncOnConnAuth func(pconn PreConn, data []byte) (User, error)
 type FuncOnConnEnable func(Conn, bool)
 type FuncOnConnPacket func(Conn, *HVPacket)
 
@@ -90,4 +93,11 @@ type Conn interface {
 	Enable() bool
 
 	RemoteAddr() string
+}
+
+type PreConn interface {
+	RemoteAddr() string
+
+	// WritePacket(p *HVPacket) error
+	// ReadPacket() (*HVPacket, error)
 }

@@ -1,30 +1,28 @@
 package lobby
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/ajenpan/surf/core"
-	msgBattle "github.com/ajenpan/surf/msg/battle"
 	msgLobby "github.com/ajenpan/surf/msg/lobby"
-	"github.com/ajenpan/surf/server"
-	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 )
 
 func (h *Lobby) OnClientConnect(uid uint32, gateNodeId uint32, ip string) {
-
+	h.usersIp[uid] = ip
 }
 
 func (h *Lobby) OnClientDisconnect(uid uint32, gateNodeId uint32, reason int32) {
-
+	h.delLoginUser(uid)
 }
 
-func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
-	resp := &msgLobby.RespLoginLobby{}
+func (h *Lobby) OnReqLoginLobby(ctx context.Context, req *msgLobby.ReqLoginLobby, resp *msgLobby.RespLoginLobby) error {
 	var err error
 
-	uid := ctx.FromUId()
-	if ctx.FromURole() != 0 {
+	uid := core.CtxToUId(ctx)
+	if uid == 0 {
 		uid = req.Uid
 	}
 
@@ -52,15 +50,14 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 		case msgLobby.PlayerStatus_PlayerInGaming:
 			if req.GameRoomId != int32(user.PlayInfo.gameRoomId) {
 				resp.Flag = 1
-				ctx.Response(resp, nil)
-				return
+				return nil
 			}
 		default:
 			log.Error("uknown status")
 		}
 	}
 
-	user.ConnInfo.Sender = ctx.Async
+	user.ConnInfo.Sender = func(msg proto.Message) error { return h.surf.SendAsyncToClient(uid, msg) }
 	user.GameInfo.GameId = req.GameId
 	user.PlayInfo.gameRoomId = req.GameRoomId
 
@@ -72,24 +69,22 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 		h.addLoginUser(user)
 
 		user.MutableRespLoginLobby(resp)
-		ctx.Response(resp, nil)
-
-		notify := table.MutableNotifyDispatchResult()
-		user.Send(notify)
-		return
+		h.surf.Do(func() {
+			notify := table.MutableNotifyDispatchResult()
+			user.Send(notify)
+		})
+		return nil
 	}
 
 	err = user.Init()
 	if err != nil {
-		ctx.Response(resp, err)
-		return
+		return err
 	}
 
 	err = h.uLoign.loadOrStore(uid)
 	if err != nil {
 		resp.Flag = msgLobby.RespLoginLobby_kInOtherRoom
-		ctx.Response(resp, nil)
-		return
+		return nil
 	}
 
 	h.addLoginUser(user)
@@ -102,34 +97,31 @@ func (h *Lobby) OnReqLoginLobby(ctx core.Context, req *msgLobby.ReqLoginLobby) {
 	// }
 	// resp.BaseInfo = baseinfo
 	user.MutableRespLoginLobby(resp)
-	ctx.Response(resp, nil)
+	return nil
 }
 
-func (h *Lobby) OnReqJoinQue(ctx core.Context, req *msgLobby.ReqJoinQue) {
-	uid := ctx.FromUId()
-	user := h.getLoginUser(uid)
-	resp := &msgLobby.RespJoinQue{}
+func (h *Lobby) OnReqJoinQue(ctx context.Context, req *msgLobby.ReqJoinQue, resp *msgLobby.RespJoinQue) error {
+	uid := core.CtxToUId(ctx)
+
 	var herr error
 
-	defer func() { ctx.Response(resp, herr) }()
+	user := h.getLoginUser(uid)
 
 	if user == nil {
 		herr = fmt.Errorf("user not found %d", uid)
-		return
+		return herr
 	}
 
 	que := h.getQue(user.PlayInfo.gameRoomId)
 
 	if que == nil {
-		herr = fmt.Errorf("que not found roomid:%d", user.PlayInfo.gameRoomId)
-		return
+		return fmt.Errorf("que not found roomid:%d", user.PlayInfo.gameRoomId)
 	}
 
 	currState := user.PlayInfo.PlayerStatus
 	if currState == msgLobby.PlayerStatus_PlayerInGaming ||
 		currState == msgLobby.PlayerStatus_PlayerInQueue {
-		herr = fmt.Errorf("player state err %d", currState)
-		return
+		return fmt.Errorf("player state err %d", currState)
 	}
 	needJoinQue := true
 
@@ -139,7 +131,7 @@ func (h *Lobby) OnReqJoinQue(ctx core.Context, req *msgLobby.ReqJoinQue) {
 			needJoinQue = false
 
 			if herr = table.AddContinuePlayer(user); herr != nil {
-				return
+				return herr
 			}
 
 			ok := table.checkStartCondi()
@@ -150,7 +142,7 @@ func (h *Lobby) OnReqJoinQue(ctx core.Context, req *msgLobby.ReqJoinQue) {
 					table.keepOnUsers = make(map[uint32]*User)
 					h.DoTableStart(table)
 				})
-				return
+				return nil
 			}
 
 			if table.keepOnTimer != nil {
@@ -174,144 +166,17 @@ func (h *Lobby) OnReqJoinQue(ctx core.Context, req *msgLobby.ReqJoinQue) {
 		err := que.Add(user)
 		if err != nil {
 			herr = err
-			return
+			return herr
 		}
 	}
-}
-
-func (h *Lobby) OnReqLogoutLobby(ctx core.Context, req *msgLobby.ReqLogoutLobby) {
-	uid := ctx.FromUId()
-	if ctx.FromURole() != 0 {
-		uid = req.Uid
-	}
-	h.delLoginUser(uid)
-	ctx.Response(&msgLobby.RespLogoutLobby{}, nil)
-}
-
-func (h *Lobby) newPlayID(_ TableIdxT) string {
-	return uuid.NewString()
-}
-
-func (h *Lobby) DoTableStart(table *Table) error {
-	table.status = msgLobby.TableStatus_TableInCreating
-	table.playid = h.newPlayID(table.idx)
-	// 提前锁住
-	for _, user := range table.users {
-		user.PlayInfo.PlayerStatus = msgLobby.PlayerStatus_PlayerInGaming
-	}
-
-	onFailed := func(table *Table, flag int32, err error) {
-		// 		FLOGE("DoTableStart faild flag:{},tidx:{},tappid:{},tid:{},playid:{},player:{},msg:{}",
-		// 		flag, pTable->tableIdx, pTable->logic_appid, pTable->tableid, pTable->playid, fmt::join(pTable->m_players, "-"), errmsg);
-		notify := &msgLobby.NotifyDispatchResult{
-			Flag: 1,
-		}
-		table.BroadcastMessage(notify)
-		h.DismissTable(table)
-	}
-
-	onSuccess := func(table *Table) {
-
-		onDeadline := func() {
-			// 	auto pTable = TableStore::Instance().FindTable(tuid);
-			// 	if (pTable == nullptr) {
-			// 		FLOGW("table not found:{}", tuid);
-			// 		return;
-			// 	}
-			// 	if (pTable->playid != playid) {
-			// 		FLOGW("table playid has chg:{},{}", pTable->playid, playid);
-			// 		return;
-			// 	}
-			// 	FLOGW("onTallyTimeOver tidx:{},lappid:{},ltid:{},playid:{},tstatus:{}",
-			// 		  pTable->tableIdx, pTable->logic_appid, pTable->tableid, pTable->playid, (int)pTable->GetStatus());
-			// 	TableStore::Instance().RemoveTable(tuid);
-			// 	DismissTable(pTable);
-			// }
-		}
-
-		if table.deadlineTimer != nil {
-			table.deadlineTimer.Stop()
-		}
-		table.deadlineTimer = time.AfterFunc(time.Second, onDeadline)
-
-		table.status = msgLobby.TableStatus_TableInInGaming
-
-		table.keepOnTimer = nil
-		table.keepOnAt = 0
-
-		notify := table.MutableNotifyDispatchResult()
-
-		for _, user := range table.users {
-			h.inTableUsers[user.UserId] = user
-			user.Send(notify)
-		}
-
-	}
-
-	h.TallyTableFee(table, func(table *Table, err error) {
-		if err != nil {
-			onFailed(table, 1, err)
-			return
-		}
-		h.NewRemoteTable(table, 3, func(table *Table, err error) {
-			if err != nil {
-				onFailed(table, 2, err)
-				return
-			}
-			onSuccess(table)
-		})
-	})
 	return nil
 }
 
-func (h *Lobby) TallyTableFee(table *Table, fn func(table *Table, err error)) {
-	// h.WGameDB.
-	// h.WGameDB.raw
-	var err error
-	if h.banker != nil {
-		for _, user := range table.users {
-			err = h.banker.UpdateUserProp(user.UserId, 1, -100)
-			if err != nil {
-				break
-			}
-		}
+func (h *Lobby) OnReqLogoutLobby(ctx context.Context, req *msgLobby.ReqLogoutLobby, resp *msgLobby.RespLogoutLobby) error {
+	uid := core.CtxToUId(ctx)
+	if uid == 0 {
+		uid = req.Uid
 	}
-
-	if fn != nil {
-		fn(table, err)
-	}
-}
-
-func (h *Lobby) NewRemoteTable(table *Table, trycnt int, fn func(table *Table, err error)) {
-	if trycnt <= 0 {
-		fn(table, fmt.Errorf("new remote table failed"))
-		return
-	}
-	req := &msgBattle.ReqStartBattle{
-		GameName:    table.game.Name,
-		GameConf:    table.game.DefaultConf,
-		TableConf:   nil,
-		PlayerInfos: make([]*msgBattle.PlayerInfo, 0, len(table.users)),
-		Playid:      table.playid,
-	}
-
-	for _, user := range table.users {
-		req.PlayerInfos = append(req.PlayerInfos, &msgBattle.PlayerInfo{
-			Uid:    int64(user.UserId),
-			SeatId: user.PlayInfo.SeatId,
-			Score:  user.GameInfo.PlayScore,
-			Role:   user.UType,
-		})
-	}
-
-	err := core.SendRequestToNode(h.surf, server.NodeType_Battle, 0, req, func(result *core.ResponseResult, pk *msgBattle.RespStartBattle) {
-		if result.Failed() {
-			h.NewRemoteTable(table, trycnt-1, fn)
-			return
-		}
-	})
-
-	if err != nil {
-		h.NewRemoteTable(table, trycnt-1, fn)
-	}
+	h.delLoginUser(uid)
+	return nil
 }

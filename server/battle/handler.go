@@ -1,6 +1,8 @@
 package battle
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 
 	"github.com/ajenpan/surf/core"
@@ -10,37 +12,18 @@ import (
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
-func (h *Battle) reportBattleFinished(battleid string) {
-	d := h.getBattleById(battleid)
-	if d == nil {
-		return
-	}
-
-	d.Players.Range(func(p *table.Player) bool {
-		h.UIDUnBindBattleID(int64(p.UID()), battleid)
-		return true
-	})
-	h.tables.Delete(battleid)
-	d.Close()
-	log.Info("battle finished", "battleid", battleid)
-}
-
-func (h *Battle) OnReqStartBattle(ctx core.Context, in *msgBattle.ReqStartBattle) {
+func (h *Battle) OnStartBattle(ctx context.Context, in *msgBattle.ReqStartBattle, out *msgBattle.RespStartBattle) error {
 	var err error
 	var resp = &msgBattle.RespStartBattle{}
 
-	defer func() {
-		ctx.Response(resp, err)
-	}()
-
 	logic, err := h.LogicCreator.CreateLogic(in.GameName)
 	if err != nil {
-		return
+		return err
 	}
 
 	players, err := table.NewPlayers(in.PlayerInfos)
 	if err != nil {
-		return
+		return err
 	}
 
 	battleid := uuid.NewString()
@@ -57,42 +40,42 @@ func (h *Battle) OnReqStartBattle(ctx core.Context, in *msgBattle.ReqStartBattle
 
 	err = d.Init(logic, players, in.GameConf)
 	if err != nil {
-		return
+		return err
 	}
 
 	h.tables.Store(battleid, d)
 	resp.BattleId = battleid
+	return nil
 }
 
-func (h *Battle) OnReqJoinBattle(ctx core.Context, in *msgBattle.ReqJoinBattle) {
+func (h *Battle) OnJoinBattle(ctx context.Context, in *msgBattle.ReqJoinBattle, out *msgBattle.RespJoinBattle) error {
 	var err error
 
-	out := &msgBattle.RespJoinBattle{
-		BattleId:   in.BattleId,
-		SeatId:     in.SeatId,
-		ReadyState: in.ReadyState,
-	}
+	out.BattleId = in.BattleId
+	out.SeatId = in.SeatId
+	out.ReadyState = in.ReadyState
 
 	d := h.getBattleById(in.BattleId)
 	if d == nil {
 		err = errors.New(-1, "battle not found")
-		ctx.Response(out, err)
-		return
+		return err
 	}
 
+	user, _ := core.CtxToUser(ctx)
+
+	uid := user.UserID()
+
 	sender := func(msgid uint32, raw []byte) error {
-		return ctx.Async(&msgBattle.BattleMsgToClient{
+		return h.surf.SendAsyncToClient(uid, &msgBattle.BattleMsgToClient{
 			BattleId: in.BattleId,
 			Msgid:    msgid,
 			Data:     raw,
 		})
 	}
 
-	d.OnPlayerConn(int64(ctx.FromUId()), sender, true)
-
-	ctx.Response(out, err)
-
-	h.UIDBindBattleID(int64(ctx.FromUId()), in.BattleId)
+	d.OnPlayerConn(int64(uid), sender, true)
+	h.UIDBindBattleID(int64(uid), in.BattleId)
+	return nil
 }
 
 func (h *Battle) OnPlayerDisConn(uid uint32, gateNodeId uint32, reason int32) {
@@ -109,20 +92,21 @@ func (h *Battle) OnPlayerDisConn(uid uint32, gateNodeId uint32, reason int32) {
 	}
 }
 
-func (h *Battle) OnReqQuitBattle(ctx core.Context, in *msgBattle.ReqQuitBattle) {
-	resp := &msgBattle.RespQuitBattle{
-		BattleId: in.BattleId,
-	}
-	uid := ctx.FromUId()
+func (h *Battle) OnQuitBattle(ctx context.Context, in *msgBattle.ReqQuitBattle, out *msgBattle.RespQuitBattle) error {
+	user, _ := core.CtxToUser(ctx)
+	uid := user.UserID()
+	out.BattleId = in.BattleId
 	h.UIDUnBindBattleID(int64(uid), in.BattleId)
-	ctx.Response(resp, nil)
+	return nil
 }
 
-func (h *Battle) OnBattleMsgToServer(ctx core.Context, in *msgBattle.BattleMsgToServer) {
+func (h *Battle) OnBattleMsgToServer(ctx context.Context, in *msgBattle.BattleMsgToServer) {
 	d := h.getBattleById(in.BattleId)
 	if d == nil {
 		log.Warn("battle not found", "battleid", in.BattleId)
 		return
 	}
-	d.OnPlayerMessage(int64(ctx.FromUId()), in.Syn, in.Msgid, in.Data)
+	user, _ := core.CtxToUser(ctx)
+	uid := user.UserID()
+	d.OnPlayerMessage(int64(uid), in.Syn, in.Msgid, in.Data)
 }

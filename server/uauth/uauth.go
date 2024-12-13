@@ -13,11 +13,11 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
-	coreauth "github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/utils/calltable"
-
 	"github.com/ajenpan/surf/core"
-	"github.com/ajenpan/surf/core/errors"
+	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/utils/rsagen"
+
+	xerr "github.com/ajenpan/surf/core/errors"
 	msgUAuth "github.com/ajenpan/surf/msg/uauth"
 	"github.com/ajenpan/surf/server/uauth/database/cache"
 	"github.com/ajenpan/surf/server/uauth/database/models"
@@ -25,37 +25,54 @@ import (
 
 var RegUname = regexp.MustCompile(`^[a-zA-Z0-9_]{4,16}$`)
 
-type AuthOptions struct {
-	PK        *rsa.PrivateKey
-	PublicKey []byte
-	DB        *gorm.DB
-	Cache     cache.AuthCache
-}
-
-func NewAuth(opts AuthOptions) *Auth {
-	ret := &Auth{
-		AuthOptions: opts,
+func New(privateRaw, publicRaw []byte) *UAuth {
+	pk, err := rsagen.ParseRsaPrivateKeyFromPem(privateRaw)
+	if err != nil {
+		panic(err)
 	}
 
-	// 自动创建表
-	opts.DB.AutoMigrate(models.Users{})
-	return ret
+	return &UAuth{
+		cache:        cache.NewMemory(),
+		privateKey:   pk,
+		publicKeyRaw: publicRaw,
+	}
 }
 
-type Auth struct {
-	AuthOptions
+type UAuth struct {
+	privateKey   *rsa.PrivateKey
+	publicKeyRaw []byte
+	cache        cache.AuthCache
+
+	DB   *gorm.DB
+	surf *core.Surf
 }
 
-func (h *Auth) CTByName() *calltable.CallTable {
-	ct := calltable.NewCallTable()
-	ct.AddFunctionWithName("Login", h.OnReqLogin)
-	ct.AddFunctionWithName("AnonymousLogin", h.AnonymousLogin)
-	ct.AddFunctionWithName("Register", h.OnReqRegister)
-	ct.AddFunctionWithName("UserInfo", h.OnReqUserInfo)
-	return ct
+func (h *UAuth) OnInit(surf *core.Surf) error {
+	h.surf = surf
+	conf := DefaultConf
+
+	h.DB = core.NewMysqlClient(conf.DBAddr)
+	h.DB.AutoMigrate(models.Users{})
+
+	core.HandleRequestFromHttp(surf, "/Login", h.OnReqLogin)
+	core.HandleRequestFromHttp(surf, "/Verify", h.OnVerifyToken)
+	core.HandleRequestFromHttp(surf, "/AnonymousLogin", h.OnAnonymousLogin)
+
+	surf.HttpMux().HandleFunc("/publickey", func(w http.ResponseWriter, r *http.Request) {
+		w.Write(h.publicKeyRaw)
+	})
+	return nil
 }
 
-func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {
+func (h *UAuth) OnReady() error {
+	return nil
+}
+
+func (h *UAuth) OnStop() error {
+	return nil
+}
+
+func (h *UAuth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authorstr := r.Header.Get("Authorization")
 		authorstr = strings.TrimPrefix(authorstr, "Bearer ")
@@ -63,7 +80,7 @@ func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		_, err := coreauth.VerifyToken(&h.PK.PublicKey, []byte(authorstr))
+		_, err := auth.VerifyToken(&h.privateKey.PublicKey, []byte(authorstr))
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -72,21 +89,15 @@ func (h *Auth) AuthWrapper(f http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) {
-	out := &msgUAuth.RespAnonymousLogin{}
+func (h *UAuth) OnAnonymousLogin(ctx context.Context, in *msgUAuth.ReqAnonymousLogin, out *msgUAuth.RespAnonymousLogin) error {
 	var err error
 
-	defer func() {
-		ctx.Response(out, err)
-	}()
-
 	if !RegUname.MatchString(in.Uname) {
-		err = errors.New(int32(msgUAuth.ResponseFlag_PasswdWrong), "error")
-		return
+		return xerr.New(int16(msgUAuth.ResponseFlag_PasswdWrong), "error")
 	}
 
 	if len(in.Passwd) < 6 {
-		return
+		return xerr.New(int16(msgUAuth.ResponseFlag_PasswdWrong), "error")
 	}
 
 	user := &models.Users{
@@ -95,7 +106,7 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 
 	res := h.DB.Limit(1).Find(user, user)
 	if err := res.Error; err != nil {
-		return
+		return xerr.New(int16(msgUAuth.ResponseFlag_PasswdWrong), "error")
 	}
 
 	if res.RowsAffected == 0 {
@@ -107,30 +118,26 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 		}
 		res := h.DB.Create(user)
 		if res.Error != nil {
-			err = errors.New(int32(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
+			return xerr.New(int16(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
 		}
 		if res.RowsAffected == 0 {
-			err = errors.New(int32(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
-			return
+			return xerr.New(int16(msgUAuth.ResponseFlag_DataBaseErr), "create failed")
 		}
 	} else {
 		if user.Passwd != in.Passwd {
-			err = errors.New(int32(msgUAuth.ResponseFlag_PasswdWrong), "error")
-			return
+			return xerr.New(int16(msgUAuth.ResponseFlag_PasswdWrong), "error")
 		}
 		if user.Stat != 0 {
-			err = errors.New(int32(msgUAuth.ResponseFlag_StatErr), "error")
-			return
+			return xerr.New(int16(msgUAuth.ResponseFlag_StatErr), "error")
 		}
 	}
 
-	assess, err := coreauth.GenerateToken(h.PK, &coreauth.UserInfo{
+	assess, err := auth.GenerateToken(h.privateKey, &auth.UserInfo{
 		UId: uint32(user.UID),
 	}, 0)
 
 	if err != nil {
-		err = errors.New(int32(msgUAuth.ResponseFlag_GenTokenErr), err.Error())
-		return
+		return xerr.New(int16(msgUAuth.ResponseFlag_GenTokenErr), err.Error())
 	}
 
 	cacheInfo := &cache.AuthCacheInfo{
@@ -139,8 +146,8 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 		RefreshToken: uuid.NewString(),
 	}
 
-	if err = h.Cache.StoreUser(context.Background(), cacheInfo, time.Hour); err != nil {
-		return
+	if err = h.cache.StoreUser(context.Background(), cacheInfo, time.Hour); err != nil {
+		return err
 	}
 
 	out.AssessToken = assess
@@ -151,22 +158,16 @@ func (h *Auth) AnonymousLogin(ctx core.Context, in *msgUAuth.ReqAnonymousLogin) 
 		Stat:    int32(user.Stat),
 		Created: user.CreateAt.Unix(),
 	}
+	return nil
 }
 
-func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
-	out := &msgUAuth.RespLogin{}
-	var err error
-	defer func() {
-		ctx.Response(out, err)
-	}()
-
+func (h *UAuth) OnReqLogin(ctx context.Context, in *msgUAuth.ReqLogin, out *msgUAuth.RespLogin) error {
 	if !RegUname.MatchString(in.Uname) {
-		err = errors.New(int32(msgUAuth.ResponseFlag_PasswdWrong), "error")
-		return
+		return xerr.New(int16(msgUAuth.ResponseFlag_PasswdWrong), "error")
 	}
 
 	if len(in.Passwd) < 6 {
-		return
+		return fmt.Errorf("passwd is error")
 	}
 
 	user := &models.Users{
@@ -175,24 +176,24 @@ func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
 
 	res := h.DB.Limit(1).Find(user, user)
 	if err := res.Error; err != nil {
-		return
+		return err
 	}
 
 	if res.RowsAffected == 0 {
-		return
+		return fmt.Errorf("passwd is error")
 	}
 
 	if user.Passwd != in.Passwd {
-		return
+		return fmt.Errorf("passwd is error")
 	}
 
 	if user.Stat != 0 {
-		return
+		return fmt.Errorf("stat is error")
 	}
 
-	assess, err := coreauth.GenerateToken(h.PK, &coreauth.UserInfo{UId: uint32(user.UID)}, 0)
+	assess, err := auth.GenerateToken(h.privateKey, &auth.UserInfo{UId: uint32(user.UID)}, 0)
 	if err != nil {
-		return
+		return err
 	}
 
 	cacheInfo := &cache.AuthCacheInfo{
@@ -201,7 +202,7 @@ func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
 		RefreshToken: uuid.NewString(),
 	}
 
-	if err = h.Cache.StoreUser(context.Background(), cacheInfo, time.Hour); err != nil {
+	if err = h.cache.StoreUser(context.Background(), cacheInfo, time.Hour); err != nil {
 		slog.Error("store user err", "err", err)
 	}
 
@@ -212,56 +213,67 @@ func (h *Auth) OnReqLogin(ctx core.Context, in *msgUAuth.ReqLogin) {
 		Stat:    int32(user.Stat),
 		Created: user.CreateAt.Unix(),
 	}
+
+	return nil
 }
 
-func (h *Auth) OnReqUserInfo(ctx core.Context, in *msgUAuth.ReqUserInfo) {
+func (h *UAuth) OnReqUserInfo(ctx context.Context, in *msgUAuth.ReqUserInfo, out *msgUAuth.RespUserInfo) error {
 	user := &models.Users{
 		UID: in.Uid,
 	}
-	uc := h.Cache.FetchUser(context.Background(), in.Uid)
+	uc := h.cache.FetchUser(context.Background(), in.Uid)
 	if uc != nil {
 		user = uc.User
 	} else {
 		res := h.DB.Limit(1).Find(user, user)
 		if res.Error != nil {
-			ctx.Response(nil, res.Error)
-			return
+			return res.Error
 		}
 		if res.RowsAffected == 0 {
-			ctx.Response(nil, fmt.Errorf("user not found"))
-			return
+			return fmt.Errorf("user not found")
 		}
-		h.Cache.StoreUser(context.Background(), &cache.AuthCacheInfo{User: user}, time.Hour)
+		h.cache.StoreUser(context.Background(), &cache.AuthCacheInfo{User: user}, time.Hour)
 	}
-
-	out := &msgUAuth.RespUserInfo{
-		Info: &msgUAuth.UserInfo{
-			Uid:     user.UID,
-			Uname:   user.Uname,
-			Stat:    int32(user.Stat),
-			Created: user.CreateAt.Unix(),
-		},
+	out.Info = &msgUAuth.UserInfo{
+		Uid:     user.UID,
+		Uname:   user.Uname,
+		Stat:    int32(user.Stat),
+		Created: user.CreateAt.Unix(),
 	}
-
-	ctx.Response(out, nil)
+	return nil
 }
 
-func (h *Auth) OnReqRegister(ctx core.Context, in *msgUAuth.ReqRegister) {
-	resp := &msgUAuth.RespRegister{}
+func (h *UAuth) OnVerifyToken(ctx context.Context, in *msgUAuth.ReqVerifyToken, out *msgUAuth.RespVerifyToken) error {
+	uinfo, err := auth.VerifyToken(&h.privateKey.PublicKey, []byte(in.AccessToken))
+	if err != nil {
+		out.Ok = false
+		return nil
+	}
+	out.Ok = true
+
+	c := h.cache.FetchUser(context.Background(), int64(uinfo.UId))
+	if c == nil || c.User == nil {
+		return nil
+	}
+
+	user := c.User
+	out.UserInfo = &msgUAuth.UserInfo{
+		Uid:     user.UID,
+		Uname:   user.Uname,
+		Stat:    int32(user.Stat),
+		Created: user.CreateAt.Unix(),
+	}
+	return nil
+}
+
+func (h *UAuth) OnReqRegister(ctx context.Context, in *msgUAuth.ReqRegister, out *msgUAuth.RespRegister) error {
 	var err error
-
-	defer func() {
-		ctx.Response(resp, err)
-	}()
-
 	if !RegUname.MatchString(in.Uname) {
-		err = fmt.Errorf("invalid username")
-		return
+		return fmt.Errorf("invalid username")
 	}
 
 	if len(in.Passwd) < 6 {
-		err = fmt.Errorf("invalid password")
-		return
+		return fmt.Errorf("invalid password")
 	}
 
 	user := &models.Users{
@@ -276,17 +288,18 @@ func (h *Auth) OnReqRegister(ctx core.Context, in *msgUAuth.ReqRegister) {
 	if res.Error != nil {
 		if res.Error == gorm.ErrDuplicatedKey {
 			err = fmt.Errorf("username already exists")
-			return
+			return err
 		}
 		slog.Error("create user err", "err", res.Error)
 		err = fmt.Errorf("server internal error")
-		return
+		return err
 	}
 
 	if res.RowsAffected == 0 {
 		err = fmt.Errorf("create user error")
-		return
+		return err
 	}
 
-	resp.Msg = "ok"
+	out.Msg = "ok"
+	return nil
 }

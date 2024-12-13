@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -91,32 +92,47 @@ func LoadRsaPublicKeyFromFile(fname string) (*rsa.PublicKey, error) {
 	return ParseRsaPublicKeyFromPem(publicRaw)
 }
 
-func LoadRsaPublicKeyFromUrl(f string) (*rsa.PublicKey, error) {
-	u, err := url.Parse(f)
-	if err != nil {
-		return nil, err
-	}
-	if u.Scheme == "http" || u.Scheme == "https" {
-		resp, err := http.Get(u.String())
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		raw, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return ParseRsaPublicKeyFromPem(raw)
-	} else if u.Scheme == "file" {
-		return LoadRsaPublicKeyFromFile(u.Host + u.Path)
-	}
-	return nil, errors.New("unsupported scheme")
-}
-
 func LoadRsaPrivateKeyFromFile(fname string) (*rsa.PrivateKey, error) {
 	privateRaw, err := os.ReadFile(fname)
 	if err != nil {
 		return nil, err
 	}
 	return ParseRsaPrivateKeyFromPem(privateRaw)
+}
+
+func ReadFromUrl(path string) ([]byte, error) {
+	u, err := url.Parse(path)
+	if err != nil {
+		return nil, err
+	}
+	var raw []byte
+	if u.Scheme == "http" || u.Scheme == "https" {
+		resp, nerr := http.Get(u.String())
+		if nerr != nil {
+			return nil, nerr
+		}
+		defer resp.Body.Close()
+		raw, err = io.ReadAll(resp.Body)
+	} else if u.Scheme == "file" {
+		raw, err = os.ReadFile(u.Host + u.Path)
+	} else {
+		err = fmt.Errorf("unsupported scheme: %v", u.Scheme)
+	}
+	return raw, err
+}
+
+func LoadRsaPublicKeyFromUrl(path string) (*rsa.PublicKey, error) {
+	raw, err := ReadFromUrl(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRsaPublicKeyFromPem(raw)
+}
+
+func LoadRsaPrivateKeyFromUrl(path string) (*rsa.PrivateKey, error) {
+	raw, err := ReadFromUrl(path)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRsaPrivateKeyFromPem(raw)
 }

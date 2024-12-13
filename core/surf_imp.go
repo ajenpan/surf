@@ -1,9 +1,9 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -13,7 +13,6 @@ import (
 	etcclientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/ajenpan/surf/core/auth"
-	"github.com/ajenpan/surf/core/marshal"
 	"github.com/ajenpan/surf/core/network"
 	"github.com/ajenpan/surf/core/registry"
 	utilRsa "github.com/ajenpan/surf/core/utils/rsagen"
@@ -30,8 +29,8 @@ func (s *Surf) init() error {
 	s.caller = NewPacketRouteCaller()
 
 	if s.NodeType() != NodeType_Gate {
-		HandleFunc(s, s.onNotifyClientConnect)
-		HandleFunc(s, s.onNotifyClientDisconnect)
+		HandleAsyncFromConn(s, s.onNotifyClientConnect)
+		HandleAsyncFromConn(s, s.onNotifyClientDisconnect)
 	}
 
 	err = s.serverInfo.Svr.OnInit(s)
@@ -41,91 +40,39 @@ func (s *Surf) init() error {
 
 	return nil
 }
-func (s *Surf) getMsgIdFromPath(path string) uint32 {
-	// TODO: name to id map
-	idx := strings.LastIndexByte(path, '/') + 1
-	if idx <= 0 || idx >= len(path) {
-		return 0
-	}
-	msgIdStr := path[idx:]
-	msgid, _ := strconv.Atoi(msgIdStr)
-	return uint32(msgid)
+
+type httpPreConn struct {
+	remoteAddr string
 }
 
-func (s *Surf) startHttpSvr() {
-	log.Info("start http server", "addr", s.conf.HttpListenAddr)
+func (c *httpPreConn) RemoteAddr() string {
+	return c.remoteAddr
+}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Print("onrecv ", r.URL.Path)
-		msgid := s.getMsgIdFromPath(r.URL.Path)
-		if msgid <= 0 {
-			http.Error(w, "handle not found", http.StatusNotFound)
-			return
-		}
+func (s *Surf) HttpAuthWrap(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		authdata := r.Header.Get("Authorization")
-		if len(authdata) < 5 {
-			http.Error(w, "Authorization failed", http.StatusUnauthorized)
-			return
-		}
 		authdata = strings.TrimPrefix(authdata, "Bearer ")
-		uinfo, err := s.onConnAuth([]byte(authdata))
+		uinfo, err := s.onConnAuth(&httpPreConn{r.RemoteAddr}, []byte(authdata))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
 
-		raw, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
-			return
-		}
+		r = r.WithContext(CtxWithUser(r.Context(), uinfo))
 
-		msgType := RoutePackMsgType_Request
-		msgTypeStr := r.Header.Get("MsgType")
-		if len(msgTypeStr) > 0 {
-			msgType, _ = strconv.Atoi(msgTypeStr)
-		}
+		fn(w, r)
+	}
+}
 
-		rpk := NewRoutePacket(raw)
-		rpk.SetFromUId(uinfo.UserID())
-		rpk.SetFromURole(uinfo.UserRole())
-		rpk.SetMarshalType(marshal.NameToId(r.Header.Get("Content-Type")))
-		rpk.SetToUId(s.NodeID())
-		rpk.SetToURole(s.NodeType())
-		rpk.SetMsgId(msgid)
-		rpk.SetMsgType(uint8(msgType))
-
-		var ctx = &HttpContext{
-			W:         w,
-			R:         r,
-			UInfo:     uinfo,
-			ReqPacket: rpk,
-			RespChan:  make(chan func()),
-		}
-
-		if msgType == RoutePackMsgType_Request {
-			s.Do(func() {
-				s.caller.Call(ctx)
-			})
-		} else {
-			s.Do(func() {
-				s.caller.Call(ctx)
-				ctx.RespChan <- func() {
-					ctx.W.WriteHeader(http.StatusOK)
-				}
-			})
-		}
-		if f := <-ctx.RespChan; f != nil {
-			f()
-		}
-	})
+func (s *Surf) startHttpSvr() {
+	log.Info("start http server", "addr", s.conf.HttpListenAddr)
 
 	svr := &http.Server{
 		Addr:    s.conf.HttpListenAddr,
-		Handler: mux,
+		Handler: s.httpMux,
 	}
+
 	ln, err := net.Listen("tcp", svr.Addr)
 	if err != nil {
 		panic(err)
@@ -183,27 +130,15 @@ func (h *Surf) onGatePacket(conn network.Conn, pk *network.HVPacket) {
 			log.Error("parse route pakcet error")
 			return
 		}
-		ctx := &ConnContext{
-			ReqConn:   conn,
-			Core:      h,
-			ReqPacket: rpk,
-		}
-
 		h.Do(func() {
-			h.caller.Call(ctx)
+			h.caller.Call(conn, rpk)
 		})
 	default:
 		log.Error("invalid packet type", "type", pk.Meta.GetType())
 	}
 }
 
-func (s *Surf) catch() {
-	if err := recover(); err != nil {
-		log.Error("catch panic", "err", err)
-	}
-}
-
-func (s *Surf) onConnAuth(data []byte) (network.User, error) {
+func (s *Surf) onConnAuth(_ network.PreConn, data []byte) (network.User, error) {
 	return auth.VerifyToken(s.rasPublicKey, data)
 }
 
@@ -231,35 +166,38 @@ func (s *Surf) onGateStatus(conn network.Conn, enable bool) {
 	}
 }
 
-func (s *Surf) onNotifyClientConnect(ctx Context, msg *msgCore.NotifyClientConnect) {
+func (s *Surf) onNotifyClientConnect(ctx context.Context, msg *msgCore.NotifyClientConnect) {
+
+	connId, _ := CtxToConnId(ctx)
+	uInfo, _ := CtxToUser(ctx)
+
 	item := &clientGateItem{
-		// conn:     ctx.Conn(),
-		connId:   ctx.ConnId(),
+		connId:   connId,
 		clientIp: msg.IpAddr,
 		connAt:   time.Now(),
 	}
-	s.Do(func() {
-		s.clientGateMap[msg.Uid] = item
-		if ctx.FromURole() == NodeType_Gate {
-			m, has := s.gateHoldUserid[ctx.ConnId()]
-			if !has {
-				m = make(map[uint32]*clientGateItem)
-				s.gateHoldUserid[ctx.ConnId()] = m
-			}
-			m[msg.Uid] = item
+
+	s.clientGateMap[msg.Uid] = item
+	if uInfo.UserRole() == NodeType_Gate {
+		m, has := s.gateHoldUserid[connId]
+		if !has {
+			m = make(map[uint32]*clientGateItem)
+			s.gateHoldUserid[connId] = m
 		}
-		s.notifyClientConnect(msg.Uid, msg.GateNodeId, msg.IpAddr)
-	})
+		m[msg.Uid] = item
+	}
+
+	s.notifyClientConnect(msg.Uid, msg.GateNodeId, msg.IpAddr)
 }
 
-func (s *Surf) onNotifyClientDisconnect(ctx Context, msg *msgCore.NotifyClientDisconnect) {
-	s.Do(func() {
-		delete(s.clientGateMap, msg.Uid)
-		if m, has := s.gateHoldUserid[ctx.ConnId()]; has {
-			delete(m, msg.Uid)
-		}
-		s.notifyClientDisconnect(msg.Uid, msg.GateNodeId, msg.Reason)
-	})
+func (s *Surf) onNotifyClientDisconnect(ctx context.Context, msg *msgCore.NotifyClientDisconnect) {
+	connId, _ := CtxToConnId(ctx)
+
+	delete(s.clientGateMap, msg.Uid)
+	if m, has := s.gateHoldUserid[connId]; has {
+		delete(m, msg.Uid)
+	}
+	s.notifyClientDisconnect(msg.Uid, msg.GateNodeId, msg.Reason)
 }
 
 func (s *Surf) notifyClientConnect(uid uint32, gateNodeId uint32, ip string) {

@@ -8,15 +8,18 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	utilSignal "github.com/ajenpan/surf/core/utils/signal"
+	"github.com/ajenpan/surf/core"
+	"github.com/ajenpan/surf/core/auth"
+	"github.com/ajenpan/surf/core/utils/rsagen"
+	"github.com/ajenpan/surf/server"
 	"github.com/ajenpan/surf/server/uauth"
 )
 
+var Name string = server.NodeName_UAuth
 var Version string = "unknown"
 var GitCommit string = "unknown"
 var BuildAt string = "unknown"
 var BuildBy string = "unknown"
-var Name string = "uauth"
 
 var ConfigPath string = ""
 
@@ -79,15 +82,56 @@ func main() {
 	}
 }
 
+const PrivateKeyFile = "private.pem"
+const PublicKeyFile = "public.pem"
+
+func ReadRSAKey() ([]byte, []byte, error) {
+	privateRaw, err := os.ReadFile(PrivateKeyFile)
+	if err != nil {
+		privateKey, publicKey, err := rsagen.GenerateRsaPem(512)
+		if err != nil {
+			return nil, nil, err
+		}
+		privateRaw = []byte(privateKey)
+		os.WriteFile(PrivateKeyFile, []byte(privateKey), 0644)
+		os.WriteFile(PublicKeyFile, []byte(publicKey), 0644)
+	}
+	publicRaw, err := os.ReadFile(PublicKeyFile)
+	if err != nil {
+		return nil, nil, err
+	}
+	return privateRaw, publicRaw, nil
+}
+
 func RealMain(c *cli.Context) error {
 	InitConfig()
 
-	closer, err := uauth.Start(uauth.DefaultConf)
+	privateRaw, publicRaw, err := ReadRSAKey()
 	if err != nil {
 		return err
 	}
-	defer closer()
-	signal := utilSignal.WaitShutdown()
-	slog.Info("recv signal", "signal", signal.String())
-	return nil
+
+	h := uauth.New(privateRaw, publicRaw)
+	opts := &core.ServerInfo{
+		Svr: h,
+	}
+
+	conf := &core.NodeConf{
+		SurfConf: core.SurfConfig{
+			HttpListenAddr:    ":9999",
+			PublicKeyFilePath: "file://" + PublicKeyFile,
+		},
+	}
+	ninfo := &auth.NodeInfo{
+		NId:   10200,
+		NName: server.NodeName_UAuth,
+		NType: server.NodeType_UAuth,
+	}
+	surf, err := core.NewSurf(ninfo, conf, opts)
+	if err != nil {
+		return err
+	}
+	defer surf.Close()
+	err = surf.Run()
+	return err
 }

@@ -13,22 +13,11 @@ func (e *Error) Error() string {
 }
 
 // New generates a custom error.
-func New(code int32, msg string) error {
+func New(code int16, msg string) error {
 	return &Error{
-		Code:   code,
+		Code:   int32(code),
 		Detail: msg,
 	}
-}
-
-// Parse tries to parse a JSON string into an error. If that
-// fails, it will set the given string as the error Detail.
-func Parse(err string) *Error {
-	e := new(Error)
-	errr := json.Unmarshal([]byte(err), e)
-	if errr != nil {
-		e.Detail = err
-	}
-	return e
 }
 
 // Equal tries to compare errors
@@ -59,8 +48,10 @@ func FromError(err error) *Error {
 	if verr, ok := err.(*Error); ok && verr != nil {
 		return verr
 	}
-
-	return Parse(err.Error())
+	return &Error{
+		Code:   -1,
+		Detail: err.Error(),
+	}
 }
 
 // As finds the first error in err's chain that matches *Error

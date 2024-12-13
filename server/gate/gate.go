@@ -51,8 +51,9 @@ func (gate *Gate) OnInit(surf *core.Surf) error {
 	return err
 }
 
-func (gate *Gate) OnReady() {
+func (gate *Gate) OnReady() error {
 	gate.surf.UpdateNodeData(core.NodeState_Running, nil)
+	return nil
 }
 
 func (gate *Gate) OnStop() error {
@@ -62,8 +63,8 @@ func (gate *Gate) OnStop() error {
 	return nil
 }
 
-func (gate *Gate) OnConnAuth(data []byte) (network.User, error) {
-	return auth.VerifyToken(gate.NodePublicKey, data)
+func (gate *Gate) OnConnAuth(_ network.PreConn, data []byte) (network.User, error) {
+	return auth.VerifyToken(gate.ClientPublicKey, data)
 }
 
 func (gate *Gate) OnConnEnable(conn network.Conn, enable bool) {
@@ -74,8 +75,8 @@ func (gate *Gate) OnConnEnable(conn network.Conn, enable bool) {
 	}
 }
 
-func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
-	log.Info("OnConnPacket", "sid", s.ConnId(), "uid", s.UserID(), "type", pk.Meta.GetType(), "datalen", len(pk.Body))
+func (gate *Gate) OnConnPacket(conn network.Conn, pk *network.HVPacket) {
+	log.Info("OnConnPacket", "sid", conn.ConnId(), "uid", conn.UserID(), "type", pk.Meta.GetType(), "datalen", len(pk.Body))
 
 	if pk.Meta.GetType() != network.PacketType_Route || len(pk.Body) < core.RoutePackHeadBytesLen {
 		return
@@ -87,10 +88,10 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		return
 	}
 
-	target_ntype := rpk.GetToURole()
-	target_nid := rpk.GetToUId()
+	target_ntype := rpk.ToURole()
+	target_nid := rpk.ToUId()
 
-	log.Debug("recv client route pk", "from", rpk.GetFromUId(), "fromrole", rpk.GetFromURole(), "to", target_nid, "torole", target_ntype, "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
+	log.Info("recv client route pk", "from", rpk.FromUId(), "fromrole", rpk.FromURole(), "to", target_nid, "torole", target_ntype, "msgid", rpk.MsgId(), "msgtype", rpk.MsgType())
 
 	if target_ntype == 0 && target_nid == 0 {
 		log.Warn("OnConnPacket from server type and nodeid is 0")
@@ -98,11 +99,11 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 	}
 
 	if target_nid == gate.surf.NodeID() || target_ntype == gate.surf.NodeType() {
-		gate.OnCall(s, rpk)
+		gate.caller.Call(conn, rpk)
 		return
 	}
 
-	ud := s.GetUserData().(*ClientConnUserData)
+	ud := conn.GetUserData().(*ClientConnUserData)
 	var targetConn network.Conn
 	if target_nid != 0 {
 		targetConn, _ = gate.nodeConnStore.LoadByUId(target_nid)
@@ -119,7 +120,7 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 
 	if targetConn == nil {
 		pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
-		gate.SendTo(s, pk)
+		gate.SendTo(conn, pk)
 		return
 	}
 
@@ -128,18 +129,19 @@ func (gate *Gate) OnConnPacket(s network.Conn, pk *network.HVPacket) {
 		ud.serverType2NodeID[target_ntype] = targetConn.UserID()
 
 		notify := &msgCore.NotifyClientConnect{
-			Uid:        s.UserID(),
+			Uid:        conn.UserID(),
 			GateNodeId: gate.surf.NodeID(),
-			IpAddr:     s.RemoteAddr(),
+			IpAddr:     conn.RemoteAddr(),
 		}
 		gate.surf.SendAsync(targetConn, core.NodeType_Core, targetConn.UserID(), notify)
 	}
 
-	rpk.SetFromUId(s.UserID())
-	rpk.SetFromURole(s.UserRole())
+	rpk.SetFromUId(conn.UserID())
+	rpk.SetFromURole(conn.UserRole())
 	rpk.SetToUId(targetConn.UserID())
 	rpk.SetToURole(targetConn.UserRole())
-	gate.SendTo(targetConn, pk)
+	npk := rpk.ToHVPacket()
+	gate.SendTo(targetConn, npk)
 }
 
 func (gate *Gate) FindIdleNode(servertype uint16) network.Conn {
@@ -155,7 +157,7 @@ func (gate *Gate) FindIdleNode(servertype uint16) network.Conn {
 	return ret
 }
 
-func (gate *Gate) OnNodeAuth(data []byte) (network.User, error) {
+func (gate *Gate) OnNodeAuth(_ network.PreConn, data []byte) (network.User, error) {
 	info := &auth.NodeInfo{}
 	err := info.Unmarshal(data)
 	if err != nil {
@@ -182,11 +184,11 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 			return
 		}
 
-		log.Debug("OnNodePacket", "from", rpk.GetFromUId(), "fromrole", rpk.GetFromURole(),
-			"to", rpk.GetToUId(), "torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType())
+		log.Info("OnNodePacket", "from", rpk.FromUId(), "fromrole", rpk.FromURole(),
+			"to", rpk.ToUId(), "torole", rpk.ToURole(), "msgid", rpk.MsgId(), "msgtype", rpk.MsgType())
 
-		toUId := rpk.GetToUId()
-		toURole := rpk.GetToURole()
+		toUId := rpk.ToUId()
+		toURole := rpk.ToURole()
 
 		var targetConn network.Conn = nil
 		var found bool = false
@@ -202,7 +204,7 @@ func (gate *Gate) OnNodePacket(s network.Conn, pk *network.HVPacket) {
 		}
 
 		if !found {
-			log.Warn("client not found", "cid", toUId)
+			log.Warn("client not found", "touid", toUId)
 			pk.Meta.SetSubFlag(core.RoutePackType_SubFlag_RouteFail)
 			gate.SendTo(s, pk)
 			return
@@ -276,13 +278,4 @@ func (gate *Gate) onUserOffline(conn network.Conn) {
 
 func (gate *Gate) PublishEvent(ename string, event any) {
 	log.Info("PublishEvent", "ename", ename, "event", event)
-}
-
-func (gate *Gate) OnCall(conn network.Conn, pk *core.RoutePacket) {
-	ctx := &core.ConnContext{
-		ReqConn:   conn,
-		Core:      gate.surf,
-		ReqPacket: pk,
-	}
-	gate.caller.Call(ctx)
 }

@@ -152,6 +152,9 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 	deadline := time.Now().Add(s.opts.HeatbeatInterval)
 	conn.SetReadDeadline(deadline)
 	conn.SetWriteDeadline(deadline)
+
+	preconn := newTcpConn(GenConnID(), nil, conn, s.opts.HeatbeatInterval)
+
 	pk := NewHVPacket()
 	_, err := pk.ReadFrom(conn)
 	if err != nil {
@@ -177,24 +180,25 @@ func (s *TcpServer) handshake(conn net.Conn) (*TcpConn, error) {
 			return nil, ErrInvalidPacket
 		}
 
-		if us, err = s.opts.OnConnAuth(pk.GetBody()); err != nil {
+		if us, err = s.opts.OnConnAuth(preconn, pk.GetBody()); err != nil {
 			pk.Meta.SetType(PacketType_Inner)
 			pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFailed)
 			pk.SetBody([]byte(err.Error()))
+
+			pk.WriteTo(conn)
 			return nil, err
 		}
 	}
 
-	socketid := GenConnID()
+	preconn.userInfo.fromUser(us)
 
 	pk.Meta.SetType(PacketType_Inner)
 	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFinish)
-	pk.SetBody([]byte(socketid))
+	pk.SetBody([]byte(preconn.ConnId()))
 	if _, err := pk.WriteTo(conn); err != nil {
 		return nil, err
 	}
-
-	return newTcpConn(socketid, us, conn, s.opts.HeatbeatInterval), nil
+	return preconn, nil
 }
 
 func (s *TcpServer) Address() net.Addr {

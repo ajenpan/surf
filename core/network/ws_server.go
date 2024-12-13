@@ -104,42 +104,46 @@ func (s *WSServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.SetReadDeadline(deadline)
 	c.SetWriteDeadline(deadline)
 
-	pk, err := conn.readPacket()
+	pk, err := conn.ReadPacket()
 	if err != nil {
 		return
 	}
+
 	if pk.Meta.GetType() != PacketType_Inner || pk.Meta.GetSubFlag() != PacketInnerSubType_HandShakeStart || len(pk.GetBody()) != 0 {
 		return
 	}
 
-	var us User
+	var uInfo User
+
 	if s.opts.OnConnAuth != nil {
 		pk := NewHVPacket()
 		pk.Meta.SetType(PacketType_Inner)
 		pk.Meta.SetSubFlag(PacketInnerSubType_Cmd)
 		pk.SetHead([]byte("auth"))
-		if err := conn.writePacket(pk); err != nil {
+		if err := conn.WritePacket(pk); err != nil {
 			return
 		}
-		if pk, err := conn.readPacket(); err != nil {
-			return
-		} else {
-			if us, err = s.opts.OnConnAuth(pk.GetBody()); err != nil {
-				pk.Meta.SetType(PacketType_Inner)
-				pk.SetHead([]byte("auth"))
-				pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFailed)
-				pk.SetBody([]byte(err.Error()))
-				return
-			}
 
-			conn.userInfo.fromUser(us)
+		pk, err = conn.ReadPacket()
+		if err != nil {
+			return
 		}
+		if uInfo, err = s.opts.OnConnAuth(conn, pk.GetBody()); err != nil {
+			pk.Meta.SetType(PacketType_Inner)
+			pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFailed)
+			pk.SetHead([]byte("auth"))
+			pk.SetBody([]byte(err.Error()))
+			conn.WritePacket(pk)
+			time.Sleep(1 * time.Second)
+			return
+		}
+		conn.userInfo.fromUser(uInfo)
 	}
 
 	pk.Meta.SetType(PacketType_Inner)
 	pk.Meta.SetSubFlag(PacketInnerSubType_HandShakeFinish)
 	pk.SetBody([]byte(conn.ConnId()))
-	conn.writePacket(pk)
+	conn.WritePacket(pk)
 
 	// the connection is established here
 	if s.opts.OnConnEnable != nil {

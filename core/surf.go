@@ -66,6 +66,7 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 		clientGateMap:  make(map[uint32]*clientGateItem),
 		gateConnMap:    make(map[string]network.Conn),
 		gateHoldUserid: make(map[string]map[uint32]*clientGateItem),
+		httpMux:        http.NewServeMux(),
 	}
 	err := surf.init()
 	if err != nil {
@@ -93,6 +94,7 @@ type Surf struct {
 	tcpsvr  *network.TcpServer
 	wssvr   *network.WSServer
 	httpsvr *http.Server
+	httpMux *http.ServeMux
 
 	caller *PacketRouteCaller
 
@@ -301,7 +303,10 @@ func (s *Surf) SendAsync(conn network.Conn, urole uint16, uid uint32, msg proto.
 	if err != nil {
 		return err
 	}
+	msgid := GetMsgId(msg)
+
 	rpk := NewRoutePacket(body)
+	rpk.SetMsgId(msgid)
 	rpk.SetToUId(uid)
 	rpk.SetToURole(urole)
 	rpk.SetFromUId(s.NodeID())
@@ -309,8 +314,8 @@ func (s *Surf) SendAsync(conn network.Conn, urole uint16, uid uint32, msg proto.
 	rpk.SetMsgType(RoutePackMsgType_Async)
 	rpk.SetMarshalType(s.serverInfo.Marshaler.Id())
 	err = conn.Send(rpk.ToHVPacket())
-	log.Debug("SendAsync", "from", rpk.GetFromUId(), "fromrole", rpk.GetFromURole(), "to", rpk.GetToUId(),
-		"torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType(), "err", err)
+	log.Debug("SendAsync", "from", rpk.FromUId(), "fromrole", rpk.FromURole(), "to", rpk.ToUId(),
+		"torole", rpk.ToURole(), "msgid", rpk.MsgId(), "msgtype", rpk.MsgType(), "err", err)
 	return err
 }
 
@@ -320,7 +325,11 @@ func (s *Surf) SendRequest(conn network.Conn, urole uint16, uid uint32, msg prot
 	if err != nil {
 		return err
 	}
+	msgid := GetMsgId(msg)
+
 	rpk := NewRoutePacket(body)
+	rpk.SetMsgId(msgid)
+
 	rpk.SetToUId(uid)
 	rpk.SetToURole(urole)
 	rpk.SetFromUId(s.NodeID())
@@ -334,8 +343,8 @@ func (s *Surf) SendRequest(conn network.Conn, urole uint16, uid uint32, msg prot
 	if err != nil {
 		s.caller.PopRespCallback(cbkey)
 	}
-	log.Debug("SendRequest", "from", rpk.GetFromUId(), "fromrole", rpk.GetFromURole(), "to", rpk.GetToUId(),
-		"torole", rpk.GetToURole(), "msgid", rpk.GetMsgId(), "msgtype", rpk.GetMsgType(), "err", err)
+	log.Debug("SendRequest", "from", rpk.FromUId(), "fromrole", rpk.FromURole(), "to", rpk.ToUId(),
+		"torole", rpk.ToURole(), "msgid", rpk.MsgId(), "msgtype", rpk.MsgType(), "err", err)
 	return err
 }
 
@@ -354,11 +363,15 @@ func (s *Surf) NodeGateConn() network.Conn {
 	return nil
 }
 
-func (s *Surf) HandleFuncs(msgid uint32, chain ...HandlerFunc) {
-	if len(chain) == 0 {
+func (s *Surf) HandleFuncs(msgid uint32, chain ConnHandler) {
+	if msgid == 0 {
 		return
 	}
 	s.caller.handlers.Add(msgid, chain)
+}
+
+func (s *Surf) HttpMux() *http.ServeMux {
+	return s.httpMux
 }
 
 func (s *Surf) NextNodeId(ntype uint16) (uint32, error) {

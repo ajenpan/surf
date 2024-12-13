@@ -14,7 +14,7 @@ ScriptDir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 NowTime=$(date +%Y%m%d%H%M%S)
 TargetBin=$(realpath "${ScriptDir}/../bin/${BinFile}")
 
-echo "currdir:$(pwd), ScriptDir: ${ScriptDir}, TargetBin: ${TargetBin}"
+echo "currDir:$(pwd), scriptDir: ${ScriptDir}, targetBin: ${TargetBin}"
 
 BinDir=/workdir/server/${BinFile}
 RemoteHost=root@myali01
@@ -25,6 +25,8 @@ scp ${TargetBin} ${RemoteHost}:${BinDir}/${BinFile}.tmp
 
 ssh ${RemoteHost} >/dev/null 2>&1 <<EOF
 cd ${BinDir}
+
+pwd
 
 if [ -f ${BinFile} ]; then
     mv ${BinFile} ${BinFile}.${NowTime}

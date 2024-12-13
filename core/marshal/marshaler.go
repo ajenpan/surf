@@ -1,5 +1,7 @@
 package marshal
 
+import "google.golang.org/protobuf/encoding/protojson"
+
 type Marshaler interface {
 	Id() uint8
 	ContentType() string
@@ -21,7 +23,14 @@ func NewMarshaler(typ MarshalerId) Marshaler {
 	case MarshalerId_protobuf:
 		return &ProtoMarshaler{}
 	case MarshalerId_json:
-		return &JSONPb{}
+		return &JSONPb{
+			UnmarshalOptions: protojson.UnmarshalOptions{
+				DiscardUnknown: true,
+			},
+			MarshalOptions: protojson.MarshalOptions{
+				UseProtoNames: true,
+			},
+		}
 	}
 	return nil
 }
