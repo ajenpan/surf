@@ -60,16 +60,17 @@ func NewEtcdRegistry(opts EtcdRegistryOpts) (*EtcdRegistry, error) {
 		leaseID: grantResp.ID,
 	}
 
-	go ret.keepAlive()
-	// resp, err := ret.cli.KeepAlive(context.Background(), grantResp.ID)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// go func() {
-	// 	for v := range resp {
-	// 		 v
-	// 	}
-	// }()
+	// go ret.keepAlive()
+	resp, err := ret.cli.KeepAlive(context.Background(), grantResp.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	go func() {
+		for range resp {
+			// do nothing
+		}
+	}()
 
 	return ret, nil
 }
