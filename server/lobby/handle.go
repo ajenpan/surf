@@ -67,12 +67,7 @@ func (h *Lobby) OnReqLoginLobby(ctx context.Context, req *msgLobby.ReqLoginLobby
 
 	if isReconnect {
 		h.addLoginUser(user)
-
 		user.MutableRespLoginLobby(resp)
-		h.surf.Do(func() {
-			notify := table.MutableNotifyDispatchResult()
-			user.Send(notify)
-		})
 		return nil
 	}
 
@@ -137,11 +132,10 @@ func (h *Lobby) OnReqJoinQue(ctx context.Context, req *msgLobby.ReqJoinQue, resp
 			ok := table.checkStartCondi()
 
 			if ok {
-				h.surf.Do(func() {
-					h.RemoveContiTable(table.idx)
-					table.keepOnUsers = make(map[uint32]*User)
-					h.DoTableStart(table)
-				})
+				h.RemoveContiTable(table.idx)
+				table.keepOnUsers = make(map[uint32]*User)
+				h.DoTableStart(table)
+
 				return nil
 			}
 
@@ -150,9 +144,7 @@ func (h *Lobby) OnReqJoinQue(ctx context.Context, req *msgLobby.ReqJoinQue, resp
 			}
 
 			table.keepOnTimer = time.AfterFunc(10*time.Second, func() {
-				h.surf.Do(func() {
-					h.DismissTable(table)
-				})
+				h.DismissTable(table)
 			})
 
 		} else {

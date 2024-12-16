@@ -54,7 +54,6 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 	surf := &Surf{
 		serverInfo: svrinfo,
 		ninfo:      ninfo,
-		queue:      make(chan func(), 100),
 		closed:     make(chan struct{}),
 		conf:       conf.SurfConf,
 		svrconf:    conf.ServerConf,
@@ -98,7 +97,6 @@ type Surf struct {
 
 	caller *PacketRouteCaller
 
-	queue  chan func()
 	closed chan struct{}
 
 	mux sync.Mutex
@@ -112,18 +110,18 @@ type Surf struct {
 	nodeGroup *NodeGroup
 }
 
-func (s *Surf) Do(fn func()) {
-	select {
-	case <-s.closed:
-		return
-	default:
-		select {
-		case s.queue <- fn:
-		default:
-			log.Error("queue full, drop fn")
-		}
-	}
-}
+// func (s *Surf) Do(fn func()) {
+// 	select {
+// 	case <-s.closed:
+// 		return
+// 	default:
+// 		select {
+// 		case s.queue <- fn:
+// 		default:
+// 			log.Error("queue full, drop fn")
+// 		}
+// 	}
+// }
 
 func (s *Surf) ServerConf() []byte {
 	return s.svrconf
@@ -158,8 +156,6 @@ func (s *Surf) Close() error {
 		return nil
 	default:
 		close(s.closed)
-
-		close(s.queue)
 	}
 
 	if s.registry != nil {
@@ -234,12 +230,12 @@ func (s *Surf) Run() error {
 		case <-s.closed:
 			log.Info("surf closed")
 			return nil
-		case fn, ok := <-s.queue:
-			if !ok {
-				log.Error("queue closed")
-				return nil
-			}
-			fn()
+			// case fn, ok := <-s.queue:
+			// 	if !ok {
+			// 		log.Error("queue closed")
+			// 		return nil
+			// 	}
+			// 	fn()
 		}
 	}
 }

@@ -130,9 +130,7 @@ func (h *Surf) onGatePacket(conn network.Conn, pk *network.HVPacket) {
 			log.Error("parse route pakcet error")
 			return
 		}
-		h.Do(func() {
-			h.caller.Call(conn, rpk)
-		})
+		go h.caller.Call(conn, rpk)
 	default:
 		log.Error("invalid packet type", "type", pk.Meta.GetType())
 	}
@@ -145,22 +143,18 @@ func (s *Surf) onConnAuth(_ network.PreConn, data []byte) (network.User, error) 
 func (s *Surf) onGateStatus(conn network.Conn, enable bool) {
 	log.Info("conn status", "id", conn.ConnId(), "uid", conn.UserID(), "utype", conn.UserRole(), "status", enable)
 	if conn.UserRole() == NodeType_Client {
-		s.Do(func() {
-			if enable {
-				s.notifyClientConnect(conn.UserID(), s.ninfo.NodeID(), conn.RemoteAddr())
-			} else {
-				s.notifyClientDisconnect(conn.UserID(), s.ninfo.NodeID(), msgCore.NotifyClientDisconnect_Disconnect)
-			}
-		})
+		if enable {
+			s.notifyClientConnect(conn.UserID(), s.ninfo.NodeID(), conn.RemoteAddr())
+		} else {
+			s.notifyClientDisconnect(conn.UserID(), s.ninfo.NodeID(), msgCore.NotifyClientDisconnect_Disconnect)
+		}
 	} else if conn.UserRole() == NodeType_Gate {
-		s.Do(func() {
-			if enable {
-				s.gateConnMap[conn.ConnId()] = conn
-			} else {
-				s.onGateDisconn(conn)
-				delete(s.gateConnMap, conn.ConnId())
-			}
-		})
+		if enable {
+			s.gateConnMap[conn.ConnId()] = conn
+		} else {
+			s.onGateDisconn(conn)
+			delete(s.gateConnMap, conn.ConnId())
+		}
 	} else {
 		// do nothing
 	}

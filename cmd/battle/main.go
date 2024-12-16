@@ -36,7 +36,6 @@ func main() {
 
 func RealMain(c *cli.Context) error {
 	h := battleHandler.New()
-	// calltable := calltable.ExtractMethodFromDesc(msgBattle.File_battle_proto.Messages(), h)
 
 	// RegGames
 	game.RegisterGame("guandan", guandan.NewLogic)

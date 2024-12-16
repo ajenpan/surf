@@ -97,7 +97,6 @@ type Conn interface {
 
 type PreConn interface {
 	RemoteAddr() string
-
 	// WritePacket(p *HVPacket) error
 	// ReadPacket() (*HVPacket, error)
 }

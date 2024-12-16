@@ -12,9 +12,8 @@ import (
 	"github.com/ajenpan/surf/server/battle/table"
 )
 
-func (h *Battle) OnStartBattle(ctx context.Context, in *msgBattle.ReqStartBattle, out *msgBattle.RespStartBattle) error {
+func (h *Battle) OnStartBattle(ctx context.Context, in *msgBattle.ReqStartBattle, resp *msgBattle.RespStartBattle) error {
 	var err error
-	var resp = &msgBattle.RespStartBattle{}
 
 	logic, err := h.LogicCreator.CreateLogic(in.GameName)
 	if err != nil {

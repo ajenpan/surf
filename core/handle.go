@@ -106,7 +106,6 @@ func RequestFuncToHttpHandler[ReqT, RespT proto.Message](fn func(ctx context.Con
 		resp := reflect.New(respType).Interface().(RespT)
 
 		marshaltype := marshal.NameToId(r.Header.Get("Content-Type"))
-
 		marshaler := marshal.NewMarshaler(marshaltype)
 		if marshaler == nil {
 			err := fmt.Errorf("marshaler not found")
