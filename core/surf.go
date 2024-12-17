@@ -63,7 +63,6 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 			Meta:   registryMeta{},
 		},
 		clientGateMap:  make(map[uint32]*clientGateItem),
-		gateConnMap:    make(map[string]network.Conn),
 		gateHoldUserid: make(map[string]map[uint32]*clientGateItem),
 		httpMux:        http.NewServeMux(),
 	}
@@ -104,8 +103,9 @@ type Surf struct {
 	regData nodeRegistryData
 
 	clientGateMap  map[uint32]*clientGateItem
-	gateConnMap    map[string]network.Conn
 	gateHoldUserid map[string]map[uint32]*clientGateItem
+
+	gateConnMap sync.Map
 
 	nodeGroup *NodeGroup
 }
@@ -279,7 +279,7 @@ func (s *Surf) SendRequestToNode(ntype uint16, nid uint32, msg proto.Message, cb
 		}
 	}
 
-	conn := s.NodeGateConn()
+	conn := s.ChoiceNodeGateConn()
 	if conn == nil {
 		return fmt.Errorf("conn not found")
 	}
@@ -325,7 +325,6 @@ func (s *Surf) SendRequest(conn network.Conn, urole uint16, uid uint32, msg prot
 
 	rpk := NewRoutePacket(body)
 	rpk.SetMsgId(msgid)
-
 	rpk.SetToUId(uid)
 	rpk.SetToURole(urole)
 	rpk.SetFromUId(s.NodeID())
@@ -349,21 +348,31 @@ func (s *Surf) ClientGateConn(uid uint32) network.Conn {
 	if !has {
 		return nil
 	}
-	return s.gateConnMap[item.connId]
+	return s.GateConn(item.connId)
 }
 
-func (s *Surf) NodeGateConn() network.Conn {
-	for _, v := range s.gateConnMap {
-		return v
+func (s *Surf) GateConn(connid string) network.Conn {
+	conn, ok := s.gateConnMap.Load(connid)
+	if !ok {
+		return nil
 	}
-	return nil
+	return conn.(network.Conn)
 }
 
-func (s *Surf) HandleFuncs(msgid uint32, chain ConnHandler) {
+func (s *Surf) ChoiceNodeGateConn() network.Conn {
+	var conn network.Conn
+	s.gateConnMap.Range(func(key, value any) bool {
+		conn = value.(network.Conn)
+		return false
+	})
+	return conn
+}
+
+func (s *Surf) HandleFuncs(msgid uint32, h ConnHandler) {
 	if msgid == 0 {
 		return
 	}
-	s.caller.handlers.Add(msgid, chain)
+	s.caller.Add(msgid, h)
 }
 
 func (s *Surf) HttpMux() *http.ServeMux {

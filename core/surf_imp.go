@@ -122,7 +122,7 @@ func (s *Surf) startTcpSvr() {
 	s.tcpsvr.Start()
 }
 
-func (h *Surf) onGatePacket(conn network.Conn, pk *network.HVPacket) {
+func (s *Surf) onGatePacket(conn network.Conn, pk *network.HVPacket) {
 	switch pk.Meta.GetType() {
 	case network.PacketType_Route:
 		rpk := NewRoutePacket(nil).FromHVPacket(pk)
@@ -130,7 +130,7 @@ func (h *Surf) onGatePacket(conn network.Conn, pk *network.HVPacket) {
 			log.Error("parse route pakcet error")
 			return
 		}
-		go h.caller.Call(conn, rpk)
+		go s.caller.Call(conn, rpk)
 	default:
 		log.Error("invalid packet type", "type", pk.Meta.GetType())
 	}
@@ -150,10 +150,10 @@ func (s *Surf) onGateStatus(conn network.Conn, enable bool) {
 		}
 	} else if conn.UserRole() == NodeType_Gate {
 		if enable {
-			s.gateConnMap[conn.ConnId()] = conn
+			s.gateConnMap.Store(conn.ConnId(), conn)
 		} else {
 			s.onGateDisconn(conn)
-			delete(s.gateConnMap, conn.ConnId())
+			s.gateConnMap.Delete(conn.ConnId())
 		}
 	} else {
 		// do nothing

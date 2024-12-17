@@ -272,7 +272,7 @@ func (h *Lobby) NewRemoteTable(table *Table, trycnt int, fn func(table *Table, e
 		})
 	}
 
-	err := core.SendRequestToNode(h.surf, server.NodeType_Battle, 0, req, func(result *core.ResponseResult, pk *msgBattle.RespStartBattle) {
+	err := core.Request(h.surf, server.NodeType_Battle, 0, req, func(result *core.ResponseResult, pk *msgBattle.RespStartBattle) {
 		if result.Failed() {
 			h.NewRemoteTable(table, trycnt-1, fn)
 			return

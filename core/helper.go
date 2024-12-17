@@ -62,7 +62,7 @@ func Assert(guard bool, text string) {
 	}
 }
 
-func SendRequestToNode[RespT any](surf *Surf, ntype uint16, nid uint32, msg proto.Message, fn func(result *ResponseResult, resp *RespT)) error {
+func Request[RespT any](surf *Surf, ntype uint16, nid uint32, msg proto.Message, fn func(result *ResponseResult, resp *RespT)) error {
 	var resp *RespT = new(RespT)
 	return surf.SendRequestToNode(ntype, nid, msg, func(result *ResponseResult, pk *RoutePacket) {
 		if fn == nil {

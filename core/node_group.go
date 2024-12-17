@@ -6,37 +6,38 @@ import (
 )
 
 // todo:
-type NodeSelect interface {
-	Next() uint32
-	Add(key uint32)
-	Del(key uint32)
-}
+// type RotateSelect interface {
+// 	Next() ItemT
+// 	Add(key ItemT)
+// 	Del(key ItemT)
+// }
 
-type nodeSelecter struct {
+type RotateSelect[ItemT comparable] struct {
 	rwl  sync.RWMutex
 	idx  atomic.Uint32
-	list []uint32
+	list []ItemT
 }
 
-func (ns *nodeSelecter) Next() uint32 {
+func (ns *RotateSelect[ItemT]) Next() ItemT {
 	ns.rwl.RLock()
 	defer ns.rwl.RUnlock()
 
 	if len(ns.list) == 0 {
-		return 0
+		var v ItemT
+		return v
 	}
 	idx := int(ns.idx.Add(1)) % len(ns.list)
 	return ns.list[idx]
 }
 
-func (ns *nodeSelecter) Add(key uint32) {
+func (ns *RotateSelect[ItemT]) Add(key ItemT) {
 	ns.rwl.Lock()
 	defer ns.rwl.Unlock()
 
 	ns.list = append(ns.list, key)
 }
 
-func (ns *nodeSelecter) Del(key uint32) {
+func (ns *RotateSelect[ItemT]) Del(key ItemT) {
 	ns.rwl.Lock()
 	defer ns.rwl.Unlock()
 
@@ -48,7 +49,7 @@ func (ns *nodeSelecter) Del(key uint32) {
 	}
 }
 
-func (ns *nodeSelecter) Size() int {
+func (ns *RotateSelect[ItemT]) Size() int {
 	ns.rwl.RLock()
 	defer ns.rwl.RUnlock()
 
@@ -57,7 +58,7 @@ func (ns *nodeSelecter) Size() int {
 
 type NodeGroup struct {
 	m         map[uint32]*nodeRegistryData
-	selecters map[uint16]*nodeSelecter
+	selecters map[uint16]*RotateSelect[uint32]
 	lock      sync.RWMutex
 }
 
@@ -77,7 +78,7 @@ func (g *NodeGroup) Set(item *nodeRegistryData) {
 	if !has {
 		selecter, got := g.selecters[item.Node.NType]
 		if !got {
-			selecter = &nodeSelecter{}
+			selecter = &RotateSelect[uint32]{}
 			g.selecters[item.Node.NType] = selecter
 		}
 		selecter.idx.Add(item.Node.NId)

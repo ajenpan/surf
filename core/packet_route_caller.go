@@ -41,13 +41,13 @@ type ResponseRouteKey struct {
 
 func NewPacketRouteCaller() *PacketRouteCaller {
 	return &PacketRouteCaller{
-		handlers: NewHandlerRoute[RequestRouteKey](),
+		HandlerRoute: NewHandlerRoute[RequestRouteKey](),
 	}
 }
 
 type PacketRouteCaller struct {
 	respWatier sync.Map
-	handlers   *HandlerRoute[RequestRouteKey]
+	*HandlerRoute[RequestRouteKey]
 }
 
 func (s *PacketRouteCaller) PushRespCallback(key ResponseRouteKey, timeoutsec uint32, cb RequestCallbackFunc) error {
@@ -95,7 +95,7 @@ func (p *PacketRouteCaller) Call(ctx network.Conn, rpk *RoutePacket) {
 	case RoutePackMsgType_Async:
 		fallthrough
 	case RoutePackMsgType_Request:
-		h := p.handlers.Get(rpk.MsgId())
+		h := p.Get(rpk.MsgId())
 		if h == nil {
 			log.Error("not found msg handler", "msgid", rpk.MsgId(), "from_uid", rpk.FromUId(), "from_svrtype", rpk.FromURole(), "to_uid", rpk.ToUId(), "to_svrtype", rpk.ToURole())
 			return
