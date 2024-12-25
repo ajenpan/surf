@@ -65,6 +65,7 @@ func NewSurf(ninfo *auth.NodeInfo, conf *NodeConf, svrinfo *ServerInfo) (*Surf, 
 		clientGateMap:  make(map[uint32]*clientGateItem),
 		gateHoldUserid: make(map[string]map[uint32]*clientGateItem),
 		httpMux:        http.NewServeMux(),
+		queue:          make(chan func(), 1024),
 	}
 	err := surf.init()
 	if err != nil {
@@ -97,6 +98,7 @@ type Surf struct {
 	caller *PacketRouteCaller
 
 	closed chan struct{}
+	queue  chan func()
 
 	mux sync.Mutex
 
@@ -110,18 +112,18 @@ type Surf struct {
 	nodeGroup *NodeGroup
 }
 
-// func (s *Surf) Do(fn func()) {
-// 	select {
-// 	case <-s.closed:
-// 		return
-// 	default:
-// 		select {
-// 		case s.queue <- fn:
-// 		default:
-// 			log.Error("queue full, drop fn")
-// 		}
-// 	}
-// }
+func (s *Surf) Do(fn func()) {
+	select {
+	case <-s.closed:
+		return
+	default:
+		select {
+		case s.queue <- fn:
+		default:
+			log.Error("queue full, drop fn")
+		}
+	}
+}
 
 func (s *Surf) ServerConf() []byte {
 	return s.svrconf
@@ -191,6 +193,14 @@ func (s *Surf) UpdateNodeData(state NodeState, data json.RawMessage) error {
 
 	return s.registry.UpdateNodeData(string(raw))
 }
+func (s *Surf) SafeCall(fn func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error("safe call panic", "err", err)
+		}
+	}()
+	fn()
+}
 
 func (s *Surf) Run() error {
 	if len(s.conf.HttpListenAddr) > 1 {
@@ -230,12 +240,12 @@ func (s *Surf) Run() error {
 		case <-s.closed:
 			log.Info("surf closed")
 			return nil
-			// case fn, ok := <-s.queue:
-			// 	if !ok {
-			// 		log.Error("queue closed")
-			// 		return nil
-			// 	}
-			// 	fn()
+		case fn, ok := <-s.queue:
+			if !ok {
+				log.Error("queue closed")
+				return nil
+			}
+			s.SafeCall(fn)
 		}
 	}
 }
